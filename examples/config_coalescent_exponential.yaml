@@ -1,0 +1,95 @@
+# ============================================================
+# Beast2Py 示例配置文件 16 / Example configuration 16
+# Coalescent + 指数增长种群模型（ExponentialGrowth）
+# Coalescent prior with an exponentially growing population.
+#
+# 说明 / Notes
+# ----
+# * tree_prior.type: coalescent_exponential emits
+#   spec="Coalescent" + populationModel spec="ExponentialGrowth" with popSize
+#   and growthRate.  growthRate is *signed*, so it is given explicit bounds
+#   (an unbounded flat prior on it is improper); Beast2Py otherwise treats it
+#   like any estimated continuous parameter and attaches a diffuse Normal prior.
+# * Units: the tree is scaled by the calibration below, so times are in Ma and
+#   popSize / growthRate are in Ma-derived units (popSize ~ N_e * generation
+#   time / 1e6, growthRate per Ma).  N(t) = popSize * exp(-growthRate * t), so
+#   with growthRate = 0.5 the population at the 8 Ma root is e^-4 = 1.8% of the
+#   present one.  Read the two numbers as a *shape* of demographic history, not
+#   as census sizes.
+# * Caveat carried over from the data: a coalescent prior is meant for samples
+#   drawn from one population.  On this 12-species primate matrix it is shown
+#   because the XML wiring has to be exercised somewhere; for species-level
+#   data use `yule`, `birth_death` or `calibrated_yule`.
+# ============================================================
+
+metadata:
+  analysis_name: "primates_coalescent_exponential"
+  analysis_description: "Coalescent tree prior with exponential population growth"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "hky"
+        kappa: {value: 2.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 0.002, lower: 0.0}     # subs/site/Myr, estimated
+    tree: "shared"
+
+tree_prior:
+  type: "coalescent_exponential"
+  pop_size: {value: 0.001, lower: 0.0}
+  growth_rate: {value: 0.5, lower: -5.0, upper: 5.0}
+
+calibrations:
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_coalexp.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_coalexp.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_coalexp.xml"
+  embed_fingerprint: true

@@ -1,0 +1,192 @@
+# ============================================================
+# Beast2Py 示例配置文件 2 / Example configuration 2
+# 高级场景：多 partition + GTR+Γ+I + UCLN + Birth-Death + 多校准 + 超先验
+# 展示多 partition link/unlink、松弛时钟、多 MRCA 校准、超先验、诊断阈值
+#
+# 说明 / Notes
+# ----
+# * 两个 partition 来自同一比对的**互不相交**的密码子位点（codon12 = 599 sites，
+#   codon3 = 299 sites）。把同一份 898 位点原样复制成 gene1/gene2 会让同一批
+#   位点被计进似然两次——后验等于把自己乘两遍，是过度自信的后验而不是更锐的
+#   后验。解析器现在拒绝两个 partition 指向同一个 file-backed alignment。
+# * 这里 site model 与 clock 都用 linked_to 链接到 codon12（"全链接"写法）；
+#   只链接时钟、不链接取代模型的场景见 config_multi_partition.yaml。
+# * hyperpriors：Normal 校准的 sigma 本身作为待估参数，给它一个 LogNormal 先验。
+#   键名必须是该分布**真实存在**的参数名（normal -> mean/sigma），否则会报错。
+# * 根校准：uniform[20,40] 对这份比对太年轻——它的根是 Strepsirrhini vs
+#   Haplorhini（Lemur_catta vs 其余），约 65 Ma。改成 uniform[55,75] 后，
+#   三个校准按嵌套次序 Hominina [7.0,9.3] < Hominidae [13.0,17.4] <
+#   root [55,75] 不再互相打架。
+# ============================================================
+
+metadata:
+  analysis_name: "primates_advanced_multicalibration"
+  analysis_description: "Advanced multi-partition analysis with UCLN clock and multiple calibrations"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+# --- 序列数据（母本比对 + 两个互不相交的密码子分区） ---
+alignments:
+  - id: "gene1"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+  - id: "codon12"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+    filter: "1::3,2::3"
+    data_id: "gene1"
+
+  - id: "codon3"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+    filter: "3::3"
+    data_id: "gene1"
+
+# --- Partition 模型配置 ---
+partitions:
+  - id: "codon12"
+    site_model:
+      substitution_model:
+        type: "gtr"
+        rateAC: {value: 1.0, lower: 0.0}
+        rateAG: {value: 4.0, lower: 0.0}
+        rateAT: {value: 1.0, lower: 0.0}
+        rateCG: {value: 1.0, lower: 0.0}
+        rateCT: {value: 4.0, lower: 0.0}
+        rateGT: {value: 1.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+      proportion_invariant: {value: 0.01, lower: 0.0, upper: 1.0}
+    clock_model:
+      type: "ucln"
+      ucld_mean: {value: 1.0, lower: 0.0}
+      ucld_stdev: {value: 0.5, lower: 0.0, upper: 1.0}
+    tree: "shared"
+
+  - id: "codon3"
+    site_model:
+      linked_to: "codon12"     # 与 codon12 共享位点模型（link）
+    clock_model:
+      type: "ucln"
+      linked_to: "codon12"     # 共享时钟（link）
+    tree: "shared"
+
+# --- 树先验 ---
+tree_prior:
+  type: "birth_death"
+  birth_rate: {value: 1.0, lower: 0.0}
+  death_rate: {value: 0.5, lower: 0.0}
+  sample_probability: {value: 1.0, lower: 0.0, upper: 1.0}
+
+# --- 校准点（多个，含嵌套关系） ---
+calibrations:
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "normal"
+      parameters: {mean: 8.0, sigma: 0.8}
+      # sigma 的超先验：sigma 作为待估参数，其自身服从 LogNormal 先验
+      hyperpriors:
+        sigma:
+          type: "lognormal"
+          parameters: {M: 0.0, S: 0.5}
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; the prior's 95% HPD [6.4, 9.6] stays above it only softly"
+
+  # lognormal(M=1.0, S=0.4) offset 12 -> median 14.7, 95% HPD [13.0, 17.4]
+  - name: "hominidaeMRCA"
+    taxa: ["Homo_sapiens", "Pan", "Gorilla", "Pongo"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 1.0, S: 0.4, mean_in_real_space: false}
+      offset: 12.0
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1126/science.1069883"
+      calibration_type: "soft"
+      original_age_min: 12.5
+      original_age_max: 17.5
+      notes: "Sivapithecus / late-Miocene hominoid record; 12 Ma offset = hard floor"
+
+  # uniform[55, 75] -> median 65.0 (see the note above: 20-40 Ma is six times
+  # too young for the strepsirrhine/haplorhine split).
+  - name: "primateRoot"
+    taxa: null
+    monophyletic: true
+    distribution:
+      type: "uniform"
+      parameters: {lower: 55.0, upper: 75.0}
+    use_originate: true
+    provenance:
+      source: "secondary"
+      reference: "DOI:10.1093/molbev/msab286"
+      calibration_type: "soft"
+      original_age_min: 55.0
+      original_age_max: 75.0
+      notes: "Secondary calibration from a published primate divergence-time estimate"
+
+# --- 参数先验 ---
+# These name the *derived* state nodes of the BirthDeathGernhard08Model
+# (birth - death and death / birth), which is what the priors must attach to;
+# priors written against "birth_rate"/"death_rate" are resolved through the
+# alias table, and a name that matches nothing is an error.
+parameter_priors:
+  - parameter: "birthDiffRate"
+    distribution:
+      type: "uniform"
+      parameters: {lower: 0.0, upper: 10.0}
+  - parameter: "relativeDeathRate"
+    distribution:
+      type: "uniform"
+      parameters: {lower: 0.0, upper: 1.0}
+
+# --- 诊断阈值（beast2py diagnose / generate 的第 2 道闸门） ---
+# overlap_measure: relative (default) | absolute | both.  The relative measure
+# divides the 1-Wasserstein distance of two prior densities by the mean width
+# of their 95% intervals, so it does not flag every pair of shallow nodes just
+# because deep nodes are far apart in absolute time.
+diagnostics:
+  overlap_measure: "both"
+  overlap_threshold: 2.0
+  relative_overlap_threshold: 0.15
+
+# --- MCMC ---
+mcmc:
+  type: "standard"
+  chain_length: 50000000
+  pre_burnin: 0
+  store_every: 50000
+
+# --- 日志器 ---
+loggers:
+  trace_log:
+    file_name: "primates_advanced.$(seed).log"
+    log_every: 5000
+  tree_log:
+    file_name: "primates_advanced.$(seed).trees"
+    log_every: 5000
+  screen_log:
+    log_every: 10000
+
+# --- 初始化 ---
+initialization:
+  tree_type: "random"
+
+# --- 输出 ---
+output:
+  file: "primates_advanced.xml"
+  embed_fingerprint: true

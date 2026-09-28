@@ -1,0 +1,115 @@
+# ============================================================
+# Beast2Py 示例配置文件 8 / Example configuration 8
+# 替换模型选择：一次运行只放一个模型（本例：TVM）
+# Substitution-model selection: ONE model per run.
+#
+# 为什么不能把 5 个模型塞进一份 XML？
+# ----
+# 旧版这份示例把 jc69/tn93/sym/tim/tvm 五个 partition 全部指向同一份
+# primates.fasta，产出的 XML 有 5 个 TreeLikelihood，而 60 个 <sequence> 里只有
+# 12 个不同的 (taxon, sequence) 对：同一批 898 个位点在同一棵树上被**计入似然
+# 5 次**。后验正比于各似然之积，于是等于把后验自乘 5 遍——得到的是虚假的精确
+# （credible interval 收窄约 sqrt(5) 倍），而不是模型比较。
+# 模型比较的正确做法：每个模型一份 YAML、一份 XML、一次 MCMC，然后用边际似然
+# （ stepping-stone / path sampling，或见 config_nested_sampling.yaml 的
+# nested sampling）比较。Beast2Py 的 diagnose 不代替这一点。
+# 同样的位点拆分（互不相交）则完全是另一回事：那是多分区分析，见
+# config_multi_partition.yaml。
+#
+# 本例用的是最一般的可逆核苷酸模型 TVM（4 个颠换率 + 1 个转换率）。
+# 其余模型的参数名（YAML 里 substitution_model 下的键）：
+#   jc69   : 无参数（均衡频率恒为 1/4，不接受 frequencies / rates）
+#            -> config_subst_jc69.yaml
+#   hky    : kappa; frequencies                            -> config_basic.yaml
+#   tn93   : kappa1, kappa2; frequencies                   -> config_skyline.yaml
+#   sym    : 6 个 rateXX; 强制均匀频率                     -> config_subst_sym.yaml
+#   tim    : rateAG, rateCT, rateTransversions1/2; frequencies
+#            -> config_subst_tim.yaml
+#   tvm    : rateAC, rateAT, rateCG, rateGT, rateTransitions（本文件）
+#   gtr    : rates: 6 个值，或 6 个 rateXX（只有 gtr/sym 接受 rates）
+#   wag/jtt/dayhoff/blosum62/cprev/mtrev : 无参数、自带经验频率，
+#            只能配 data_type: aminoacid
+#            -> config_aa_model.yaml (WAG), config_aa_jtt.yaml (JTT)
+# 注意：TIM 与 TVM **不接受** rates 向量（它们的速率之间有等式约束，6 自由率
+# 向量实现的不是它们的模型），写了就是在解析期报错。
+# ============================================================
+
+metadata:
+  analysis_name: "primates_subst_tvm"
+  analysis_description: "Single-partition TVM+Gamma analysis for model comparison"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "tvm"
+        rateAC: {value: 1.0, lower: 0.0}
+        rateAT: {value: 1.0, lower: 0.0}
+        rateCG: {value: 1.0, lower: 0.0}
+        rateGT: {value: 1.0, lower: 0.0}
+        rateTransitions: {value: 4.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "strict"
+      # Estimated.  `clock_rate: {estimate: false}` would freeze the rate at
+      # 1.0 substitutions/site/Myr, which contradicts the ~0.036 human--chimp
+      # p-distance of this alignment under a 7.9 Ma calibration: prior and
+      # likelihood would be mutually exclusive and only the calibration would
+      # "win" by fiat.
+      clock_rate: {value: 1.0, lower: 0.0}
+    tree: "shared"
+
+tree_prior:
+  type: "yule"
+  birth_rate: {value: 1.0, lower: 0.0}
+
+calibrations:
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_tvm.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_tvm.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_tvm.xml"
+  embed_fingerprint: true

@@ -1,0 +1,86 @@
+# ============================================================
+# Beast2Py 示例配置文件 8a / Example configuration 8a
+# 替换模型：JC69（最简模型；用于与 TVM/HKY 做边际似然比较）
+# JC69: one model per run -- see config_subst_models.yaml for why.
+#
+# 说明 / Notes
+# ----
+# * JC69 (spec="JukesCantor") has no exchangeability parameters and no
+#   frequency parameters: all six rates are equal and all four equilibrium
+#   frequencies are 1/4 by construction.  Therefore this file carries neither
+#   `rates` nor `frequencies` under substitution_model, and no <frequencies>
+#   element appears in the XML.  Writing `rates:` here is a parse error, and a
+#   stray `frequencies:` key would be dead weight.
+# * Gamma rate heterogeneity is what makes this model competitive on real mtDNA
+#   data; with gamma_categories: 0 the shape parameter would be ignored by
+#   BEAST2, so Beast2Py refuses `gamma_shape` unless gamma_categories > 1.
+# ============================================================
+
+metadata:
+  analysis_name: "primates_subst_jc69"
+  analysis_description: "JC69 + Gamma, single partition, for marginal-likelihood model comparison"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "jc69"
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 1.0, lower: 0.0}   # estimated
+    tree: "shared"
+
+tree_prior:
+  type: "yule"
+  birth_rate: {value: 1.0, lower: 0.0}
+
+calibrations:
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_jc69.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_jc69.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_jc69.xml"
+  embed_fingerprint: true

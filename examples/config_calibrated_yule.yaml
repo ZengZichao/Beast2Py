@@ -1,0 +1,136 @@
+# ============================================================
+# Beast2Py 示例配置文件 4 / Example configuration 4
+# CalibratedYule 场景：把校准直接整合进树先验
+# CalibratedYule: the calibration densities become part of the tree prior
+# instead of being added as independent MRCAPrior distributions.
+#
+# 说明 / Notes
+# ----
+# * With `calibration_method: calibrated_yule` the calibrations below are
+#   written as <calibrations spec="CalibrationPoint"> children of
+#   CalibratedYuleModel and are NOT also added to the prior compound, so a
+#   node's fossil density is counted exactly once (see docs/xml_format guide).
+# * CalibratedYule needs at least one *crown* calibration and a bound on the
+#   origin of the process; the root point below plays that role, with
+#   use_originate: true so it refers to the stem (origin) of the whole tree.
+# * The primate fossil/secondary panel is shared with the other primates
+#   examples; every prior was checked with the tool's own
+#   compute_distribution_stats() and the median + 95% HPD quoted in the
+#   comments is what the generated XML implies.
+# ============================================================
+
+metadata:
+  analysis_name: "primates_calibrated_yule"
+  analysis_description: "CalibratedYule model integrating calibration into tree prior"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "hky"
+        kappa: {value: 2.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 1.0, lower: 0.0}
+    tree: "shared"
+
+# --- CalibratedYule 树先验 ---
+tree_prior:
+  type: "calibrated_yule"
+  birth_rate: {value: 1.0, lower: 0.0}
+
+# --- 校准方法选择：把校准并入树先验，而不是独立的 MRCAPrior ---
+calibration_method: "calibrated_yule"
+
+# --- 校准点（用于 CalibratedYuleModel 的 CalibrationPoint） ---
+calibrations:
+  # 7.24 Ma Sahelanthropus as a soft minimum.  lognormal(M=0.35, S=0.4)
+  # offset 6.5 -> median 7.92, 95% HPD [7.02, 9.32].
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+
+  # Crown Hominidae (great apes).  lognormal(M=1.0, S=0.4) offset 12 ->
+  # median 14.72, 95% HPD [12.99, 17.40]: the interval starts above the
+  # 12.7 Ma late-Miocene great-ape record.
+  - name: "hominidaeMRCA"
+    taxa: ["Homo_sapiens", "Pan", "Gorilla", "Pongo"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 1.0, S: 0.4}
+      offset: 12.0
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1126/science.1069883"
+      calibration_type: "soft"
+      original_age_min: 12.5
+      original_age_max: 17.5
+      notes: "Sivapithecus / late Miocene hominoid record; soft minimum"
+
+  # Root of this 12-taxon tree = Strepsirrhini vs Haplorhini (Lemur_catta vs
+  # the rest), NOT the platyrrhine/catarrhine split.  A 20-40 Ma root would be
+  # far too young; secondary calibration from published primate timetrees.
+  - name: "primateRoot"
+    taxa: null
+    monophyletic: true
+    distribution:
+      type: "uniform"
+      parameters: {lower: 55.0, upper: 75.0}
+    use_originate: true
+    provenance:
+      source: "secondary"
+      reference: "TimeTree of Life, crown-Primates estimates (https://www.timetree.org)"
+      calibration_type: "soft"
+      original_age_min: 55.0
+      original_age_max: 75.0
+      notes: "Secondary calibration from published divergence-time estimates"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  pre_burnin: 0
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_cyule.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_cyule.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  # UPGMA 起始树高度为遗传距离量级，无法容纳 Ma 级校准点
+  # （校准节点会高于根节点，导致 BEAST2 无法初始化）；含校准的配置建议 random。
+  tree_type: "random"
+
+output:
+  file: "primates_cyule.xml"
+  embed_fingerprint: true

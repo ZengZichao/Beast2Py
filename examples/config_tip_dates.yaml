@@ -1,0 +1,132 @@
+# ============================================================
+# Beast2Py 示例配置文件 3 / Example configuration 3
+# 末端日期场景：TraitSet 采样日期 + Birth-Death + HKY + UCLN
+# Tip dates: a TraitSet of sampling dates attached to the tree.
+# 对标 BEAST2 examples/testTipDates.xml（但见下面的"已知限制"）
+#
+# 说明 / Notes（三条容易被静默写错的规则）
+# ----
+# 1. tip_dates.dates 必须覆盖比对中的**每一个** taxon。未命名的末端会被
+#    BEAST2 当作 0（今世样本），三条最深层系会在用户不知情时变成今世样本；
+#    解析器现在直接报错并列出缺失的 taxon。
+# 2. trait_name 只能是 date-forward / date-backward；写成 date_backward 会
+#    产出一份"能被解析、但 BEAST2 从不把它当日期"的合法 XML。
+# 3. **整个分析只有一条时间轴**。末端日期以 year 为单位，所以校准先验和时钟
+#    速率也必须以 year 为单位：7.9 Ma 要写成 7 925 453，灵长类 mtDNA 速率
+#    2e-3 subs/site/Myr 要写成 2e-6 subs/site/year，lognormal 的 M 也从
+#    ln(1.42) 变成 ln(1 420 000) = 14.17。原示例用 units: year 的 0-20 与
+#    Ma 尺度的 uniform[20,40] 共用一根数轴，相差六个数量级。
+#
+# 已知限制 / Known limitation (why every date below is 0)
+# ----
+# primates.fasta 的 12 条序列全部来自现生标本，因此 date-backward 全为 0 是
+# 这份数据的**正确**写法：BEAST2 由此得到"所有末端在同一时刻"，并只由校准点
+# 决定绝对时间轴。
+# 对真正的异时采样数据（古 DNA、亚化石），Beast2Py 目前还不能产出可解析的
+# TipDatesRandomWalker：写出的 <taxonset> 同时给了 alignment= 与 <taxon> 子节
+# 点，BEAST2 会以
+#   "Only one of taxon and alignment should be specified, not both
+#    (id=tipdates.taxonset)"
+# 拒绝（model.py 的 build_operators -tip-dates 分支）。所以本例保持全 0；把任何
+# 一个日期改成非 0 之前，请先修好那条分支并用 beast2_validate.sh 复验。
+# ============================================================
+
+metadata:
+  analysis_name: "primates_tip_dates"
+  analysis_description: "Tip-dated (TraitSet) analysis of a contemporaneous primate sample"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "hky"
+        kappa: {value: 2.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 0
+    clock_model:
+      type: "ucln"
+      ucld_mean: {value: 0.000002, lower: 0.0}   # 2e-6 subs/site/year: years axis
+      ucld_stdev: {value: 0.5, lower: 0.0, upper: 1.0}
+    tree: "shared"
+
+# --- 末端日期（date-backward = 距今年数；0 = 今世样本） ---
+tip_dates:
+  enabled: true
+  trait_name: "date-backward"
+  units: "year"
+  dates:
+    # All 12 sequences are extant samples, so 0 years before present is the
+    # value that states what is true rather than one that exercises the writer.
+    Homo_sapiens: 0
+    Pan: 0
+    Gorilla: 0
+    Pongo: 0
+    Hylobates: 0
+    Macaca_fuscata: 0
+    M_mulatta: 0
+    M_fascicularis: 0
+    M_sylvanus: 0
+    Saimiri_sciureus: 0
+    Tarsius_syrichta: 0
+    Lemur_catta: 0
+
+# --- 树先验：物种级数据用生灭先验，而不是 coalescent ---
+tree_prior:
+  type: "birth_death"
+  birth_rate: {value: 1.0, lower: 0.0}
+  death_rate: {value: 0.5, lower: 0.0}
+  sample_probability: {value: 1.0, lower: 0.0, upper: 1.0}
+
+# --- 校准点：与末端日期同一条数轴（year） ---
+# The offset shifts the distribution and M/S describe the lognormal *above* the
+# offset, in the axis units, so M = ln(1 420 000) = 14.17 here; in Ma units the
+# same shape is M = 0.35.  Checked with
+#   compute_distribution_stats("lognormal", {M: 14.17, S: 0.4}, 6500000)
+# -> median 7 925 453, 95% HPD [7 021 030, 9 331 427] years.
+calibrations:
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 14.17, S: 0.4}
+      offset: 6500000.0
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7000000.0
+      original_age_max: 9500000.0
+      notes: "Sahelanthropus tchadensis, 7.24 Ma, expressed in years"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_tipdates.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_tipdates.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_tipdates.xml"
+  embed_fingerprint: true

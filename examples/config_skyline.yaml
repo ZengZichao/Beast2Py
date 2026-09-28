@@ -1,0 +1,93 @@
+# ============================================================
+# Beast2Py 示例配置文件 11 / Example configuration 11
+# Bayesian Skyline 树先验 + TN93+Γ4 + 严格时钟
+# Demographic history (Bayesian Skyline Plot) with TN93.
+#
+# 说明 / Notes
+# ----
+# * A skyline analysis needs an *absolute* time axis: population sizes and the
+#   skyline change points are measured in the same units as the node heights.
+#   Two routes exist -- (i) estimate the clock rate and calibrate at least one
+#   node, or (ii) fix the clock rate at a literature value expressed in
+#   substitutions/site/time-unit.  Beast2Py rejects a *fixed* rate combined
+#   with *zero* calibrations, because then nothing on the tree is anchored and
+#   every time parameter is unidentifiable.  This example takes route (i).
+# * bPopSizes / bGroupSizes are the skyline parameters: the sizes stay positive
+#   (a scale operator moves them), the group sizes are integers moved by a
+#   delta-exchange operator with integer="true".
+# ============================================================
+
+metadata:
+  analysis_name: "primates_bayesian_skyline"
+  analysis_description: "Bayesian skyline plot with TN93 + Gamma"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "tn93"
+        kappa1: {value: 2.0, lower: 0.0}
+        kappa2: {value: 4.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 1.0, lower: 0.0}   # estimated: see the note above
+    tree: "shared"
+
+tree_prior:
+  type: "bayesian_skyline"
+  pop_sizes: {value: 1.0, lower: 0.0, dimension: 5}
+  group_sizes: {value: 1, dimension: 5}
+
+calibrations:
+  # The skyline is plotted against time, so the time axis must be pinned.
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  # (Sahelanthropus tchadensis, 7.24 Ma, as a soft minimum).
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_bsp.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_bsp.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_bsp.xml"
+  embed_fingerprint: true

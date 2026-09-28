@@ -1,0 +1,104 @@
+# ============================================================
+# Beast2Py 示例配置文件 15 / Example configuration 15
+# 第二个氨基酸经验矩阵：JTT + Γ+I（与 config_aa_model.yaml 的 WAG 对照）
+# A second empirical amino-acid matrix (JTT) with gamma + invariant sites.
+#
+# 说明 / Notes
+# ----
+# * Everything but `substitution_model.type` is the WAG example's structure:
+#   switching matrices is a one-token edit.  The four remaining empirical
+#   matrices in the registry (dayhoff, blosum62, cprev, mtrev) are reached the
+#   same way; MTREV and CPREV are the mitochondrion-specific ones and are the
+#   natural choice for this alignment.
+# * JTT, like every matrix here, brings its own equilibrium frequencies, so the
+#   substitution model has no `frequencies` key at all.
+# * proportion_invariant is estimated on [0, 1]; it needs gamma_categories > 0
+#   to be meaningful, and Beast2Py refuses a `gamma_shape` when
+#   gamma_categories <= 1 (SiteModel documents the shape as ignored there).
+# ============================================================
+
+metadata:
+  analysis_name: "mito_aminoacid_jtt"
+  analysis_description: "Amino acid alignment under JTT with gamma and invariant sites"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "aminoacid.fasta"
+    format: "auto"
+    data_type: "aminoacid"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "jtt"
+      gamma_categories: 4
+      gamma_shape: {value: 1.0, lower: 0.0}
+      proportion_invariant: {value: 0.05, lower: 0.0, upper: 1.0}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 0.001, lower: 0.0}     # estimated; subs/site/Myr
+    tree: "shared"
+
+tree_prior:
+  type: "yule"
+  birth_rate: {value: 1.0, lower: 0.0}
+
+calibrations:
+  # lognormal(M=2.5, S=0.5) offset 66 -> median 78.2, 95% HPD [69.1, 94.3]
+  - name: "boreoeutherianMRCA"
+    taxa: ["Cow", "Human", "Mouse", "Rat", "Seal", "Whale"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 2.5, S: 0.5}
+      offset: 66.0
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature06614"
+      calibration_type: "soft"
+      original_age_min: 66.0
+      original_age_max: 95.0
+      notes: "K-Pg (66.0 Ma) floor for crown placental mammals"
+
+  # lognormal(M=1.0, S=0.5) offset 11 -> median 13.7, 95% HPD [11.7, 17.3]
+  - name: "rodentMRCA"
+    taxa: ["Mouse", "Rat"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 1.0, S: 0.5}
+      offset: 11.0
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature06614"
+      calibration_type: "soft"
+      original_age_min: 11.0
+      original_age_max: 18.0
+      notes: "late-Miocene first occurrence of the murine rodent radiation"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "aa_jtt.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "aa_jtt.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "aa_jtt.xml"
+  embed_fingerprint: true

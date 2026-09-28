@@ -1,0 +1,117 @@
+# ============================================================
+# Beast2Py 示例配置文件 8b / Example configuration 8b
+# 替换模型：SYM（6 个自由交换率 + 均匀平衡频率）
+# SYM: all six exchangeabilities free, equilibrium frequencies uniform.
+#
+# 说明 / Notes
+# ----
+# * SYM is the "symmetric rates" model: its six rates are free (like GTR), but
+#   the base frequencies are *not* parameters.  That is expressed with
+#   `frequencies.mode: uniform`, which emits
+#   <frequencies spec="Frequencies" data="@alignment" estimate="false"/> --
+#   BEAST2's documented meaning for that combination is "uniform over the
+#   observed characters".  Do not write an estimated frequency vector here: it
+#   silently turns SYM into GTR.
+# * `rates:` is legal for sym and gtr only, and must give exactly 6 values; it
+#   may not be mixed with explicit rateAC..rateGT keys.
+# ============================================================
+
+metadata:
+  analysis_name: "primates_subst_sym"
+  analysis_description: "SYM + Gamma, single partition, for marginal-likelihood model comparison"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "sym"
+        # one flat vector for the six exchangeabilities, or the six named keys
+        rates: {value: "1.0 4.0 1.0 1.0 4.0 1.0", dimension: 6, lower: 0.0, estimate: true}
+        frequencies:
+          mode: "uniform"
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "ucln"
+      ucld_mean: {value: 1.0, lower: 0.0}
+      ucld_stdev: {value: 0.5, lower: 0.0, upper: 1.0}
+    tree: "shared"
+
+tree_prior:
+  type: "birth_death"
+  birth_rate: {value: 1.0, lower: 0.0}
+  death_rate: {value: 0.5, lower: 0.0}
+  sample_probability: {value: 1.0, lower: 0.0, upper: 1.0}
+
+calibrations:
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+
+  # lognormal(M=3.35, S=0.1) -> median 28.5, 95% HPD [23.2, 34.5]
+  - name: "catarrhiniMRCA"
+    taxa:
+      - "Homo_sapiens"
+      - "Pan"
+      - "Gorilla"
+      - "Pongo"
+      - "Hylobates"
+      - "Macaca_fuscata"
+      - "M_mulatta"
+      - "M_fascicularis"
+      - "M_sylvanus"
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 3.35, S: 0.1}
+    provenance:
+      source: "secondary"
+      reference: "TimeTree of Life, Homo/Macaca estimates (https://www.timetree.org)"
+      calibration_type: "soft"
+      original_age_min: 25.0
+      original_age_max: 33.0
+      notes: "Secondary calibration; Oligocene catarrhines give a ~28 Ma floor"
+
+mcmc:
+  type: "standard"
+  chain_length: 20000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_sym.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_sym.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_sym.xml"
+  embed_fingerprint: true

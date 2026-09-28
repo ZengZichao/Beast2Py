@@ -1,0 +1,95 @@
+# ============================================================
+# Beast2Py 示例配置文件 7 / Example configuration 7
+# Nested Sampling 场景：用于模型比较和边缘似然估计
+# Requires the BEAST2 NS add-on (github.com/BEAST2-Dev/nested-sampling).
+# The generated <run> element carries spec="nestedsampling.gss.NS", so the
+# add-on must be installed for BEAST2 to open the file (the bundled
+# beast2_validate.sh puts every jar under ~/.beast/2.7 on the classpath).
+#
+# 说明 / Notes
+# ----
+# * Nested sampling is the marginal-likelihood route to a Bayes factor, which
+#   is exactly how substitution models should be compared: one analysis per
+#   model (see config_subst_models.yaml for why several likelihoods must not
+#   share one run).
+# * With `type: nested_sampling`, `particle_count` and `sub_chain_length`
+#   drive the walker stack; `pre_burnin`/`store_every` are still emitted so a
+#   crashed run can be resumed.
+# ============================================================
+
+metadata:
+  analysis_name: "primates_nested_sampling"
+  analysis_description: "Nested sampling for marginal likelihood estimation"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "hky"
+        kappa: {value: 2.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 1.0, lower: 0.0}
+    tree: "shared"
+
+tree_prior:
+  type: "yule"
+  birth_rate: {value: 1.0, lower: 0.0}
+
+calibrations:
+  # Crown Primates (Lemur_catta vs the rest of this alignment).  A Normal(25, 3)
+  # root would be ~40 Ma too young; secondary calibration instead.
+  # uniform[55, 75] -> median 65.0, 95% HPD [55, 75].
+  - name: "primateRoot"
+    taxa: null
+    monophyletic: true
+    distribution:
+      type: "uniform"
+      parameters: {lower: 55.0, upper: 75.0}
+    use_originate: true
+    provenance:
+      source: "secondary"
+      reference: "TimeTree of Life, crown-Primates estimates (https://www.timetree.org)"
+      calibration_type: "soft"
+      original_age_min: 55.0
+      original_age_max: 75.0
+      notes: "Secondary calibration from published divergence-time estimates"
+
+# --- Nested Sampling MCMC ---
+mcmc:
+  type: "nested_sampling"
+  chain_length: 10000000
+  pre_burnin: 0
+  store_every: 10000
+  particle_count: 1
+  sub_chain_length: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_ns.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_ns.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_ns.xml"
+  embed_fingerprint: true
