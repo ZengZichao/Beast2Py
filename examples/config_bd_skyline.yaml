@@ -1,0 +1,100 @@
+# ============================================================
+# Beast2Py 示例配置文件 13 / Example configuration 13
+# 串行采样 Birth-Death Skyline 树先验（BDSKY）
+# Serial-sampling birth-death skyline prior.
+# 注意 / Requires the bdsky add-on package (github.com/BEAST2-Dev/bdsky):
+# the generated prior is spec="bdsky.evolution.speciation.BirthDeathSkylineModel".
+#
+# 说明 / Notes
+# ----
+# * BirthDeathSkylineModel is emitted with contemp="false", i.e. the sampling
+#   process is written as psi (samplingRate) through time plus rho (removal /
+#   present-day sampling proportion).  All 12 primates here are modern samples,
+#   so the self-consistent parameterisation is psi ~ 0 and rho = 1: every
+#   sampled lineage is removed at the present and nothing is sampled in between.
+#   psi starts at 1e-3 and is estimated -- it is wired to a state node, so it
+#   cannot be fixed -- and with strictly contemporaneous tips its posterior mass
+#   stays near zero.  rho is a fixed data property (the sampling proportion).
+#   (Serial sampling with psi >> 0 belongs with tip dates; see
+#   config_tip_dates.yaml for that data shape.)
+# * The clock rate is estimated and one node is calibrated: a fixed clock rate
+#   without any calibration leaves absolute time unidentifiable, and the
+#   skyline change-point times would be meaningless.
+# * Birth and death rates stay free here; for a critical or sub-critical
+#   process (death >= birth) this is the prior to use, since the plain
+#   `birth_death` prior reparameterises to birth - death and death / birth.
+# ============================================================
+
+metadata:
+  analysis_name: "primates_bd_skyline"
+  analysis_description: "Serial birth-death skyline prior (requires the bdsky add-on)"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "hky"
+        kappa: {value: 2.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 1.0, lower: 0.0}   # estimated
+    tree: "shared"
+
+tree_prior:
+  type: "bd_skyline_serial"
+  birth_rate: {value: 1.0, lower: 0.0}
+  death_rate: {value: 0.5, lower: 0.0}
+  sampling_rate: {value: 0.001, lower: 0.0, upper: 1.0}
+  rho: {value: 1.0, lower: 0.0, upper: 1.0}
+
+calibrations:
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_bdsky.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_bdsky.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_bdsky.xml"
+  embed_fingerprint: true

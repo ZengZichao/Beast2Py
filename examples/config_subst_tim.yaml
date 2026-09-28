@@ -1,0 +1,104 @@
+# ============================================================
+# Beast2Py 示例配置文件 8c / Example configuration 8c
+# 替换模型：TIM（过渡速率分两类、颠换速率两类；频率由比对计数得到）
+# TIM: two transition rates + two transversion rates, empirical frequencies.
+#
+# 说明 / Notes
+# ----
+# * TIM's four free rates are rateAG, rateCT, rateTransversions1 and
+#   rateTransversions2.  It does NOT take a 6-value `rates` vector: the model
+#   is defined by equalities among the six exchangeabilities, so a vector of
+#   six free rates implements a different (GTR-like) process.  The same holds
+#   for TVM (rateAC, rateAT, rateCG, rateGT, rateTransitions -- see
+#   config_subst_models.yaml).
+# * `frequencies.mode` has four settings:
+#     estimated -> a 4-dim probability vector in the state space (default)
+#     uniform   -> estimate="false", i.e. flat over the observed characters
+#     empirical -> estimate="true"  with data="@alignment": BEAST2 counts the
+#                  alignment and fixes the result (no frequency operator)
+#     fixed     -> the vector written below is emitted verbatim and not
+#                  estimated (for externally derived frequencies)
+#   Here: empirical.  To pin an outside estimate instead, use
+#     frequencies:
+#       mode: "fixed"
+#       value: "0.29 0.31 0.19 0.21"
+#       dimension: 4
+#       estimate: false
+#   (values must be positive and sum to ~1 within 0.02; the generator also
+#   gives every frequency vector the bounds it statistically requires).
+# ============================================================
+
+metadata:
+  analysis_name: "primates_subst_tim"
+  analysis_description: "TIM + empirical frequencies + Gamma, for marginal-likelihood model comparison"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "tim"
+        rateAG: {value: 4.0, lower: 0.0}
+        rateCT: {value: 4.0, lower: 0.0}
+        rateTransversions1: {value: 1.0, lower: 0.0}
+        rateTransversions2: {value: 1.0, lower: 0.0}
+        frequencies:
+          mode: "empirical"
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 1.0, lower: 0.0}   # estimated
+    tree: "shared"
+
+tree_prior:
+  type: "yule"
+  birth_rate: {value: 1.0, lower: 0.0}
+
+calibrations:
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_tim.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_tim.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_tim.xml"
+  embed_fingerprint: true

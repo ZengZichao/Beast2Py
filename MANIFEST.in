@@ -1,0 +1,7 @@
+include beast2py/beast2_validate.sh
+include beast2py/tools/Beast2Validator.java
+include beast2py/tools/launcher.jar
+recursive-include beast2py/tools/classes *.class
+include README.md README_en.md README_zh.md LICENSE
+include docs/*.md
+recursive-include examples *.yaml *.fasta

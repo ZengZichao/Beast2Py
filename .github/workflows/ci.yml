@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Lint with flake8 (gate)
+        run: |
+          flake8 beast2py tests --count --max-line-length=100 --statistics
+
+      - name: Run tests
+        # -rs makes skipped tests visible: the BEAST2 integration tests in
+        # test_beast2_validation.py are skipped when no BEAST.base.jar is
+        # found, and a silent skip used to look like full coverage.
+        run: |
+          pytest tests/ -v -rs --cov=beast2py --cov-report=xml
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  integration:
+    # End-to-end BEAST2 validation: installs BEAST 2.7.8 and runs the
+    # integration tests (including XMLParser validation of every example
+    # config) instead of silently skipping them.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install BEAST 2.7.8
+        run: |
+          curl -L -o beast.tgz \
+            https://github.com/CompEvol/beast2/releases/download/v2.7.8/BEAST.v2.7.8.Linux.tgz
+          tar -xzf beast.tgz
+          mkdir -p ~/.beast/2.7/BEAST.base
+          mv beast ~/.beast/2.7/BEAST.base/2.7.8
+
+      - name: Install BEAST2 add-ons used by two examples (non-fatal)
+        # config_bd_skyline.yaml and config_nested_sampling.yaml reference
+        # bdsky.evolution.speciation.BirthDeathSkylineModel and
+        # nestedsampling.gss.NS. Without the jars those two integration cases
+        # SKIP (visible via -rs), which must never be read as a pass: the
+        # add-on-dependent specs are otherwise unverified in CI.
+        run: |
+          BEAST=~/.beast/2.7/BEAST.base/2.7.8/beast/bin/beast
+          "$BEAST" -get BDSKY v1.5.1 || echo "::warning::BDSKY add-on not installed; bd_skyline example will be skipped"
+          "$BEAST" -get NS || echo "::warning::nested-sampling add-on not installed; nested_sampling example will be skipped"
+          ls ~/.beast/2.7 || true
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run BEAST2 integration tests
+        run: |
+          pytest tests/test_beast2_validation.py -v -rs
+
+  packaging:
+    # The BEAST2 validation helper must be present after a
+    # plain `pip install .`, otherwise validation silently degrades to
+    # "executable not found" while the command still exits 0.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install the distribution (not the source tree)
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+          python -m pip install dist/*.whl
+      - name: Assert the bundled validator is discoverable
+        run: |
+          cd /tmp
+          python - <<'PY'
+          from beast2py.validator import XMLValidator
+          path = XMLValidator._bundled_validator_script()
+          assert path is not None and path.is_file(), (
+              "beast2_validate.sh missing from the installed distribution"
+          )
+          print("validator script:", path)
+          tools = path.parent / "tools" / "Beast2Validator.java"
+          assert tools.is_file(), "tools/Beast2Validator.java missing from the wheel"
+          PY
+      - name: Assert the console entry point runs
+        run: |
+          cd /tmp
+          beast2py list-models >/dev/null

@@ -1,0 +1,12 @@
+{
+  "fingerprint": "B2P-ba18c26ed61f-0.1.0",
+  "config_hash": "ba18c26ed61fcf4b157723d410f13f7534b0533c9c4810f6a3f422caa3ed9d8e",
+  "full_hash": "ba18c26ed61fcf4b157723d410f13f7534b0533c9c4810f6a3f422caa3ed9d8e",
+  "data_hash": "30be5613d3ff6862",
+  "hash_bits": 48,
+  "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% collision probability would require about 2**24 distinct analyses.",
+  "tool_version": "0.1.0",
+  "beast2_version": "2.7.8",
+  "generation_time": "2026-09-21T14:49:47.359446",
+  "analysis_name": "primates_basic_calibration"
+}

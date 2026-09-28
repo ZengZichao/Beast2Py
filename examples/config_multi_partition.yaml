@@ -1,0 +1,153 @@
+# ============================================================
+# Beast2Py 示例配置文件 5 / Example configuration 5
+# 多 Partition 场景：同一比对的密码子位点分区 + 模型 link/unlink
+# Multi-partition analysis: codon-position partitions of one alignment,
+# independent site models, one shared (linked) clock and topology.
+#
+# 说明 / Notes
+# ----
+# * 两个 partition 用 FilteredAlignment 从**同一份**比对里取出互不相交的位点
+#   （codon12 = 599 sites，codon3 = 299 sites，599 + 299 = 898）。让两个
+#   partition 直接指向同一个 alignment 会被解析器拒绝：同一批位点会被计入似然
+#   两次，后验等于把自己乘了两遍。
+# * filter 表达式是 BEAST2 自己的语法：`from-to[\step]` 或 `from:to:step`，
+#   空着的 to 表示"到末端"，所以 `1::3,2::3` = 第 1、2 位密码子，`3::3` = 第 3 位。
+#   声明 file + filter 时，未过滤的母本 alignment 会自动注册为
+#   `<id>.unfiltered`（也可以像这里一样显式声明 gene1 并用 data_id 指过去），
+#   FilteredAlignment 永远不指向自己。
+# * 局限（不要指望这份配置）：Beast2Py 把所有 partition 装配在**同一棵连锁的
+#   拓扑**上，`tree: separate` 或任何非 "shared" 的取值都会在解析期被拒绝。
+#   真正的不连锁拓扑（基因树-物种树冲突、*\BEAST / StarDivergence* 型分析）
+#   尚未实现；要各基因独立拓扑，请分别跑分析。
+# * clock_model.linked_to 让两个 partition 共用一套速率——这是"链接时钟、
+#   不链接取代模型"的标准配置。
+# ============================================================
+
+metadata:
+  analysis_name: "primates_multi_partition"
+  analysis_description: "Multi-partition (codon) analysis with a linked clock model"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+# --- 序列数据：母本比对 + 两个互不相交的密码子分区 ---
+alignments:
+  - id: "gene1"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+  - id: "codon12"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+    filter: "1::3,2::3"
+    data_id: "gene1"
+
+  - id: "codon3"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+    filter: "3::3"
+    data_id: "gene1"
+
+# --- Partition 模型配置 ---
+partitions:
+  # Partition 1: HKY + Gamma (第 1、2 位密码子)
+  - id: "codon12"
+    site_model:
+      substitution_model:
+        type: "hky"
+        kappa: {value: 2.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "ucln"
+      ucld_mean: {value: 1.0, lower: 0.0}
+      ucld_stdev: {value: 0.5, lower: 0.0, upper: 1.0}
+    tree: "shared"
+
+  # Partition 2: GTR + Gamma (第 3 位密码子)，共享 codon12 的时钟模型
+  - id: "codon3"
+    site_model:
+      substitution_model:
+        type: "gtr"
+        rates: {value: "1.0 1.0 1.0 1.0 1.0 1.0", dimension: 6, estimate: true}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      linked_to: "codon12"    # 共享 codon12 的时钟模型
+    tree: "shared"
+
+# --- 树先验 ---
+tree_prior:
+  type: "birth_death"
+  birth_rate: {value: 1.0, lower: 0.0}
+  death_rate: {value: 0.5, lower: 0.0}
+  sample_probability: {value: 1.0, lower: 0.0, upper: 1.0}
+
+# --- 校准点 ---
+calibrations:
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+
+  # 根校准：这份比对的根是 Strepsirrhini vs Haplorhini（Lemur_catta vs 其余），
+  # 不是阔鼻/狭鼻类之分。M=2.5, S=0.3 的中位数只有 12.2 Ma，比真正的灵长类根
+  # 年轻了 50 Myr，而且它的 95% 区间还允许根比自己的子节点更年轻。
+  # uniform[55, 75] -> median 65.0, 95% HPD [55, 75]，完全包住子节点先验。
+  - name: "primateRoot"
+    taxa: null
+    monophyletic: true
+    distribution:
+      type: "uniform"
+      parameters: {lower: 55.0, upper: 75.0}
+    use_originate: true
+    provenance:
+      source: "secondary"
+      reference: "TimeTree of Life, crown-Primates estimates (https://www.timetree.org)"
+      calibration_type: "soft"
+      original_age_min: 55.0
+      original_age_max: 75.0
+      notes: "Secondary calibration from published divergence-time estimates"
+
+# --- MCMC ---
+mcmc:
+  type: "standard"
+  chain_length: 20000000
+  pre_burnin: 0
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_mpart.$(seed).log"
+    log_every: 2000
+  tree_log:
+    file_name: "primates_mpart.$(seed).trees"
+    log_every: 2000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  # UPGMA 起始树高度为遗传距离量级，无法容纳 Ma 级校准点
+  # （校准节点会高于根节点，导致 BEAST2 无法初始化）；含校准的配置建议 random。
+  tree_type: "random"
+
+output:
+  file: "primates_mpart.xml"
+  embed_fingerprint: true

@@ -1,0 +1,115 @@
+# ============================================================
+# Beast2Py 示例配置文件 14 / Example configuration 14
+# 氨基酸替换模型（WAG 经验矩阵，自带平衡频率）+ 两个 MRCA 校准
+# Amino-acid data under the empirical WAG matrix, UCLN clock.
+#
+# 说明 / Notes
+# ----
+# * WAG (and JTT/Dayhoff/Blosum62/CPREV/MTREV) is a 20 x 20 empirical matrix
+#   that ships with its own equilibrium frequencies, so no <frequencies> element
+#   is generated -- and it is only legal on `data_type: aminoacid`, which the
+#   parser now enforces in both directions (a nucleotide model on amino-acid
+#   data, or WAG on ACGT data, is a parse error).
+# * A calibration's taxon list must be a clade of the *real* tree, because
+#   `monophyletic: true` becomes an MRCAPrior constraint that the topology has
+#   to satisfy.  This alignment (examples/aminoacid.fasta, 10 taxa) holds six
+#   mammals -- Cow, Human, Mouse, Rat, Seal, Whale -- so a "mammal root" on
+#   [Cow, Mouse, Rat] would exclude Human/Seal/Whale and constrain away the
+#   true topology.  All six are listed below.
+# * A Laplace prior on a node age is unusual (it has support below zero once
+#   offset and its density peaks with heavy symmetric tails); the age of a
+#   clade is a positive quantity, so a lognormal soft minimum is used instead.
+# ============================================================
+
+metadata:
+  analysis_name: "mito_aminoacid_wag"
+  analysis_description: "Amino acid alignment under WAG with two MRCA calibrations"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "aminoacid.fasta"
+    format: "auto"
+    data_type: "aminoacid"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "wag"
+      gamma_categories: 4
+      gamma_shape: {value: 1.0, lower: 0.0}
+    clock_model:
+      type: "ucln"
+      ucld_mean: {value: 0.001, lower: 0.0}      # ~1e-3 subs/site/Myr for proteins
+      ucld_stdev: {value: 0.5, lower: 0.0, upper: 1.0}
+    tree: "shared"
+
+tree_prior:
+  type: "birth_death"
+  birth_rate: {value: 1.0, lower: 0.0}
+  death_rate: {value: 0.5, lower: 0.0}
+  sample_probability: {value: 1.0, lower: 0.0, upper: 1.0}
+
+calibrations:
+  # Boreoeutheria (the six mammals of this alignment).  lognormal(M=2.5, S=0.5)
+  # offset 66 -> median 78.2, 95% HPD [69.1, 94.3]: the K-Pg extinction at
+  # 66.0 Ma is the hard floor (nothing in the prior sits below it) and the tail
+  # runs to ~94 Ma, matching published placental timetrees.
+  - name: "boreoeutherianMRCA"
+    taxa: ["Cow", "Human", "Mouse", "Rat", "Seal", "Whale"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 2.5, S: 0.5}
+      offset: 66.0
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature06614"
+      calibration_type: "soft"
+      original_age_min: 66.0
+      original_age_max: 95.0
+      notes: "K-Pg (66.0 Ma) floor for crown placental mammals; soft maximum ~100 Ma"
+
+  # Muridae (Mouse + Rat).  lognormal(M=1.0, S=0.5) offset 11 -> median 13.7,
+  # 95% HPD [11.7, 17.3]: the murine fossil record starts in the late
+  # Miocene (~11.7 Ma), and the interval stays well below the mammal root.
+  - name: "rodentMRCA"
+    taxa: ["Mouse", "Rat"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 1.0, S: 0.5}
+      offset: 11.0
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature06614"
+      calibration_type: "soft"
+      original_age_min: 11.0
+      original_age_max: 18.0
+      notes: "late-Miocene first occurrence of the murine rodent radiation"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "aa_wag.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "aa_wag.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "aa_wag.xml"
+  embed_fingerprint: true

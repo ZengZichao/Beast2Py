@@ -1,0 +1,45 @@
+# ============================================================
+# 校准点配置文件（用于 quick 子命令）
+# Calibration-only YAML for the `quick` subcommand:
+#   beast2py quick -a primates.fasta --calibration-yaml calibrations.yaml ...
+# Taxon names must match the alignment you pass to -a.
+#
+# 每条记录都是"先验 + 出处"成对写：distribution 是真正进入 BEAST2 的先验，
+# provenance 是它的证据链。两者会被交叉检查——provenance.original_age_min/max
+# 与先验的 95% 区间若完全错开，解析期直接报错，所以"记录写 7 Ma 的化石、
+# 实际用中位数 6 Ma 的正态"这类自相矛盾无法静默通过。
+# ============================================================
+
+# lognormal(M=0.35, S=0.4) offset 6.5
+#  -> median 7.92 Ma, 95% HPD [7.02, 9.32], P(age < 7.24 Ma) = 0.05
+- name: "homininaMRCA"
+  taxa: ["Homo_sapiens", "Pan"]
+  monophyletic: true
+  distribution:
+    type: "lognormal"
+    parameters: {M: 0.35, S: 0.4}
+    offset: 6.5
+  provenance:
+    source: "fossil"
+    reference: "DOI:10.1038/nature12323"
+    calibration_type: "soft"
+    original_age_min: 7.0
+    original_age_max: 9.5
+    notes: "Sahelanthropus tchadensis, 7.24 Ma; lognormal soft minimum"
+
+# lognormal(M=1.0, S=0.4) offset 12.0
+#  -> median 14.72 Ma, 95% HPD [12.99, 17.40]
+- name: "hominidaeMRCA"
+  taxa: ["Homo_sapiens", "Pan", "Gorilla", "Pongo"]
+  monophyletic: true
+  distribution:
+    type: "lognormal"
+    parameters: {M: 1.0, S: 0.4}
+    offset: 12.0
+  provenance:
+    source: "fossil"
+    reference: "DOI:10.1126/science.1069883"
+    calibration_type: "soft"
+    original_age_min: 12.5
+    original_age_max: 17.5
+    notes: "Sivapithecus / late-Miocene hominoid record; 12 Ma offset = hard floor"

@@ -1,0 +1,130 @@
+# ============================================================
+# Beast2Py 示例配置文件 1 / Example configuration 1
+# 基础场景：单 partition + Yule + HKY+Γ4 + 严格时钟 + 1 个校准
+# Basic scenario: single partition, Yule prior, HKY+Gamma4, strict
+# clock, one (soft-minimum) fossil calibration.
+# 对标 BEAST2 examples/testCalibration.xml
+#
+# 说明 / Notes
+# ----
+# * 被估计的连续参数若没有先验，后验在形式上是非正常的（improper）。
+#   Beast2Py 会为每个被估计参数自动补一个弱信息先验，并在 XMLValidator
+#   里检查覆盖率；这里把两个关键先验显式写出来，是为了让 YAML 本身
+#   就是分析记录（见 §7.4 priors / parameter_priors）。
+# * The clock rate is *estimated*, so the single calibration below is
+#   what carries the absolute time scale.  Every other time in this
+#   analysis is expressed relative to it.
+# ============================================================
+
+# --- 元数据（可重复性） ---
+metadata:
+  analysis_name: "primates_basic_calibration"
+  analysis_description: "Basic divergence time estimation for primates with single calibration"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+# --- 序列数据 ---
+# primates.fasta: 12 taxa x 898 bp mitochondrial alignment (BEAST2's
+# Primates.nex converted to FASTA).  Equal sequence lengths, unique taxon
+# names and a legal alphabet are checked at parse time.
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+# --- Partition 模型配置 ---
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "hky"
+        kappa: {value: 2.0, lower: 0.0}
+        # mode: estimated (default) | uniform | empirical | fixed
+        #   estimated -> 4 维概率向量进入状态空间并被采样
+        #   empirical -> spec="Frequencies" data="@alignment" estimate="true"
+        #   fixed     -> 原样写入下面的向量，不再估计
+        frequencies:
+          mode: "estimated"
+          value: 0.25
+          dimension: 4
+          lower: 0.0
+          upper: 1.0
+          estimate: true
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 1.0, lower: 0.0}   # estimated (expected substitutions/site/Myr)
+    tree: "shared"
+
+# --- 树先验 ---
+tree_prior:
+  type: "yule"
+  birth_rate: {value: 1.0, lower: 0.0}
+
+# --- 校准点 ---
+# A soft minimum, not a hard bound: Sahelanthropus tchadensis from
+# Toros-Menalla is dated 7.24 +/- 0.15 Ma and is *controversially* placed
+# near the human--chimp split, so the prior is a lognormal offset by 6.5 Ma
+# (BEAST2's OffsetLogNormalDistribution).  Checked with the tool's own
+# compute_distribution_stats("lognormal", {M: 0.35, S: 0.4}, offset 6.5):
+#   median 7.92 Ma, 95% HPD [7.02, 9.32] Ma, P(age < 7.24 Ma) = 0.05,
+# i.e. the fossil sits at the 5% quantile and the tail runs older, which is
+# the behaviour recommended for fossil minima (Rieux & Balloux 2016).
+# provenance.original_age_min/max are compared against that 95% interval at
+# parse time, so the record and the prior cannot silently disagree.
+calibrations:
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    use_originate: false
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, Toros-Menalla 7.24 Ma; soft minimum"
+
+# --- 参数先验（显式声明关键两个；其余由默认弱信息先验补齐） ---
+parameter_priors:
+  - parameter: "clock_rate"          # resolves to the clockRate state node
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.0, S: 1.0}   # diffuse around 1.0 subs/site/Myr
+  - parameter: "kappa"
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.0, S: 1.0}
+
+# --- MCMC ---
+# store_every defaults to 10000 samples so a 10^7-state chain can be resumed
+# with `beast -resume`; -1 disables checkpointing (the validator warns).
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  pre_burnin: 0
+  store_every: 10000
+
+# --- 日志器 ---
+loggers:
+  trace_log:
+    file_name: "primates_basic.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_basic.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+# --- 输出 ---
+output:
+  file: "primates_basic.xml"
+  embed_fingerprint: true

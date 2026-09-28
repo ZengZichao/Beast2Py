@@ -1,0 +1,88 @@
+# ============================================================
+# Beast2Py 示例配置文件 12 / Example configuration 12
+# EBSP（扩展贝叶斯天际线图，BEAST 2.7 核心包内置）+ HKY+Γ4
+# Extended Bayesian Skyline Plot: a Coalescent prior whose populationModel is
+# a CompoundPopulationFunction (type="linear") whose segments are switched on
+# and off by a BooleanParameter of indicators (BitFlipOperator).
+#
+# 说明 / Notes
+# ----
+# * EBSP is built for data with many sampled ancestors / dense sampling; with
+#   12 contemporaneous primate sequences the indicators mostly stay off, so the
+#   estimate collapses towards a Bayesian Skyline.  The example exists to show
+#   the XML wiring (discrete indicator parameter + linear population function)
+#   and the absolute-time requirement, not to recommend EBSP for this matrix.
+# * The clock rate is estimated and one node is calibrated, otherwise the
+#   population function would have no time axis to be plotted against.
+# ============================================================
+
+metadata:
+  analysis_name: "primates_ebsp"
+  analysis_description: "Extended Bayesian skyline plot with HKY"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "hky"
+        kappa: {value: 2.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 1.0, lower: 0.0}   # estimated: see the note above
+    tree: "shared"
+
+tree_prior:
+  type: "ebsp"
+  pop_sizes: {value: 1.0, lower: 0.0}
+
+calibrations:
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_ebsp.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_ebsp.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_ebsp.xml"
+  embed_fingerprint: true

@@ -1,0 +1,136 @@
+# ============================================================
+# Beast2Py 示例配置文件 6 / Example configuration 6
+# 松弛时钟场景：UCLN（不相关松弛对数正态时钟）+ GTR+Γ4
+# Relaxed-clock showcase: uncorrelated lognormal relaxed clock.
+#
+# 说明 / Notes
+# ----
+# * UCLN is emitted with normalize="true" and the *relative* rate multiplier
+#   distributed as LogNormal(M = 1 fixed, S = ucld.stdev); ucld.mean is the
+#   clock rate.  ucld.stdev is bounded in [0, 1] exactly as BEAUti does,
+#   because an unbounded rate standard deviation is the classic UCLN
+#   non-identifiability pathology.
+# * Two nested calibrations (Hominina, Catarrhini) bracket the tree; both
+#   95% HPDs were computed with the tool's own compute_distribution_stats().
+# ============================================================
+
+metadata:
+  analysis_name: "primates_relaxed_clock"
+  analysis_description: "Relaxed clock analysis with the UCLN model"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "gtr"
+        # GTR takes either a `rates` vector (exactly 6 values, expanded into
+        # rateAC..rateGT) or the six named parameters.  TIM/TVM must use their
+        # own named rate parameters -- they do NOT accept `rates`.
+        rateAC: {value: 1.0, lower: 0.0}
+        rateAG: {value: 4.0, lower: 0.0}
+        rateAT: {value: 1.0, lower: 0.0}
+        rateCG: {value: 1.0, lower: 0.0}
+        rateCT: {value: 4.0, lower: 0.0}
+        rateGT: {value: 1.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    # UC Relaxed LogNormal clock
+    clock_model:
+      type: "ucln"
+      ucld_mean: {value: 1.0, lower: 0.0}
+      ucld_stdev: {value: 0.5, lower: 0.0, upper: 1.0}
+    tree: "shared"
+
+# Alternative clock models (uncomment to use):
+#   UC Relaxed Exponential clock:
+# clock_model:
+#   type: "uce"
+#   ucld_mean: {value: 1.0, lower: 0.0}
+#   ucld_stdev: {value: 0.5, lower: 0.0, upper: 1.0}
+#
+#   Random Local Clock:
+# clock_model:
+#   type: "rlc"
+
+tree_prior:
+  type: "birth_death"
+  birth_rate: {value: 1.0, lower: 0.0}
+  death_rate: {value: 0.5, lower: 0.0}
+  sample_probability: {value: 1.0, lower: 0.0, upper: 1.0}
+
+calibrations:
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92, 95% HPD [7.02, 9.32]
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+
+  # Homineoid/cercopithecoid split (crown Catarrhini = the 9 catarrhine taxa;
+  # Saimiri, Tarsius and Lemur fall outside it).
+  # lognormal(M=3.35, S=0.1) -> median 28.5, 95% HPD [23.2, 34.5]
+  - name: "catarrhiniMRCA"
+    taxa:
+      - "Homo_sapiens"
+      - "Pan"
+      - "Gorilla"
+      - "Pongo"
+      - "Hylobates"
+      - "Macaca_fuscata"
+      - "M_mulatta"
+      - "M_fascicularis"
+      - "M_sylvanus"
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 3.35, S: 0.1}
+    provenance:
+      source: "secondary"
+      reference: "TimeTree of Life, Homo/Macaca estimates (https://www.timetree.org)"
+      calibration_type: "soft"
+      original_age_min: 25.0
+      original_age_max: 33.0
+      notes: "Secondary calibration; Oligocene catarrhines give a ~28 Ma floor"
+
+mcmc:
+  type: "standard"
+  chain_length: 30000000
+  pre_burnin: 1000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_rcln.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_rcln.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_rcln.xml"
+  embed_fingerprint: true

@@ -1,0 +1,85 @@
+# ============================================================
+# Beast2Py 示例配置文件 10 / Example configuration 10
+# 随机局部时钟（Random Local Clock, RLC）+ HKY+Γ4 + Yule
+#
+# 说明 / Notes
+# ----
+# * The RLC puts a discrete <rateCategories> parameter on the branches (one
+#   integer per branch, drawn from the Dirichlet-rooted rateprior) and is
+#   therefore moved by a discrete operator, not by a scale operator.
+# * No `ucld_mean` / `ucld_stdev` is needed: the local rates themselves are
+#   the clock parameters, so the clock rate carries the absolute scale only
+#   once a calibration pins it (here: the Hominina soft minimum).
+# ============================================================
+
+metadata:
+  analysis_name: "primates_random_local_clock"
+  analysis_description: "Random local clock model with HKY"
+  author: "Beast2Py"
+  date: "2026-08-01"
+  beast2_version: "2.7.8"
+  tool_version: "0.1.0"
+
+alignments:
+  - id: "alignment"
+    file: "primates.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "hky"
+        kappa: {value: 2.0, lower: 0.0}
+        frequencies: {value: 0.25, dimension: 4, lower: 0.0, upper: 1.0, estimate: true}
+      gamma_categories: 4
+      gamma_shape: {value: 0.5, lower: 0.0}
+    clock_model:
+      type: "rlc"
+      clock_rate: {value: 1.0, lower: 0.0}
+    tree: "shared"
+
+tree_prior:
+  type: "yule"
+  birth_rate: {value: 1.0, lower: 0.0}
+
+calibrations:
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  # (checked with beast2py.utils.compute_distribution_stats).
+  - name: "homininaMRCA"
+    taxa: ["Homo_sapiens", "Pan"]
+    monophyletic: true
+    distribution:
+      type: "lognormal"
+      parameters: {M: 0.35, S: 0.4}
+      offset: 6.5
+    provenance:
+      source: "fossil"
+      reference: "DOI:10.1038/nature12323"
+      calibration_type: "soft"
+      original_age_min: 7.0
+      original_age_max: 9.5
+      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum, not a hard bound"
+
+mcmc:
+  type: "standard"
+  chain_length: 10000000
+  store_every: 10000
+
+loggers:
+  trace_log:
+    file_name: "primates_rlc.$(seed).log"
+    log_every: 1000
+  tree_log:
+    file_name: "primates_rlc.$(seed).trees"
+    log_every: 1000
+  screen_log:
+    log_every: 10000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "primates_rlc.xml"
+  embed_fingerprint: true

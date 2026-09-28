@@ -1,0 +1,78 @@
+[project]
+name = "beast2py"
+dynamic = ["version"]
+description = "Python framework for reproducible divergence time estimation with calibration prior validation"
+readme = "README_en.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "曾子超 (Zichao Zeng)", email = "zengzichao@sjtu.edu.cn"},
+]
+keywords = ["BEAST2", "phylogenetics", "divergence time", "calibration", "molecular clock"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "pyyaml>=6.0",
+    "biopython>=1.80",
+    "numpy>=1.20",
+    "scipy>=1.8",
+    "matplotlib>=3.5",
+    "jinja2>=3.0",
+    "defusedxml>=0.7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov", "black", "flake8", "mypy", "defusedxml>=0.7"]
+xml = ["lxml>=4.9"]
+
+[project.scripts]
+beast2py = "beast2py.main:main"
+
+[project.urls]
+Homepage = "https://github.com/ZengZichao/Beast2Py"
+"Bug Tracker" = "https://github.com/ZengZichao/Beast2Py/issues"
+ORCID = "https://orcid.org/0000-0001-6553-970X"
+
+# The BEAST2 validation helper and its Java helper must ship with the package.
+# They live under beast2py/ so that a wheel carries them.
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+beast2py = [
+    "beast2_validate.sh",
+    "tools/*.java",
+    "tools/*.jar",
+    "tools/classes/*.class",
+    "tools/classes/beast/pkgmgmt/*.class",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["beast2py*"]
+
+# Single source of truth: `beast2py.__version__`.
+[tool.setuptools.dynamic]
+version = {attr = "beast2py.__version__"}
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
