@@ -23,7 +23,7 @@ Beast2Py follows a layered architecture designed for extensibility and maintaina
 | Utility Functions | `utils.py` | ID generation, XML serialization, distribution calculations |
 | Model Registry | `registry.py` | Model name to XML spec mapping, extensible registration |
 | BEAST2 Validation Launcher | `beast2_validate.sh` | Headless BEAST2 validation entry point shipped *inside* the package (the repository root keeps only a thin wrapper of the same name) |
-| Java Validation Helper | `tools/` | `Beast2Validator.java` plus the precompiled `classes/` and `launcher.jar`, shipped as package data |
+| Java Validation Helper | `tools/` | `Beast2Validator.java` plus the precompiled `classes/` and `launcher.jar`, shipped as package data; `NOTICE` and `LICENSE.BEAST2-LGPL-2.1.txt` record the provenance and the LGPL-2.1 terms that those bundled classes carry |
 
 ## Data Flow
 

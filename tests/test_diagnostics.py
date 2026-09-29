@@ -1,6 +1,7 @@
 """Tests for the diagnostics module."""
 
 import os
+import pytest
 import tempfile
 from pathlib import Path
 
@@ -181,3 +182,58 @@ class TestDiagnosticEngine:
             content = f.read()
         assert "Beast2Py Diagnostic Report" in content
         assert "test_multi_cal" in content
+
+
+class TestOverlapCriterionIsRelativeToDefault:
+    """Supplement §S1.2 documents the ratio as the default criterion.
+
+    W grows with node depth, so the absolute criterion is opt-in: two priors that
+    are far apart relative to their own width must not be called redundant unless
+    the caller asks for the absolute measure.
+    """
+
+    WIDTH = 2 * 1.96 * 0.05          # each prior's own 95% interval width
+
+    def _pair(self):
+        from beast2py.models import CalibrationPoint, DistributionConfig
+        return [
+            CalibrationPoint(name="A", taxa=["t1", "t2"],
+                             distribution=DistributionConfig(
+                                 type="normal", parameters={"mean": 10.0, "sigma": 0.05})),
+            CalibrationPoint(name="B", taxa=["t3", "t4"],
+                             distribution=DistributionConfig(
+                                 type="normal", parameters={"mean": 10.5, "sigma": 0.05})),
+        ]
+
+    @staticmethod
+    def _overlap(conflicts):
+        return [c for c in conflicts if c.conflict_type == "distribution_overlap"]
+
+    def test_thresholds_are_the_ones_the_supplement_quotes(self):
+        assert ConflictDetector.OVERLAP_RATIO_THRESHOLD == 0.15
+        assert ConflictDetector.OVERLAP_DISTANCE_THRESHOLD == 2.0
+
+    def test_absolute_criterion_is_not_applied_by_default(self):
+        # W = 0.5 is below the absolute 2.0, but R = 0.5 / 0.196 = 2.55 is far
+        # above 0.15, so this pair is informative, not redundant.
+        assert 0.5 < ConflictDetector.OVERLAP_DISTANCE_THRESHOLD
+        out = ConflictDetector.detect_conflicts(self._pair())
+        assert self._overlap(out) == []
+
+    @pytest.mark.parametrize("measure", ["absolute", "both"])
+    def test_absolute_criterion_applies_when_requested(self, measure):
+        out = ConflictDetector.detect_conflicts(self._pair(),
+                                                settings={"overlap_measure": measure})
+        hits = self._overlap(out)
+        assert len(hits) == 1
+        assert hits[0].severity == "warning"
+
+    def test_relative_requested_explicitly_matches_the_default(self):
+        assert self._overlap(ConflictDetector.detect_conflicts(
+            self._pair(), settings={"overlap_measure": "relative"})) == []
+
+    def test_unknown_measure_is_rejected_not_silently_ignored(self):
+        from beast2py.config import ConfigError
+        with pytest.raises((ConfigError, ValueError)):
+            ConflictDetector.detect_conflicts(
+                self._pair(), settings={"overlap_measure": "whichever"})

@@ -356,7 +356,7 @@ class ModelBuilder:
         # substitution model through the XML attribute named in the registry
         # (kappa, kappa1, rateAC, rateTransversions1, ...). A *fixed* parameter
         # is instead nested as an inline <parameter estimate="false"> so it
-        # never enters the state space .
+        # never enters the state space.
         for param_name, param_spec in model_spec.get("params", {}).items():
             attr_name = param_spec["attr"]
             dim = param_spec.get("dim", 1)
@@ -679,7 +679,7 @@ class ModelBuilder:
                 # "probability" clamped this to (0, 1], which rejected perfectly
                 # ordinary UCLD settings: S is a log-scale standard deviation of
                 # among-branch rates, not a proportion, and S > 1 is common for
-                # strongly rate-varying phylogenies .
+                # strongly rate-varying phylogenies.
                 stdev_id = make_xml_id("ucld.stdev", partition_id)
                 us = clock.ucld_stdev or RealParameter(value=0.333)
                 _, stdev_node = _state_node(stdev_id, us, role="rate", default_value=0.333)
@@ -946,7 +946,7 @@ class ModelBuilder:
             # sampleProbability: BEAST2's Parameter.estimate defaults to true,
             # so this inline parameter used to be an estimated quantity that was
             # absent from <state> — an orphan the operator-coverage invariant
-            # could not see . It is a data property (taxon sampling
+            # could not see. It is a data property (taxon sampling
             # fraction), so it is now explicitly fixed.
             sp_raw = params.get("sample_probability", params.get("sampling_rate", 1.0))
             sp_value = _rate_value(sp_raw, "sample_probability")

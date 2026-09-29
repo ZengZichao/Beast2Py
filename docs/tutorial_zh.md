@@ -122,8 +122,11 @@ beast2py quick \
     --clock-model strict \
     --calibration-yaml calibrations.yaml \
     --chain-length 10000000 \
-    --output output.xml
+    --output quick_output.xml
 ```
+
+这里的输出文件命名为 `quick_output.xml`，而不是沿用第 2 节的 `output.xml`：两个命令在没有 `--force` 时都不会
+覆盖已存在的输出文件，因此复用同一个名字只会让这一步以拒绝写入收场，而不是把两次分析混进同一个文件。
 
 此外，`quick` 还接受 `--gamma-categories N`（默认 0，表示不使用 Gamma）、`--pre-burnin N`、`--name NAME`、`--force` 与 `-v/--verbose`。`quick` 同样运行那三道闸门，`store_every` 的默认值也相同。
 

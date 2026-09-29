@@ -217,3 +217,123 @@ class TestCLI:
         """Test that nonexistent config file returns error."""
         ret = main(["generate", "-c", "/nonexistent/config.yaml", "-o", "out.xml"])
         assert ret == 1
+
+
+class TestUserYamlErrorReporting:
+    """A hand-edited YAML file is the likeliest thing a new user breaks.
+
+    Every such mistake must reach the terminal as one ``[ERROR]`` line that
+    names the file, not as a Python traceback: the traceback path in
+    :func:`main` is reserved for bugs, and a stack trace on a typo teaches
+    the reader nothing about their own file.
+    """
+
+    def setup_method(self, method):
+        self.tmpdir = Path(tempfile.mkdtemp())
+        (self.tmpdir / "test.fasta").write_text(TEST_FASTA)
+
+    def _run(self, capsys, argv):
+        ret = main(argv)
+        captured = capsys.readouterr()
+        return ret, captured.out + captured.err
+
+    def _assert_clean_error(self, capsys, argv, needle):
+        ret, text = self._run(capsys, argv)
+        assert ret == 1, text
+        assert "Traceback" not in text, text
+        assert "[ERROR]" in text, text
+        assert needle in text, text
+
+    def test_malformed_config_yaml(self, capsys):
+        bad = self.tmpdir / "bad.yaml"
+        bad.write_text("partitions:\n  - id: alignment\n\t broken: :\n")
+        self._assert_clean_error(
+            capsys,
+            ["generate", "-c", str(bad), "-o", str(self.tmpdir / "out.xml")],
+            "Invalid YAML in",
+        )
+
+    def test_malformed_calibration_yaml(self, capsys):
+        bad = self.tmpdir / "cals.yaml"
+        bad.write_text("- name: rootCal\n   taxa: [oops\n")
+        self._assert_clean_error(
+            capsys,
+            [
+                "quick",
+                "-a", str(self.tmpdir / "test.fasta"),
+                "-o", str(self.tmpdir / "out.xml"),
+                "--calibration-yaml", str(bad),
+            ],
+            "Invalid YAML in",
+        )
+
+    def test_missing_calibration_file(self, capsys):
+        self._assert_clean_error(
+            capsys,
+            [
+                "quick",
+                "-a", str(self.tmpdir / "test.fasta"),
+                "-o", str(self.tmpdir / "out.xml"),
+                "--calibration-yaml", str(self.tmpdir / "nope.yaml"),
+            ],
+            "Calibration file not found",
+        )
+
+    def test_calibration_file_that_is_not_a_list(self, capsys):
+        mapping = self.tmpdir / "cals.yaml"
+        mapping.write_text("name: rootCal\n")
+        self._assert_clean_error(
+            capsys,
+            [
+                "quick",
+                "-a", str(self.tmpdir / "test.fasta"),
+                "-o", str(self.tmpdir / "out.xml"),
+                "--calibration-yaml", str(mapping),
+            ],
+            "must be a list",
+        )
+
+    def test_calibration_that_names_an_unknown_taxon(self, capsys):
+        cal = self.tmpdir / "cals.yaml"
+        cal.write_text(
+            "- name: ghostCal\n"
+            "  taxa: [ghostA, ghostB]\n"
+            "  monophyletic: true\n"
+            "  distribution:\n"
+            "    type: normal\n"
+            "    parameters: {mean: 5.0, sigma: 0.5}\n"
+        )
+        self._assert_clean_error(
+            capsys,
+            [
+                "quick",
+                "-a", str(self.tmpdir / "test.fasta"),
+                "-o", str(self.tmpdir / "out.xml"),
+                "--calibration-yaml", str(cal),
+            ],
+            "not found in any alignment",
+        )
+
+    def test_valid_calibration_still_succeeds(self, capsys):
+        """The guards must not swallow the working path."""
+        cal = self.tmpdir / "cals.yaml"
+        cal.write_text(
+            "- name: rootCal\n"
+            "  taxa: null\n"
+            "  monophyletic: true\n"
+            "  distribution:\n"
+            "    type: normal\n"
+            "    parameters: {mean: 10.0, sigma: 1.0}\n"
+        )
+        out = self.tmpdir / "quick.xml"
+        ret, text = self._run(
+            capsys,
+            [
+                "quick",
+                "-a", str(self.tmpdir / "test.fasta"),
+                "-o", str(out),
+                "--calibration-yaml", str(cal),
+            ],
+        )
+        assert ret == 0, text
+        assert out.exists()

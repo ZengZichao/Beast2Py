@@ -513,10 +513,10 @@ beast2py quick \
 
 ```bash
 # 最简单的快速生成
-beast2py quick -a primates.fasta -o output.xml
+beast2py quick -a primates.fasta -o quick_output.xml
 
 # 带校准和 Gamma
-beast2py quick -a primates.fasta -o output.xml \
+beast2py quick -a primates.fasta -o quick_full_output.xml \
     --tree-prior birth_death \
     --subst-model gtr \
     --clock-model ucln \
@@ -525,6 +525,8 @@ beast2py quick -a primates.fasta -o output.xml \
     --chain-length 50000000 \
     --name "my_analysis"
 ```
+
+每个示例都写入各自的输出文件，因为 `quick` 与 `generate` 一样，在没有 `--force` 时不会替换已存在的输出文件。
 
 ### 5.4 `validate` — 验证 XML
 
@@ -616,24 +618,27 @@ beast2py fingerprint \
 | `--output` | `-o` | 否 | 仅输出到终端 | 输出 JSON 文件路径 |
 | `--verbose` | `-v` | 否 | False | 显示详细指纹信息 |
 
-**指纹格式：** `B2P-{配置哈希前 12 位}-{工具版本}`，例如 `B2P-ba18c26ed61f-0.1.0`。该标识符**不含日期与时区**，因此同一配置在同一比对数据上重跑，总能复现相同的字节与相同的标识符。12 个十六进制字符即 48 位摘要：按生日悖论估算，达到 50% 碰撞概率约需 2²⁴（≈ 1.7 × 10⁷）个不同分析。
+**指纹格式：** `B2P-{配置哈希前 12 位}-{工具版本}`，例如 `B2P-ba18c26ed61f-0.1.0`。该标识符**不含日期与时区**，因此同一配置在同一比对数据上重跑，总能复现相同的字节与相同的标识符。12 个十六进制字符即 48 位摘要：按生日界估算，出现一次碰撞的概率达到 50% 需要 sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ 个不同分析——即约 2 × 10⁷，而不是开方捷径给出的 2**24 = 1.7 × 10⁷。它是变更检测令牌，不是全局唯一键。
 
 **指纹 JSON 文件内容**（对 `examples/config_basic.yaml` 的实测输出）：
 
 ```json
 {
-  "fingerprint": "B2P-ba18c26ed61f-0.1.0",
-  "config_hash": "ba18c26ed61fcf4b157723d410f13f7534b0533c9c4810f6a3f422caa3ed9d8e",
-  "full_hash": "ba18c26ed61fcf4b157723d410f13f7534b0533c9c4810f6a3f422caa3ed9d8e",
+  "fingerprint": "B2P-04ab3d09277b-0.1.0",
+  "config_hash": "04ab3d09277b4acb25c69b820e1f806b04adb48b08cd3af5ed9dc5d54a0eb5d1",
+  "full_hash": "04ab3d09277b4acb25c69b820e1f806b04adb48b08cd3af5ed9dc5d54a0eb5d1",
   "data_hash": "30be5613d3ff6862",
   "hash_bits": 48,
-  "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% collision probability would require about 2**24 distinct analyses.",
+  "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% chance of one collision needs sqrt(2 * 2**48 * ln 2), about 1.98e+07 distinct analyses, so it is a change-detection token rather than a globally unique key.",
   "tool_version": "0.1.0",
   "beast2_version": "2.7.8",
-  "generation_time": "2024-01-15T10:30:00.000000",
-  "analysis_name": "primates_basic_calibration"
+  "generation_time": "2026-09-29T18:01:17.890711",
+  "analysis_name": "primates_basic_calibration",
+  "xml_digest": "4f9352096f57259bcf987ba9853f943b406ee6c697f417185ed527c935ea0756"
 }
 ```
+
+上述 `generation_time` 是采集该样本的时刻；标识符本身不含时间成分，同一配置在同一比对数据上重跑总得到 `B2P-04ab3d09277b-0.1.0`。
 
 `data_hash` 由每条比对内容的摘要再汇总而成，取前 16 位，会作为 `| Data: {hash16}` 附在 XML 的指纹注释里。`generation_time` **只**出现在这个侧车文件中；XML 本体带的是无时间戳的注释（见第 15.1 节）。
 
@@ -1807,7 +1812,7 @@ result = b2p.validate_xml("output.xml", beast2_validate=True, beast2_path="/path
 
 全部 **19** 个示例配置文件均通过三道闸门：结构检查、校准冲突检测，以及 BEAST2 `parseFile` 与 `initAndValidate` 检查。第三道闸门使用无头模式下的原生 BEAST2 **v2.7.8** 解析器，无需 JavaFX。其中两份依赖附加包的文件——`config_bd_skyline.yaml` 与 `config_nested_sampling.yaml`——已对照 `~/.beast/2.7/` 下安装的包核实，即 **BDSKY 1.5.1** 与 **NS 1.2.0**。
 
-测试套件共收集 **235** 个测试：**214** 个单元/语义测试与 **21** 个 BEAST2 集成测试。集成测试对全部 19 个示例配置、`quick` 路径以及仓库内已提交的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.8 解析器与模型初始化逐一检查。当环境缺少 BEAST2 或 JDK 17 时，这些测试直接跳过，不算失败。全部通过。
+测试套件共收集 **347** 个测试：**326** 个单元/语义/发布完整性测试与 **21** 个 BEAST2 集成测试。集成测试对全部 19 个示例配置、`quick` 路径以及仓库内已提交的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.8 解析器与模型初始化逐一检查。当环境缺少 BEAST2 或 JDK 17 时，这些测试直接跳过，不算失败。全部通过。
 
 ---
 
@@ -2092,6 +2097,17 @@ evaluated.
 **`Configuration file not found`**
 
 确保 YAML 文件路径正确。使用绝对路径或相对于配置文件所在目录的相对路径。序列文件路径相对于 YAML 配置文件所在目录解析。
+
+**`Invalid YAML in <file>: …`**
+
+文件根本无法解析：流式序列未闭合、用制表符做缩进、键名重复。消息会点出文件名，并保留解析器
+自己的行列号，因此要改的位置直接写在消息里，而不是留给栈回溯去暴露。所有读取配置的命令都按
+这一形式报错，`quick --calibration-yaml` 也一样。
+
+**`Calibration file not found: …`**
+
+`quick --calibration-yaml` 需要的是一份校准点 **列表** 形式的 YAML，而不是完整的分析配置。
+若文件顶层是映射而非列表，会以同样形式被拒绝（`Calibration YAML must be a list of calibration points`）。
 
 **`Calibration taxon not found in any alignment`**
 

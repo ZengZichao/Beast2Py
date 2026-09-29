@@ -1,7 +1,16 @@
 include beast2py/beast2_validate.sh
 include beast2py/tools/Beast2Validator.java
 include beast2py/tools/launcher.jar
+include beast2py/tools/NOTICE
+include beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt
 recursive-include beast2py/tools/classes *.class
 include README.md README_en.md README_zh.md LICENSE
+# the authoring gates are part of what the deposited release must reproduce
+recursive-include scripts *.py
 include docs/*.md
 recursive-include examples *.yaml *.fasta
+# the committed example output is a fingerprint/sidecar pair: ISSUE-031 says the
+# pairing is checkable without running anything, which only holds if both files
+# ship together
+include examples/output_basic.xml examples/output_basic.fingerprint.json
+include examples/output_basic.methods.tex

@@ -322,7 +322,7 @@ class Beast2Py:
         xml_str = writer.generate_xml()
 
         # Same gate as the CLI and generate_xml(): validate first, write only on
-        # success .
+        # success.
         from .main import validate_and_write
 
         status = validate_and_write(xml_str, output, beast_config, force=force)
@@ -1182,7 +1182,7 @@ def _parse_calibration_yaml_file(yaml_path: str) -> List[CalibrationPoint]:
         where = f"calibrations[{len(calibrations)}]"
         # Strict coercion: this shortcut path used to read these flags raw, so
         # `monophyletic: "false"` inverted the user's intent through Python
-        # truthiness even though the YAML-config path rejected it .
+        # truthiness even though the YAML-config path rejected it.
         monophyletic = ConfigParser._as_bool(cal_raw, "monophyletic", True, where)
         use_originate = ConfigParser._as_bool(cal_raw, "use_originate", False, where)
         tipsonly = ConfigParser._as_bool(cal_raw, "tipsonly", False, where)

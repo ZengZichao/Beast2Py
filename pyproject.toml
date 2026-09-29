@@ -4,7 +4,7 @@ dynamic = ["version"]
 description = "Python framework for reproducible divergence time estimation with calibration prior validation"
 readme = "README_en.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = {text = "MIT AND LGPL-2.1-only"}
 authors = [
     {name = "曾子超 (Zichao Zeng)", email = "zengzichao@sjtu.edu.cn"},
 ]
@@ -13,6 +13,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -25,13 +26,13 @@ dependencies = [
     "numpy>=1.20",
     "scipy>=1.8",
     "matplotlib>=3.5",
-    "jinja2>=3.0",
     "defusedxml>=0.7",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-cov", "black", "flake8", "mypy", "defusedxml>=0.7"]
 xml = ["lxml>=4.9"]
+figures = ["pymupdf>=1.23", "pillow>=10"]
 
 [project.scripts]
 beast2py = "beast2py.main:main"

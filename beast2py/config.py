@@ -208,7 +208,7 @@ class ConfigParser:
     # points dead: `ModelRegistry.register_substitution_model("mygtr", ...)`
     # taught the registry but every config still failed with "invalid
     # substitution model", while the registration leaked into later analyses in
-    # the same process .
+    # the same process.
     VALID_SUBSTITUTION_MODELS = _RegistryNames("_substitution_models")
     VALID_CLOCK_MODELS = {"strict", "ucln", "uce", "rlc"}
     VALID_TREE_PRIORS = {
@@ -226,7 +226,7 @@ class ConfigParser:
 
     # Parameters a distribution cannot be sampled without.  BEAST2 fills in its
     # own defaults for anything it does not receive, so a missing required key
-    # silently changes which prior is fitted .
+    # silently changes which prior is fitted.
     DISTRIBUTION_REQUIRED = {
         "normal": {"mean", "sigma"},
         "lognormal": {"M", "S"},
@@ -254,7 +254,7 @@ class ConfigParser:
         Substitution models, clock models and distributions have always been
         matched case-insensitively, but the tree prior was not: ``type: HKY``
         worked while ``type: Yule`` was rejected. Authors should not have to
-        guess which rule applies .
+        guess which rule applies.
 
         Args:
             value: The configured name; non-strings pass through untouched.
@@ -263,6 +263,44 @@ class ConfigParser:
             The normalised name, or ``value`` when it is not a string.
         """
         return value.strip().lower() if isinstance(value, str) else value
+
+    @staticmethod
+    def _canonical_name(value: Any, names, field: str, where: str) -> str:
+        """Fold a user-typed model/distribution name onto the tool's own key.
+
+        Every named choice in a configuration file is meant to be matched
+        case-insensitively, but three call sites compared the raw string against
+        a lower-case name table: ``type: Strict`` was refused for the clock while
+        ``type: HKY`` was accepted for the site model, and the calibration
+        distributions a reader copies straight out of Supplementary Table S1
+        (``Normal``, ``LogNormal``, ``ChiSquare``) all failed.  Separators are
+        ignored so the printed forms ``OneOnX`` / ``InverseGamma`` / ``ChiSquare``
+        resolve to ``one_on_x`` / ``inverse_gamma`` / ``chi_square``.
+
+        Args:
+            value: The configured name.
+            names: Iterable of canonical names to resolve against.
+            field: Name used in the error message.
+            where: Location used in the error message.
+
+        Returns:
+            The canonical key, so downstream lookups keep seeing lower-case names.
+
+        Raises:
+            ConfigError: If no canonical name matches, listing the valid ones.
+        """
+        if not isinstance(value, str):
+            raise ConfigError(
+                f"{where}: {field} must be a string, got {value!r}"
+            )
+        folded = "".join(ch for ch in value if ch not in " _-").lower()
+        for name in names:
+            if "".join(ch for ch in name if ch not in " _-").lower() == folded:
+                return name
+        raise ConfigError(
+            f"{where}: invalid {field} '{value}' "
+            f"(valid: {', '.join(sorted(names))})"
+        )
 
     @staticmethod
     def _parse_enum(enum_cls, value: Any, field: str) -> Any:
@@ -365,7 +403,7 @@ class ConfigParser:
             raise ConfigError(str(exc)) from exc
         # The docstring always promised to reject non-finite numbers but never
         # did, so `kappa: .inf` escaped as a raw ValueError from a later int()
-        # cast and reached the user as a Python traceback .
+        # cast and reached the user as a Python traceback.
         if not math.isfinite(value):
             raise ConfigError(
                 f"'{where}.{key}' must be a finite number, got {raw[key]!r}"
@@ -391,8 +429,11 @@ class ConfigParser:
         if not config_path.exists():
             raise ConfigError(f"Configuration file not found: {config_path}")
 
-        with open(config_path, "r", encoding="utf-8") as f:
-            raw = yaml.safe_load(f)
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                raw = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise ConfigError(f"Invalid YAML in {config_path}: {e}")
 
         if not isinstance(raw, dict):
             raise ConfigError("Configuration root must be a mapping")
@@ -494,7 +535,7 @@ class ConfigParser:
                     # An alignment declaring both a file and a filter is a
                     # FilteredAlignment over that file. The unfiltered source is
                     # registered under its own id so the filter never points at
-                    # itself and the sequence data is not dropped .
+                    # itself and the sequence data is not dropped.
                     if base_id == aln_id:
                         raise ConfigError(
                             f"Alignment '{aln_id}': data_id must differ from the alignment's "
@@ -554,8 +595,7 @@ class ConfigParser:
             # Otherwise keep the data_id the branch above already resolved: a
             # file+filter alignment owns an implicit unfiltered parent, and
             # clobbering it with None deferred the failure to generation, where
-            # it surfaced as an unrelated "no matching alignment found"
-            # .
+            # it surfaced as an unrelated "no matching alignment found".
 
             if aln_id in alignments and aln_id not in implicit_alignment_ids:
                 raise ConfigError(f"Duplicate alignment id: {aln_id}")
@@ -664,7 +704,7 @@ class ConfigParser:
             # Calibration names become XML ids, so a repeat only surfaced much
             # later as "Duplicate XML ids generated: X, X.age, X.distr, ..."
             # with advice about renaming taxa -- sending the author to the wrong
-            # place for what is a repeated `name:` .
+            # place for what is a repeated `name:`.
             clash = [c.name for c in calibrations if c.name == parsed.name]
             if clash:
                 raise ConfigError(
@@ -696,8 +736,7 @@ class ConfigParser:
 
         # --- Identifiability: an absolute time axis needs either a clock rate
         # that is estimated, or at least one absolute calibration. With a
-        # fixed clock rate and no calibration the timestamps are unidentified
-        # .
+        # fixed clock rate and no calibration the timestamps are unidentified.
         has_calibration = bool(calibrations)
         fixed_clock = all(
             (p.clock_model.clock_rate is not None and not p.clock_model.clock_rate.estimate)
@@ -753,8 +792,7 @@ class ConfigParser:
         newick_digest = None
         if newick_path:
             # Resolve like every other file in a config, and fail here rather
-            # than at XML assembly with a bare FileNotFoundError traceback
-            # .
+            # than at XML assembly with a bare FileNotFoundError traceback.
             candidate = Path(newick_path)
             if not candidate.is_absolute():
                 candidate = self.base_dir / candidate
@@ -766,7 +804,7 @@ class ConfigParser:
             newick_path = str(candidate)
             # The starting tree is written into the XML, so it is part of the
             # analysis; only its type used to reach the fingerprint, letting two
-            # different topologies share one identity .
+            # different topologies share one identity.
             newick_digest = hashlib.sha256(newick_bytes).hexdigest()
         initialization = InitializationConfig(
             tree_type=parsed_init_type,
@@ -941,7 +979,7 @@ class ConfigParser:
         alongside the link was discarded without a word: ``gtr`` plus
         ``linked_to: g1`` quietly produced a second copy of g1's HKY, and a
         relaxed clock linked to a strict one quietly became strict. The analysis
-        that ran was not the one written .
+        that ran was not the one written.
 
         Only fields the author actually wrote are compared: the dataclasses fill
         in defaults (gamma_categories 0, clock type strict), and comparing those
@@ -1390,12 +1428,9 @@ class ConfigParser:
             raise ConfigError(f"Partition '{partition_id}': substitution_model must be a mapping")
 
         # Validate substitution model type
-        sm_type = str(subst_raw.get("type", "hky")).lower()
-        if sm_type not in self.VALID_SUBSTITUTION_MODELS:
-            raise ConfigError(
-                f"Partition '{partition_id}': invalid substitution model '{sm_type}' "
-                f"(valid: {', '.join(sorted(self.VALID_SUBSTITUTION_MODELS))})"
-            )
+        sm_type = self._canonical_name(
+            subst_raw.get("type", "hky"), self.VALID_SUBSTITUTION_MODELS,
+            "substitution model", f"Partition '{partition_id}'")
 
         # Validate substitution-model keys against the registry's parameter list
         from .registry import ModelRegistry
@@ -1414,8 +1449,7 @@ class ConfigParser:
                 self._check_keys(val, "parameter", where_param)
                 # Only the key names were checked, so `kappa: {value: .inf}`
                 # survived parsing and blew up during XML assembly as a raw
-                # "cannot convert float infinity to integer" traceback
-                # .
+                # "cannot convert float infinity to integer" traceback.
                 if "value" in val and val["value"] is not None and not isinstance(
                     val["value"], str
                 ):
@@ -1440,7 +1474,7 @@ class ConfigParser:
             )
 
         # --- Three-way cross-check: declared data type x model family x the
-        # alphabet actually observed in the alignment . ---
+        # alphabet actually observed in the alignment ---
         if model_spec.get("is_aminoacid") and (
             alignment is None or alignment.data_type.value != "aminoacid"
         ):
@@ -1516,12 +1550,9 @@ class ConfigParser:
     ) -> ClockModelConfig:
         """Parse clock model configuration."""
         self._check_keys(cm_raw, "clock_model", f"Partition '{partition_id}': clock_model")
-        cm_type_str = cm_raw.get("type", "strict")
-        if cm_type_str not in self.VALID_CLOCK_MODELS:
-            raise ConfigError(
-                f"Partition '{partition_id}': invalid clock model '{cm_type_str}' "
-                f"(valid: {', '.join(sorted(self.VALID_CLOCK_MODELS))})"
-            )
+        cm_type_str = self._canonical_name(
+            cm_raw.get("type", "strict"), self.VALID_CLOCK_MODELS,
+            "clock model", f"Partition '{partition_id}'")
 
         prefix = f"Partition '{partition_id}': clock_model"
         clock_rate = None
@@ -1609,12 +1640,9 @@ class ConfigParser:
             if not isinstance(dist_raw, dict):
                 raise ConfigError(f"Calibration '{name}': distribution must be a mapping")
             self._check_keys(dist_raw, "distribution", f"Calibration '{name}': distribution")
-            dist_type = dist_raw.get("type", "")
-            if dist_type not in self.VALID_DISTRIBUTIONS:
-                raise ConfigError(
-                    f"Calibration '{name}': invalid distribution type '{dist_type}' "
-                    f"(valid: {', '.join(sorted(self.VALID_DISTRIBUTIONS))})"
-                )
+            dist_type = self._canonical_name(
+                dist_raw.get("type", ""), self.VALID_DISTRIBUTIONS,
+                "distribution type", f"Calibration '{name}'")
             parameters = dict(dist_raw.get("parameters", {}) or {})
             offset = self._as_num(dist_raw, "offset", f"Calibration '{name}'", 0.0) or 0.0
             dist = DistributionConfig(type=dist_type, parameters=parameters, offset=float(offset))
@@ -1655,12 +1683,9 @@ class ConfigParser:
             if not isinstance(hp_config, dict):
                 raise ConfigError(f"{where_hp}: must be a mapping")
             self._check_keys(hp_config, "hyperprior", where_hp)
-            hp_type = hp_config.get("type", "uniform")
-            if hp_type not in self.VALID_DISTRIBUTIONS:
-                raise ConfigError(
-                    f"{where_hp}: invalid distribution type '{hp_type}' "
-                    f"(valid: {', '.join(sorted(self.VALID_DISTRIBUTIONS))})"
-                )
+            hp_type = self._canonical_name(
+                hp_config.get("type", "uniform"), self.VALID_DISTRIBUTIONS,
+                "distribution type", where_hp)
             if param_name not in (dist.parameters if dist else {}):
                 raise ConfigError(
                     f"{where_hp}: '{param_name}' is not a parameter of the "
@@ -1846,7 +1871,7 @@ class ConfigParser:
         mcmc_type_str = mcmc_raw.get("type", "standard")
         # `int(x or DEFAULT)` maps an explicit 0/None back to the default, which
         # made every "<= 0" guard below unreachable: `chain_length: 0` produced a
-        # silently 10^7-state chain . Default only on *absence*.
+        # silently 10^7-state chain. Default only on *absence*.
         chain_length = self._int_or_default(mcmc_raw, "chain_length", "mcmc", 10000000)
         pre_burnin = self._int_or_default(mcmc_raw, "pre_burnin", "mcmc", 0)
         if "store_every" in mcmc_raw:
@@ -1855,8 +1880,7 @@ class ConfigParser:
             # MCMC.java counts this in *logged samples*, not generations
             # (`(sampleNr + 1) % storeEvery == 0`), so a single fixed number
             # would checkpoint a 10^7-generation chain once, at the very end.
-            # Scale it with the chain so any run gets ~10 resume points
-            # .
+            # Scale it with the chain so any run gets ~10 resume points.
             store_every = max(1, chain_length // 10000)
         particle_count = self._int_or_default(mcmc_raw, "particle_count", "mcmc", 1)
         sub_chain_length = self._int_or_default(mcmc_raw, "sub_chain_length", "mcmc", 10000)

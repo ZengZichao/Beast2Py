@@ -8,6 +8,7 @@ Core innovation module containing:
 
 from __future__ import annotations
 
+import math
 import hashlib
 import json
 import os
@@ -39,6 +40,50 @@ class FingerprintGenerator:
     # collision risk is irrelevant at the scale of published phylogenies.
     HASH_HEX_CHARS = 12
 
+    @classmethod
+    def collision_bits(cls) -> int:
+        """Return the number of digest bits the identifier carries."""
+        return 4 * cls.HASH_HEX_CHARS
+
+    @classmethod
+    def collision_bound_50pct(cls) -> float:
+        r"""Return n at which a truncated digest has a 50% chance of one collision.
+
+        For n values hashed uniformly into ``2**bits`` slots,
+        ``P(>=1 collision) = 1 - exp(-n(n - 1) / 2**(bits + 1))``, which reaches
+        0.5 at ``n = sqrt(2 * 2**bits * ln 2)`` -- that is 1.1774 * 2**(bits/2),
+        about 2.0e7 for the 48 bits emitted here.  ``sqrt(2**48)`` on its own is
+        only a 39% chance, so the two must not be conflated; the earlier wording
+        in this file did exactly that.
+        """
+        return math.sqrt(2 * 2 ** cls.collision_bits() * math.log(2))
+
+    @classmethod
+    def collision_note(cls) -> str:
+        """Return the collision caveat written into the sidecar."""
+        bits = cls.collision_bits()
+        return (
+            f"The identifier truncates the configuration digest to {bits} bits; "
+            f"a 50% chance of one collision needs sqrt(2 * 2**{bits} * ln 2), "
+            f"about {cls.collision_bound_50pct():.2e} distinct analyses, so it is "
+            "a change-detection token rather than a globally unique key."
+        )
+
+    @staticmethod
+    def _canonical(obj):
+        """Serialise anything ``json`` cannot, without inheriting container order.
+
+        ``default=str`` was the fallback here and is not order-stable:
+        ``str({1, 2})`` differs from ``str({2, 1})``, so a set ever reaching
+        ``to_dict()`` would make the digest depend on ``PYTHONHASHSEED`` and
+        break the byte-identical-rerun claim. Sorting removes that hazard.
+        """
+        if isinstance(obj, (set, frozenset)):
+            return sorted(str(x) for x in obj)
+        if isinstance(obj, dict):
+            return {str(k): obj[k] for k in sorted(obj, key=str)}
+        return str(obj)
+
     @staticmethod
     def config_hash(config: BEASTConfig) -> str:
         """Return the first 12 hex digits of the configuration digest.
@@ -49,7 +94,12 @@ class FingerprintGenerator:
         Returns:
             12-character lowercase hex string.
         """
-        config_str = json.dumps(config.to_dict(), sort_keys=True, default=str, ensure_ascii=False)
+        config_str = json.dumps(
+            config.to_dict(),
+            sort_keys=True,
+            default=FingerprintGenerator._canonical,
+            ensure_ascii=False,
+        )
         return hashlib.sha256(config_str.encode("utf-8")).hexdigest()[
             : FingerprintGenerator.HASH_HEX_CHARS
         ]
@@ -133,7 +183,12 @@ class FingerprintGenerator:
             out of the identifier) and the alignment content digest.
         """
         fingerprint = FingerprintGenerator.generate_fingerprint(config)
-        config_str = json.dumps(config.to_dict(), sort_keys=True, default=str, ensure_ascii=False)
+        config_str = json.dumps(
+            config.to_dict(),
+            sort_keys=True,
+            default=FingerprintGenerator._canonical,
+            ensure_ascii=False,
+        )
         full_hash = hashlib.sha256(config_str.encode("utf-8")).hexdigest()
 
         result = {
@@ -142,12 +197,7 @@ class FingerprintGenerator:
             "full_hash": full_hash,
             "data_hash": FingerprintGenerator.data_hash(config),
             "hash_bits": 4 * FingerprintGenerator.HASH_HEX_CHARS,
-            "collision_note": (
-                "The identifier truncates the configuration digest to "
-                f"{4 * FingerprintGenerator.HASH_HEX_CHARS} bits; a 50% collision "
-                "probability would require about 2**"
-                f"{2 * FingerprintGenerator.HASH_HEX_CHARS} distinct analyses."
-            ),
+            "collision_note": FingerprintGenerator.collision_note(),
             "tool_version": config.metadata.get("tool_version") or __version__,
             "beast2_version": config.metadata.get("beast2_version", "2.7.8"),
             "generation_time": datetime.now().isoformat(),
@@ -156,7 +206,7 @@ class FingerprintGenerator:
         if xml_content is not None:
             # The sidecar used to certify only the YAML, so a hand-edited XML --
             # or a regression in the writer -- still "matched" its fingerprint.
-            # What BEAST2 actually runs is the XML .
+            # What BEAST2 actually runs is the XML.
             result["xml_digest"] = hashlib.sha256(
                 xml_content.encode("utf-8")
             ).hexdigest()
@@ -200,20 +250,20 @@ class MethodsGenerator:
     CITATIONS = {
         "beast2": "Bouckaert et al. (2014) PLoS Comput Biol 10: e1003537",
         "hky": "Hasegawa et al. (1985) J Mol Evol 22: 160-174",
-        "gtr": "Tavare (1986) Lect Notes Math 1217: 57-86",
+        "gtr": "Tavare (1986) Lect Math Life Sci 17: 57-86",
         "jc69": "Jukes & Cantor (1969) In: Mammalian Protein Metabolism, pp. 21-132",
         "tn93": "Tamura & Nei (1993) Mol Biol Evol 10: 512-526",
         "yule": "Yule (1925) Philos Trans R Soc Lond B 213: 21-87",
-        "birth_death": "Gernhard (2008) J Theor Biol 253: 76-86",
+        "birth_death": "Gernhard (2008) J Theor Biol 253: 769-778",
         "coalescent": "Kingman (1982) Stoch Process Their Appl 13: 235-248",
         "ucln": "Drummond et al. (2006) PLoS Biol 4: e88",
-        "rlc": "Drummond & Suchard (2010) Mol Biol Evol 27: 187-197",
-        "mrca": "Heled & Drummond (2012) Syst Biol 61: 716-726",
-        "calibrated_yule": "Heled & Drummond (2012) Syst Biol 61: 716-726",
+        "rlc": "Drummond & Suchard (2010) BMC Biol 8: 114",
+        "mrca": "Heled & Drummond (2012) Syst Biol 61: 138-149",
+        "calibrated_yule": "Heled & Drummond (2012) Syst Biol 61: 138-149",
         "bsp": "Drummond et al. (2005) Mol Biol Evol 22: 1185-1192",
         "ebsp": "Heled & Drummond (2008) BMC Evol Biol 8: 289",
         "gamma": "Yang (1994) J Mol Evol 39: 306-314",
-        "calibration_best_practice": "Rieux & Balloux (2016) Mol Ecol 25: 4317-4327",
+        "calibration_best_practice": "Rieux & Balloux (2016) Mol Ecol 25: 1911-1924",
         "reproducible": "Sandve et al. (2013) PLoS Comput Biol 9: e1003285",
     }
 

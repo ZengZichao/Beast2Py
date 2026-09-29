@@ -35,7 +35,7 @@ jobs:
 
       - name: Lint with flake8 (gate)
         run: |
-          flake8 beast2py tests --count --max-line-length=100 --statistics
+          flake8 beast2py tests scripts --count --max-line-length=100 --statistics
 
       - name: Run tests
         # -rs makes skipped tests visible: the BEAST2 integration tests in

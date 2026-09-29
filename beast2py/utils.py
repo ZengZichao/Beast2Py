@@ -46,7 +46,7 @@ def as_strict_bool(value: Any, field: str) -> bool:
     """Coerce a configuration value to a bool without Python truthiness traps.
 
     ``bool("false")`` is ``True`` in Python, so a quoted ``"false"`` in YAML
-    used to invert the user's intent silently . This helper only
+    used to invert the user's intent silently. This helper only
     accepts real booleans and an explicit set of spellings; everything else is
     a configuration error.
 
@@ -110,7 +110,7 @@ def format_number(value: Any) -> str:
     """Render a numeric value for XML without floating-point noise.
 
     ``0.1 - 0.4`` must not be serialised as
-    ``-0.30000000000000004`` .
+    ``-0.30000000000000004``.
 
     Args:
         value: A number or a whitespace-separated vector of numbers.
@@ -174,7 +174,7 @@ def _analytic_hpd(dist, mass: float = 0.95) -> Tuple[float, float]:
     The HPD used to come from a 100k-sample Monte Carlo, which put a
     ~0.01 Ma discretisation error into a number that then *gates* a hard
     ``calibration_type: hard`` check: a fossil that close to an interval edge
-    was classified by sampling noise rather than by the density .
+    was classified by sampling noise rather than by the density.
     For a unimodal density the HPD is the width-minimising pair
     ``(ppf(q), ppf(q + mass))``, which this solves directly.
 
@@ -223,9 +223,8 @@ def gamma_scale(parameters: Dict[str, Any]) -> Tuple[float, float, str]:
     ``mode=ShapeScale`` (Gamma.java:22-31), i.e. ``beta`` is a *scale* and the
     mean is ``alpha * beta``.  ``mode=ShapeRate`` inverts it.  Both
     ``_frozen_distribution`` and ``compute_distribution_stats`` go through this
-    one function: they used to disagree (the stats treated ``beta`` as a rate),
-
-    described a different distribution from the one BEAST2 samples.
+    one function: they used to disagree -- the stats treated ``beta`` as a rate --
+    and so described a different distribution from the one BEAST2 samples.
     """
     alpha = float(parameters.get("alpha", 1.0))
     beta = float(parameters.get("beta", 1.0))

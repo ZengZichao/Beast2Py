@@ -136,8 +136,12 @@ beast2py quick \
     --clock-model strict \
     --calibration-yaml calibrations.yaml \
     --chain-length 10000000 \
-    --output output.xml
+    --output quick_output.xml
 ```
+
+The output is named `quick_output.xml`, not §2's `output.xml`: neither command replaces an
+existing output unless you pass `--force`, so reusing the name would stop this run with a
+refusal rather than mix two analyses under one file.
 
 `quick` also accepts `--gamma-categories N` (default 0, meaning no Gamma), `--pre-burnin N`,
 `--name NAME`, `--force` and `-v/--verbose`. It runs the same three gates, and the same

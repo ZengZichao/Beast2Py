@@ -2,7 +2,7 @@
 
 **一个用于可重复分歧时间估计的 Python 框架，具备自动化校准先验指定、验证和诊断功能。**
 
-[![许可证: MIT](https://img.shields.io/badge/许可证-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![许可证: MIT AND LGPL-2.1-only](https://img.shields.io/badge/许可证-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![BEAST2 2.7.8](https://img.shields.io/badge/BEAST2-2.7.8-orange.svg)](https://www.beast2.org/)
 
@@ -69,7 +69,7 @@ biopython >= 1.80
 numpy >= 1.20
 scipy >= 1.8
 matplotlib >= 3.5
-jinja2 >= 3.0
+defusedxml >= 0.7
 ```
 
 ## 快速开始
@@ -203,9 +203,11 @@ print(models["substitution_models"])
 
 - `beast2py/` — Beast2Py Python 包源代码（CLI、API、配置解析、XML 生成、诊断、可重复性、验证等模块）
 - `examples/` — 19 个示例配置文件、示例比对数据（FASTA）和示例输出制品
-- `tests/` — 测试套件（共收集 235 个测试：214 个单元/语义测试 + 21 个 BEAST2 集成验证测试）
+- `tests/` — 测试套件（共收集 347 个测试：326 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
 - `beast2py/tools/` — 随包发布的无头 BEAST2 验证助手（`Beast2Validator.java` 源码，含预编译的 `classes/` 与 `launcher.jar`），由 `pyproject.toml` 以 `package-data` 随 wheel 打包发布；仓库根目录仅保留同名的薄包装 `beast2_validate.sh`
 - `docs/` — 使用手册、架构指南、教程、校准指南和 XML 格式指南（中英文）
+- `scripts/check_figure_export.py` — 三张 draw.io 图的导出后检查（它们没有可重绘的 Python 源）：读回已交付的 PDF 与 PNG，若导出件早于其 `.drawio` 源、字号低于 7.92 pt、字体超出 Helvetica 族、线宽低于 0.71 pt、或位图在页面自身宽度下不足 600 ppi，即报错退出（需 `pip install -e .[figures]`）
+- `scripts/check_submission_placeholders.py` — 上传前检查：列出稿件或投稿信中仍遗留的全部未替换存档标识符（Zenodo DOI、Dryad DOI 与审稿链接、TreeBASE 登录号），并给出其段落或页码；只要还有未替换项即以非零码退出（PDF 检查需 `pip install -e .[figures]`）
 - `beast2_validate.sh` — 无头 BEAST2 验证启动脚本（需要 `BEAST.base.jar` 与 JDK 17+；自动探测 `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`，也可设 `BEAST2_JAR`）
 - `pyproject.toml` — 包构建与依赖配置
 
@@ -229,7 +231,7 @@ print(models["substitution_models"])
 当成通过。`--allow-unvalidated` 可以恢复“照样写出”的行为，此时不应把该 XML 称为“已通过 BEAST2
 验证”。所有结论仅针对 BEAST2 **v2.7.8** 核实。
 
-测试套件共收集 235 个测试（214 个单元/语义测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
+测试套件共收集 347 个测试（326 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
 示例配置、`quick` 路径以及仓库内的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.8 解析器
 与模型初始化检查。当环境缺少 BEAST2 jar 或 JDK 17 时，这些测试直接跳过，不算失败。
 
@@ -254,9 +256,17 @@ Beast2Py 生成以下可重复性制品：
 - pirouette 式端到端实证测试（已知真树 → 模拟序列 → 注入冲突校准 → 检验冲突检测器灵敏度）
 - 关注 BEAST 3 / LPhy 生态演进并适时适配
 
+## 第三方许可
+
+`beast2py/tools/classes/beast/pkgmgmt/` 下随包分发的编译类来自
+[BEAST 2](https://github.com/CompEvol/beast2) v2.7.8，以 **GNU LGPL v2.1** 许可；
+本包其余部分为 MIT。许可正文见 `beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt`，
+来源、版本、是否修改以及获取完整对应源码的方式见 `beast2py/tools/NOTICE`。
+`beast2py/tools/Beast2Validator.java` 随包分发其源码，以满足 LGPL-2.1 对该编译单元的要求。
+
 ## 许可证
 
-MIT 许可证。详见 [LICENSE](LICENSE)。
+本包为 MIT；随包捆绑的 BEAST2 包管理类为 LGPL-2.1（见 `beast2py/tools/NOTICE`）。SPDX 标识为 `MIT AND LGPL-2.1-only`。详见 [LICENSE](LICENSE)。
 
 ## 相关工具
 

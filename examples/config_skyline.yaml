@@ -53,7 +53,7 @@ tree_prior:
 
 calibrations:
   # The skyline is plotted against time, so the time axis must be pinned.
-  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.31]
   # (Sahelanthropus tchadensis, 7.24 Ma, as a soft minimum).
   - name: "homininaMRCA"
     taxa: ["Homo_sapiens", "Pan"]

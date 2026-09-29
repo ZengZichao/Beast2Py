@@ -79,7 +79,7 @@ class ConflictDetector:
     # Threshold for distribution overlap warning (Wasserstein distance, in the
     # analysis' time units). Kept for backward compatibility; the relative
     # criterion below is the default because an absolute cut-off is
-    # scale-dependent).
+    # scale-dependent.
     OVERLAP_DISTANCE_THRESHOLD = 2.0
     # Dimensionless threshold: W divided by the mean width of the two priors'
     # 95% intervals. Below ~0.15 the two priors are nearly interchangeable.
@@ -164,7 +164,7 @@ class ConflictDetector:
             # Reporting nothing here let a pair that was never *evaluated* look
             # identical to a pair that was evaluated and found consistent, so
             # `one_on_x` calibrations -- whose quantiles are unbounded --
-            # produced a green "No conflicts detected." .
+            # produced a green "No conflicts detected.".
             unclear = [
                 c.name for c, s in ((parent, stats_a), (child, stats_b)) if not s
             ]
@@ -237,7 +237,7 @@ class ConflictDetector:
         every other clade, so it is compared as the parent of each of them:
         skipping root pairs, as this function used to do, made "root younger
         than its own descendant" — the most severe violation available — the one
-        thing the detector could never report .
+        thing the detector could never report.
         """
         conflicts: List[Conflict] = []
 
@@ -289,7 +289,7 @@ class ConflictDetector:
         with node depth, so at a fixed threshold shallow nodes are flagged as
         redundant almost automatically while deep ones never are, and the alarm
         rate ends up measuring phylogenetic position rather than information
-        redundancy). The relative criterion is therefore
+        redundancy. The relative criterion is therefore
         the default; both can be reported at once.
 
         Args:

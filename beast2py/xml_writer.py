@@ -134,7 +134,7 @@ class XMLWriter:
         # user: sanitize_id is many-to-one (two CJK taxon or calibration names
         # can collapse to the same ASCII id), and the standalone validator is
         # the only thing that used to notice — a caller going straight to
-        # XMLWriter got a silently ambiguous model .
+        # XMLWriter got a silently ambiguous model.
         seen_ids: Dict[str, int] = {}
         for elem in root.iter():
             elem_id = elem.get("id")
@@ -379,7 +379,7 @@ class XMLWriter:
         proper without a density: a flat prior on (0, inf) puts infinite mass
         everywhere, so the "posterior" is not a probability distribution and the
         analysis cannot be reproduced from the XML because no prior was written
-        down . The defaults below follow the conventions BEAUti
+        down. The defaults below follow the conventions BEAUti
         ships: a diffuse lognormal on positive rates, a truncated normal
         (mean 0.4, sigma 0.3334) on the UCLN stdev, a uniform on the bounded
         probability/frequency parameters, and a broad normal on signed rates.
@@ -568,8 +568,8 @@ class XMLWriter:
             # (github.com/BEAST2-Dev/nested-sampling, class nestedsampling.gss.NS
             # since v1.2.0); it is not part of the BEAST2 core packages. The
             # add-on's own settings are written here, and the shared ones
-            # (preBurnin, storeEvery) are no longer dropped for this run type
-            # . Note that MCMC has no "seed" *input* — the RNG seed
+            # (preBurnin, storeEvery) are no longer dropped for this run type.
+            # Note that MCMC has no "seed" *input* — the RNG seed
             # is a command-line argument (`beast -seed N`) — so mcmc.seed is
             # deliberately not serialised here; doing so makes the XML
             # unparseable.

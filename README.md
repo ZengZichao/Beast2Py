@@ -3,7 +3,7 @@
 **A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics.**
 [中文文档](README_zh.md) | [English README](README_en.md)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT AND LGPL-2.1-only](https://img.shields.io/badge/License-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![BEAST2 2.7.8](https://img.shields.io/badge/BEAST2-2.7.8-orange.svg)](https://www.beast2.org/)
 
@@ -70,7 +70,7 @@ biopython >= 1.80
 numpy >= 1.20
 scipy >= 1.8
 matplotlib >= 3.5
-jinja2 >= 3.0
+defusedxml >= 0.7
 ```
 
 ## Quick Start
@@ -208,9 +208,11 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 
 - `beast2py/` — Source code of the Beast2Py Python package (CLI, API, configuration parsing, XML generation, diagnostics, reproducibility, and validation modules)
 - `examples/` — 19 example configurations, example alignments (FASTA), and example output artifacts
-- `tests/` — Test suite (235 collected tests: 214 unit/semantic tests + 21 BEAST2 integration tests)
+- `tests/` — Test suite (347 collected tests: 326 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
 - `beast2py/tools/` — Headless BEAST2 validation helper bundled *inside* the package (`Beast2Validator.java` source plus the precompiled `classes/` and `launcher.jar`), shipped as `package-data` by `pyproject.toml`; the repository root keeps only a thin `beast2_validate.sh` wrapper
 - `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English)
+- `scripts/check_figure_export.py` — Post-export gate for the three draw.io figures, which have no Python source to redraw them: it reads the delivered PDF and PNG back and fails on an export older than its `.drawio` source, a span under 7.92 pt, a font outside Helvetica, a rule under 0.71 pt, or a raster under 600 ppi at the page's own width (`pip install -e .[figures]`)
+- `scripts/check_submission_placeholders.py` — Pre-upload gate listing every unresolved archive identifier (Zenodo DOI, Dryad DOI and reviewer URL, TreeBASE accession) still present in the manuscript or cover letter, each with its paragraph or page; exits non-zero while any remain (`pip install -e .[figures]` enables the PDF pass)
 - `beast2_validate.sh` — Launcher script for headless BEAST2 validation (needs `BEAST.base.jar` and JDK 17 or newer; it auto-detects `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`, or set `BEAST2_JAR`)
 - `pyproject.toml` — Package build and dependency configuration
 
@@ -242,7 +244,7 @@ a pass. `--allow-unvalidated` restores the write-anyway behaviour, in which case
 must not be described as BEAST2-verified. Everything has been verified against
 BEAST2 **v2.7.8** only.
 
-The test suite comprises 235 collected tests (214 unit/semantic + 21 BEAST2
+The test suite comprises 347 collected tests (326 unit/semantic/release + 21 BEAST2
 integration). The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and
 check each with the real BEAST 2.7.8 parser and model initialisation. When the
@@ -264,7 +266,7 @@ Beast2Py generates the following reproducibility artifacts:
 - Support CladeAge-style calibrations (birth-death simulation-based calibration densities mapped to `cladeage.math.distributions.FossilPrior` XML)
 - Automatic ESS/HPD parsing of prior-only logs with threshold alerts (Tracer-style ACT/ESS algorithms)
 - BEAST2 run orchestration (pybeast-style isolated run directories, seed management, resume snapshots)
-- Automatic BEAST2 version checking
+- Add automatic BEAST2 version checking
 - BEAST2 v2.6.x namespace compatibility
 - pirouette-style end-to-end validation (known tree → simulated alignments → injected conflicting calibrations → detector sensitivity check)
 - Track the BEAST 3 / LPhy ecosystem transition and adapt accordingly
@@ -285,9 +287,18 @@ Adjacent open-source tools in the BEAST2 ecosystem (see also the BEAST2 blog pos
 
 Beast2Py's differentiator is that it integrates the following into a single configuration-stage pipeline: declarative YAML configuration, three-way calibration conflict detection (temporal consistency, distribution overlap, monophyly), automated leave-one-out prior-sensitivity XML generation, and calibration provenance (DOI), analysis fingerprint, methods description and pipeline generation.
 
+## Third-party licences
+
+The compiled classes shipped under `beast2py/tools/classes/beast/pkgmgmt/` come from
+[BEAST 2](https://github.com/CompEvol/beast2) v2.7.8 and are licensed under the **GNU LGPL v2.1**; the rest of
+this package is MIT. The licence text is in `beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt`, and
+`beast2py/tools/NOTICE` records the provenance, whether anything was modified, and how to obtain the full
+corresponding source. `beast2py/tools/Beast2Validator.java` ships its source with the package, as LGPL-2.1
+requires for that compilation unit.
+
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
+The package is MIT; the bundled BEAST2 package-management classes are LGPL-2.1 (see `beast2py/tools/NOTICE`). The SPDX identifier is `MIT AND LGPL-2.1-only`. See [LICENSE](LICENSE) for details.
 
 ## Citation
 
