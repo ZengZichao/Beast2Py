@@ -1,6 +1,8 @@
 """Tests for the reproducibility module."""
 
 import os
+import re
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -156,6 +158,46 @@ class TestPipelineGenerator:
         assert "rule generate_xml" in content
         assert "rule run_beast" in content
         assert "beast2py" in content
+
+    def test_snakemake_sequence_paths_are_relative_to_the_snakefile(self):
+        """The generated Snakefile must not pin the pipeline to one machine.
+
+        Snakemake resolves input paths against the workflow directory, so an
+        absolute path here records the generating host and breaks on any other.
+        """
+        config_path = self.tmpdir / "config.yaml"
+        config_path.write_text(TEST_CONFIG_YAML)
+        config = ConfigParser().parse(config_path)
+
+        output_dir = self.tmpdir / "pipeline"
+        snakefile = PipelineGenerator.generate_snakemake(
+            config, output_dir=output_dir, config_file="config.yaml"
+        )
+        content = Path(snakefile).read_text()
+
+        assert "sequences = [" in content
+        assert str(self.tmpdir) not in content, "absolute host path leaked into Snakefile"
+        assert "../test.fasta" in content
+
+    def test_snakemake_runs_from_a_relocated_workflow_directory(self):
+        """A copied pipeline directory still points at its own sequence file."""
+        config_path = self.tmpdir / "config.yaml"
+        config_path.write_text(TEST_CONFIG_YAML)
+        config = ConfigParser().parse(config_path)
+        output_dir = self.tmpdir / "pipeline"
+        PipelineGenerator.generate_snakemake(
+            config, output_dir=output_dir, config_file="config.yaml"
+        )
+
+        moved = Path(tempfile.mkdtemp()) / "pipeline"
+        shutil.copytree(output_dir, moved)
+        shutil.copy(self.tmpdir / "test.fasta", moved.parent / "test.fasta")
+        content = (moved / "Snakefile").read_text()
+        referenced = re.findall(r"'([^']*\.fasta)'", content)
+        assert len(referenced) == 1
+        target = os.path.realpath(str(moved / referenced[0]))
+        assert target == os.path.realpath(str(moved.parent / "test.fasta")), (
+            "Snakefile still points outside the relocated tree: %s" % referenced[0])
 
     def test_generate_nextflow(self):
         """Test Nextflow pipeline generation."""

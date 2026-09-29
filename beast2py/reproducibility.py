@@ -533,6 +533,14 @@ class MethodsGenerator:
         return text + "."
 
 
+def _relative_to(path: str, base: str) -> str:
+    """``path`` as seen from ``base``, unchanged when no relative form exists."""
+    try:
+        return os.path.relpath(path, base)
+    except ValueError:  # different drive on Windows
+        return path
+
+
 class PipelineGenerator:
     """Generate Snakemake/Nextflow pipeline files."""
 
@@ -557,10 +565,14 @@ class PipelineGenerator:
         output_xml = config.metadata.get("output_file", f"{analysis_name}.xml")
 
         # Track the actual sequence files so Snakemake re-generates the XML
-        # when they change (they may live relative to the config file).
+        # when they change (they may live relative to the config file).  Paths
+        # are written as seen from the Snakefile, because Snakemake resolves
+        # inputs against the workflow directory; an absolute path would record
+        # the host that generated the pipeline and break everywhere else.
         seq_files = sorted({a.source_file for a in config.all_alignments if a.source_file})
         if seq_files:
-            seq_list = ",\n            ".join(repr(f) for f in seq_files)
+            seq_list = ",\n            ".join(
+                repr(_relative_to(str(f), str(output_dir))) for f in seq_files)
             seq_input = ",\n        sequences = [\n            " + seq_list + "\n        ]"
         else:
             seq_input = ""
