@@ -220,3 +220,42 @@ class TestPipelineGenerator:
         assert "Nextflow" in content
         assert "process generate_xml" in content
         assert "process run_beast" in content
+
+    def _generated(self, kind):
+        """Generate one workflow file for TEST_CONFIG_YAML and return (config, text)."""
+        config_path = self.tmpdir / "config.yaml"
+        config_path.write_text(TEST_CONFIG_YAML)
+        config = ConfigParser().parse(config_path)
+        gen = (PipelineGenerator.generate_snakemake if kind == "sm"
+               else PipelineGenerator.generate_nextflow)
+        path = gen(config, output_dir=self.tmpdir / ("pipeline_" + kind),
+                   config_file="config.yaml")
+        return config, Path(path).read_text()
+
+    def test_run_rule_declares_only_outputs_the_run_produces(self):
+        """`rule run_beast` may not name log files BEAST2 never writes.
+
+        The names used to come from metadata.analysis_name, while the run writes
+        whatever the XML's own loggers say, so the declared outputs of the rule
+        could never appear and the DAG could not be satisfied.
+        """
+        for kind in ("sm", "nf"):
+            config, content = self._generated(kind)
+            analysis = config.metadata.get("analysis_name", "analysis")
+            assert "%s.log" % analysis not in content, kind
+            assert "%s.trees" % analysis not in content, kind
+            assert "beast2_run.done" in content, kind
+            assert "touch" in content, kind
+
+    def test_run_rule_records_where_beast2_writes(self):
+        """The real logger names from the config are stated, not invented ones."""
+        for kind in ("sm", "nf"):
+            config, content = self._generated(kind)
+            for logger in (config.loggers.trace_log, config.loggers.tree_log):
+                assert logger["file_name"] in content, (kind, logger["file_name"])
+
+    def test_nextflow_carries_every_documented_stage(self):
+        """The manual promises both engines cover methods description too."""
+        _, content = self._generated("nf")
+        assert "process methods" in content
+        assert re.search(r"workflow\s*\{[^}]*methods\(\)", content, re.S)
