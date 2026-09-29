@@ -2066,7 +2066,7 @@ you asked for the check explicitly, generation stops with exit code 2 unless you
 
 All **19** example configuration files pass all three gates: structural checks, calibration-conflict detection, and the BEAST2 `parseFile` and `initAndValidate` check. The third gate uses the native BEAST2 **v2.7.8** parser in headless mode, so no JavaFX is required. Two of the files depend on add-on packages — `config_bd_skyline.yaml` and `config_nested_sampling.yaml` — and were verified against the packages installed under `~/.beast/2.7/`, namely **BDSKY 1.5.1** and **NS 1.2.0**.
 
-The test suite comprises **347** collected tests: **326** unit, semantic and release-integrity tests and **21** BEAST2 integration tests. The integration tests generate XML from all 19 example configurations plus the `quick` path and the committed `output_basic.xml`, and check each with the real BEAST 2.7.8 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests simply skip instead of failing. All are passing.
+The test suite comprises **350** collected tests: **329** unit, semantic and release-integrity tests and **21** BEAST2 integration tests. The integration tests generate XML from all 19 example configurations plus the `quick` path and the committed `output_basic.xml`, and check each with the real BEAST 2.7.8 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests simply skip instead of failing. All are passing.
 
 ---
 

@@ -207,7 +207,7 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 
 - `beast2py/` — Source code of the Beast2Py Python package (CLI, API, configuration parsing, XML generation, diagnostics, reproducibility, and validation modules)
 - `examples/` — 19 example configurations, example alignments (FASTA), and example output artifacts
-- `tests/` — Test suite (347 collected tests: 326 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
+- `tests/` — Test suite (350 collected tests: 329 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
 - `beast2py/tools/` — Headless BEAST2 validation helper bundled *inside* the package (`Beast2Validator.java` source plus the precompiled `classes/` and `launcher.jar`), shipped as `package-data` by `pyproject.toml`; the repository root keeps only a thin `beast2_validate.sh` wrapper
 - `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English)
 - `scripts/check_figure_export.py` — Post-export gate for the manuscript figures that have no Python source (the three draw.io plates): it reads the delivered PDF and PNG back and fails on a stale export, a sub-7.92 pt span, a non-Helvetica or Type3 font, a sub-0.71 pt rule, or a PNG under 600 ppi at the page's own width (`pip install -e .[figures]`)
@@ -243,7 +243,7 @@ a pass. `--allow-unvalidated` restores the write-anyway behaviour, in which case
 must not be described as BEAST2-verified. Everything has been verified against
 BEAST2 **v2.7.8** only.
 
-The test suite comprises 347 collected tests (326 unit/semantic/release + 21 BEAST2
+The test suite comprises 350 collected tests (329 unit/semantic/release + 21 BEAST2
 integration). The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and
 check each with the real BEAST 2.7.8 parser and model initialisation. When the

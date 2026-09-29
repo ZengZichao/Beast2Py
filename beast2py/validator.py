@@ -218,9 +218,13 @@ class XMLValidator:
                 continue  # the tree's density comes from the tree prior
             spec = elem.get("spec", "")
             if spec.endswith("IntegerParameter") or spec.endswith("BooleanParameter"):
-                # Discrete parameters with a bounded support are uniform by
-                # construction over their domain: rate category indices and
-                # indicator bits need no explicit density.
+                # These are indices and bits, not rates: their domain is fixed and
+                # finite by the model that owns them -- the number of rate categories,
+                # BayesianSkyline's maxNumberOfGroups, the truth values -- and BEAST2
+                # clamps proposals to it, so a uniform over that domain is implicit and
+                # needs no density.  The domain is not written as an ``upper`` attribute
+                # here; it comes from the model, which is why gate 1 exempts these and
+                # requires a written prior only for continuous parameters.
                 continue
             if node_id not in covered:
                 result.add_error(
