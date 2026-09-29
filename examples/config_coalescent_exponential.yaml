@@ -56,7 +56,7 @@ tree_prior:
   growth_rate: {value: 0.5, lower: -5.0, upper: 5.0}
 
 calibrations:
-  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.32]
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.31]
   - name: "homininaMRCA"
     taxa: ["Homo_sapiens", "Pan"]
     monophyletic: true

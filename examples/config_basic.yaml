@@ -67,11 +67,13 @@ tree_prior:
 
 # --- 校准点 ---
 # A soft minimum, not a hard bound: Sahelanthropus tchadensis from
-# Toros-Menalla is dated 7.24 +/- 0.15 Ma and is *controversially* placed
+# Toros-Menalla is bracketed at 6.8-7.2 Ma by cosmogenic 10Be/9Be dating
+# (Lebatard et al. 2008); the 7.24 Ma often quoted for the locality lies at
+# the older end of that bracket.  The fossil is *controversially* placed
 # near the human--chimp split, so the prior is a lognormal offset by 6.5 Ma
 # (BEAST2's OffsetLogNormalDistribution).  Checked with the tool's own
 # compute_distribution_stats("lognormal", {M: 0.35, S: 0.4}, offset 6.5):
-#   median 7.92 Ma, 95% HPD [7.02, 9.32] Ma, P(age < 7.24 Ma) = 0.05,
+#   median 7.92 Ma, 95% HPD [7.02, 9.31] Ma, P(age < 7.24 Ma) = 0.05,
 # i.e. the fossil sits at the 5% quantile and the tail runs older, which is
 # the behaviour recommended for fossil minima (Rieux & Balloux 2016).
 # provenance.original_age_min/max are compared against that 95% interval at

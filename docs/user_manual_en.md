@@ -556,7 +556,7 @@ The same validator parses the calibration YAML, so a quoted `monophyletic: "fals
 beast2py quick -a examples/primates.fasta -o /tmp/output_quick.xml
 
 # With calibrations and Gamma
-beast2py quick -a examples/primates.fasta -o /tmp/output_quick.xml \
+beast2py quick -a examples/primates.fasta -o /tmp/output_quick_full.xml \
     --tree-prior birth_death \
     --subst-model gtr \
     --clock-model ucln \
@@ -565,6 +565,9 @@ beast2py quick -a examples/primates.fasta -o /tmp/output_quick.xml \
     --chain-length 1000000 \
     --name "my_analysis"
 ```
+
+Each example writes its own file because `quick`, like `generate`, refuses to replace an
+existing output unless you pass `--force`.
 
 The calibration YAML is parsed by the same validator as a full configuration, so a
 quoted `monophyletic: "false"`, an inverted `uniform` bound or an unknown
@@ -671,25 +674,29 @@ beast2py fingerprint \
 **Fingerprint format:** `B2P-{first 12 hex digits of the config digest}-{tool version}`,
 e.g. `B2P-ba18c26ed61f-0.1.0`. The identifier carries **no date and no time zone**, so
 rerunning the same configuration on the same data always reproduces it. Twelve hex
-digits are 48 bits of digest: by the birthday paradox, a 50% collision probability would
-need about 2²⁴ (≈ 1.7 × 10⁷) distinct analyses.
+digits are 48 bits of digest: by the birthday bound, a 50% chance of even one collision needs
+sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ distinct analyses — about 2 × 10⁷, not the 2**24 = 1.7 × 10⁷ that a
+square-root shortcut would suggest. It is a change-detection token, not a globally unique key.
 
 **Contents of the fingerprint JSON file** (verified output for `examples/config_basic.yaml`):
 
 ```json
 {
-  "fingerprint": "B2P-ba18c26ed61f-0.1.0",
-  "config_hash": "ba18c26ed61fcf4b157723d410f13f7534b0533c9c4810f6a3f422caa3ed9d8e",
-  "full_hash": "ba18c26ed61fcf4b157723d410f13f7534b0533c9c4810f6a3f422caa3ed9d8e",
+  "fingerprint": "B2P-04ab3d09277b-0.1.0",
+  "config_hash": "04ab3d09277b4acb25c69b820e1f806b04adb48b08cd3af5ed9dc5d54a0eb5d1",
+  "full_hash": "04ab3d09277b4acb25c69b820e1f806b04adb48b08cd3af5ed9dc5d54a0eb5d1",
   "data_hash": "30be5613d3ff6862",
   "hash_bits": 48,
-  "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% collision probability would require about 2**24 distinct analyses.",
+  "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% chance of one collision needs sqrt(2 * 2**48 * ln 2), about 1.98e+07 distinct analyses, so it is a change-detection token rather than a globally unique key.",
   "tool_version": "0.1.0",
   "beast2_version": "2.7.8",
-  "generation_time": "2024-01-15T10:30:00.000000",
-  "analysis_name": "primates_basic_calibration"
+  "generation_time": "2026-09-29T18:01:17.890711",
+  "analysis_name": "primates_basic_calibration",
+  "xml_digest": "4f9352096f57259bcf987ba9853f943b406ee6c697f417185ed527c935ea0756"
 }
 ```
+
+`generation_time` above is the moment this sample was captured; the identifier itself has no time component, so the same configuration on the same alignment always yields `B2P-04ab3d09277b-0.1.0`.
 
 `data_hash` condenses the digest of each alignment's content down to the first 16 hex
 characters, and travels in the XML as `| Data: {hash16}` inside the fingerprint comment.
@@ -2059,7 +2066,7 @@ you asked for the check explicitly, generation stops with exit code 2 unless you
 
 All **19** example configuration files pass all three gates: structural checks, calibration-conflict detection, and the BEAST2 `parseFile` and `initAndValidate` check. The third gate uses the native BEAST2 **v2.7.8** parser in headless mode, so no JavaFX is required. Two of the files depend on add-on packages — `config_bd_skyline.yaml` and `config_nested_sampling.yaml` — and were verified against the packages installed under `~/.beast/2.7/`, namely **BDSKY 1.5.1** and **NS 1.2.0**.
 
-The test suite comprises **235** collected tests: **214** unit/semantic tests and **21** BEAST2 integration tests. The integration tests generate XML from all 19 example configurations plus the `quick` path and the committed `output_basic.xml`, and check each with the real BEAST 2.7.8 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests simply skip instead of failing. All are passing.
+The test suite comprises **347** collected tests: **326** unit, semantic and release-integrity tests and **21** BEAST2 integration tests. The integration tests generate XML from all 19 example configurations plus the `quick` path and the committed `output_basic.xml`, and check each with the real BEAST 2.7.8 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests simply skip instead of failing. All are passing.
 
 ---
 
@@ -2356,6 +2363,19 @@ evaluated.
 **`Configuration file not found`**
 
 Make sure the YAML file path is correct, either absolute or relative to the configuration file's own directory. Beast2Py resolves sequence file paths relative to the directory that contains the YAML configuration.
+
+**`Invalid YAML in <file>: …`**
+
+The file cannot be parsed at all: an unclosed flow sequence, a tab used for indentation, a
+duplicated key. The message names the file and keeps the parser's own line and column, so the
+place to fix is stated in the message rather than left to be found in a traceback. Every
+command that reads a configuration reports it this way, and so does `quick --calibration-yaml`.
+
+**`Calibration file not found: …`**
+
+`quick --calibration-yaml` expects a YAML **list** of calibration points, not a full analysis
+configuration. A file whose root is a mapping instead of a list is rejected in the same shape
+(`Calibration YAML must be a list of calibration points`).
 
 **`Calibration taxon not found in any alignment`**
 

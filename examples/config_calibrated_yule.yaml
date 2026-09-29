@@ -58,7 +58,7 @@ calibration_method: "calibrated_yule"
 # --- 校准点（用于 CalibratedYuleModel 的 CalibrationPoint） ---
 calibrations:
   # 7.24 Ma Sahelanthropus as a soft minimum.  lognormal(M=0.35, S=0.4)
-  # offset 6.5 -> median 7.92, 95% HPD [7.02, 9.32].
+  # offset 6.5 -> median 7.92, 95% HPD [7.02, 9.31].
   - name: "homininaMRCA"
     taxa: ["Homo_sapiens", "Pan"]
     monophyletic: true

@@ -13,8 +13,8 @@ from typing import Dict, List, Optional, Set
 from .models import Alignment, DataType, Sequence
 
 # IUPAC ambiguity codes and BEAST2 missing-data tokens are legal; anything else
-# in an alignment is a data error that used to reach <sequence> unchecked
-# . Note that '?' is BEAST2's wildcard token, '.' and '-' are gaps.
+# in an alignment is a data error that used to reach <sequence> unchecked.
+# Note that '?' is BEAST2's wildcard token, '.' and '-' are gaps.
 NUCLEOTIDE_ALPHABET: Set[str] = set("ACGTUacgtu" "RYSWKMBDHVN" "ryswnkmbdhvn" "-.?*")
 AMINOACID_ALPHABET: Set[str] = set("ACDEFGHIKLMNPQRSTVWY" "acdefghiklmnpqrstvwy" "BZUOX*" "-.?")
 

@@ -1,0 +1,42 @@
+Third-party notices for beast2py/tools
+=======================================
+
+This directory contains material that is NOT covered by the MIT licence of the
+beast2py package.  It is distributed under the terms of the GNU Lesser General
+Public Licence version 2.1 (see LICENSE.BEAST2-LGPL-2.1.txt in this directory).
+
+beast2py/tools/classes/beast/pkgmgmt/*.class
+    Origin   : BEAST 2, package-management classes.
+    Project  : https://github.com/CompEvol/beast2
+    Version  : v2.7.8 (release published 2025-06-17)
+    Licence  : GNU LGPL version 2.1, February 1999
+    Upstream licence text : BEAST 2 file "COPYING", reproduced verbatim here as
+               LICENSE.BEAST2-LGPL-2.1.txt
+    Modified : No. These are the compiled classes produced from unmodified
+               upstream sources; no upstream source file is redistributed here.
+    Source   : The corresponding unmodified sources are available from the
+               upstream project at the release tag above, and a Complete
+               Corresponding Source may also be obtained by written request to
+               the maintainer named in the beast2py LICENSE file, for at least
+               three years, as required by LGPL-2.1 section 6.
+
+    Why these are bundled: they let `beast2py validate` reach a BEAST2 XMLParser
+    without making the user compile anything.  The validator resolves BEAST2
+    jars from a local BEAST2 installation at run time, so no BEAST2 source code
+    is linked into, or copied into, the Python modules.
+
+beast2py/tools/Beast2Validator.java and the compiled Beast2Validator.class
+    Origin   : written for this project.
+    Licence  : MIT (same as beast2py), but it is compiled against BEAST 2 and so
+               is distributed together with the LGPL notice above; the class file
+               in classes/ is the compiled form of this source, which is shipped
+               here in full to satisfy LGPL-2.1 for that unit.
+
+beast2py/tools/launcher.jar
+    Origin   : written for this project (a thin Main-Class wrapper that adds
+               classes/ to the classpath).
+    Licence  : MIT.
+
+BEAST 2 is copyright (c) the BEAST2 development team and contributors.
+The Society of Systematic Biologists, Systematic Biology and the authors of
+beast2py are not affiliated with, and do not endorse, BEAST 2.

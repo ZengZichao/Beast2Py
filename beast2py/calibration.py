@@ -97,7 +97,7 @@ class CalibrationBuilder:
         # not with a child parameter.  Beast2Py's summary statistics follow the
         # requested mode, so the XML has to state it as well - otherwise a
         # `mode: ShapeRate` prior is sampled as a scale prior while the reported
-        # mean and interval use the rate convention .
+        # mean and interval use the rate convention.
         if dist.type.lower() in ("gamma", "inverse_gamma", "inversegamma"):
             mode = (dist.parameters or {}).get("mode")
             if mode is not None:

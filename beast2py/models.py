@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, Union
 
 # Metadata keys that document an analysis without describing it. They are kept
 # out of the fingerprint so that crediting a co-author or updating a prose
-# summary cannot make one analysis look like two .
+# summary cannot make one analysis look like two.
 NON_SCIENCE_METADATA = frozenset(
     {"author", "date", "output_file", "analysis_description", "description", "notes"}
 )
@@ -124,7 +124,7 @@ class Alignment:
         Raises:
             ValueError: If the alignment is ragged. Reporting the first
                 sequence's length for ragged data made the printed and
-                fingerprinted site count disagree with the file .
+                fingerprinted site count disagree with the file.
         """
         lengths = set(self.site_lengths)
         if not lengths:
@@ -323,13 +323,13 @@ class MCMCConfig:
             tests ``(sampleNr + 1) % storeEvery == 0``), not in generations; 0
             or -1 disables checkpointing. The default scales with the chain
             length so a long run gets ~10 resume points instead of one at the
-            very end .
+            very end.
         sample_from_prior: Whether to sample from prior only.
         mcmc_type: Standard or nested sampling.
         particle_count: NS particle count.
         sub_chain_length: NS sub-chain length.
         seed: RNG seed written to the XML, so log file names built from the
-            ``$(seed)`` macro and the run itself are reproducible .
+            ``$(seed)`` macro and the run itself are reproducible.
     """
 
     chain_length: int = 10000000
@@ -393,7 +393,7 @@ class InitializationConfig:
     newick_file: Optional[str] = None
     # SHA-256 of the starting-tree file's bytes. Only the *type* of initial tree
     # used to reach the fingerprint, so two analyses seeded with completely
-    # different user topologies shared one identity .
+    # different user topologies shared one identity.
     newick_digest: Optional[str] = None
 
 
@@ -440,7 +440,7 @@ class BEASTConfig:
         nothing that does not may. Accordingly the alignment content digest,
         per-partition tree reference, calibration stem/crown and tipsonly
         flags, hyperpriors, explicit parameter priors and tip dates are all
-        included, while the output file name is excluded .
+        included, while the output file name is excluded.
 
         Returns:
             A JSON-compatible dict.
@@ -457,8 +457,7 @@ class BEASTConfig:
         # Only the fields that describe the *analysis* identify it. The
         # documentary ones (who ran it, when, prose about it) used to change the
         # fingerprint, contradicting this module's own "deliberately contains no
-        # calendar date" claim and splitting one analysis across several ids
-        # .
+        # calendar date" claim and splitting one analysis across several ids.
         metadata = {
             k: v for k, v in self.metadata.items() if k not in NON_SCIENCE_METADATA
         }

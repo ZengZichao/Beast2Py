@@ -299,7 +299,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
     # Optional: Flag reproducibility siblings that are about to go stale: an overwritten
     # XML with an untouched .fingerprint.json / .methods.tex on disk mixes two
-    # analyses under one name .
+    # analyses under one name.
     if not (args.fingerprint and args.methods):
         for suffix in (".fingerprint.json", ".methods.tex"):
             stale = Path(output_path).with_suffix(suffix)
@@ -430,7 +430,7 @@ def _run_diagnostics(
         _success("No calibration conflicts detected.")
     if unchecked:
         # "Nothing found" and "nothing checked" are different statements, and
-        # only the first one deserves a green tick .
+        # only the first one deserves a green tick.
         _warn(
             f"{len(unchecked)} calibration pair(s) could NOT be checked "
             f"({', '.join(c.calibration_a + '/' + c.calibration_b for c in unchecked)}): "
@@ -556,9 +556,15 @@ def cmd_quick(args: argparse.Namespace) -> int:
     calibrations: List[CalibrationPoint] = []
     if args.calibration_yaml:
         _info(f"Reading calibrations: {args.calibration_yaml}")
-        calibrations = _parse_calibration_yaml(
-            args.calibration_yaml, known_taxa=alignment.taxa_names
-        )
+        try:
+            calibrations = _parse_calibration_yaml(
+                args.calibration_yaml, known_taxa=alignment.taxa_names
+            )
+        except ConfigError as e:
+            # The alignment above reports its own problems cleanly; a calibration
+            # file the user hand-typed can fail the same way.
+            _error(f"Configuration error: {e}")
+            return 1
         _verbose(f"Calibration points: {len(calibrations)}", verbose)
 
     # Parse MCMC
@@ -632,16 +638,21 @@ def _parse_calibration_yaml(yaml_path: str, known_taxa=None) -> List[Calibration
         List of validated CalibrationPoint objects.
 
     Raises:
-        ConfigError: If any entry is invalid.
-        ValueError: If the file is not a list.
+        ConfigError: If the file is missing, is not valid YAML, is not a list,
+            or contains an invalid entry.
     """
     import yaml
 
-    with open(yaml_path, "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
+    try:
+        with open(yaml_path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+    except FileNotFoundError:
+        raise ConfigError(f"Calibration file not found: {yaml_path}")
+    except yaml.YAMLError as e:
+        raise ConfigError(f"Invalid YAML in {yaml_path}: {e}")
 
     if not isinstance(raw, list):
-        raise ValueError("Calibration YAML must be a list of calibration points")
+        raise ConfigError("Calibration YAML must be a list of calibration points")
 
     parser = ConfigParser()
     errors: List[str] = []

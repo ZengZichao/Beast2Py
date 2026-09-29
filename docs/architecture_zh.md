@@ -23,7 +23,7 @@ Beast2Py 采用分层架构设计，注重可扩展性和可维护性。系统�
 | 工具函数 | `utils.py` | ID 生成、XML 序列化、分布计算 |
 | 模型注册表 | `registry.py` | 模型名称到 XML spec 的映射、可扩展注册 |
 | BEAST2 校验启动脚本 | `beast2_validate.sh` | 无头 BEAST2 验证入口，发布在**包内**（仓库根只保留同名的薄包装） |
-| Java 校验助手 | `tools/` | `Beast2Validator.java` 源文件、预编译的 `classes/` 与 `launcher.jar`，作为 package-data 发布 |
+| Java 校验助手 | `tools/` | `Beast2Validator.java` 源文件、预编译的 `classes/` 与 `launcher.jar`，作为 package-data 发布；`NOTICE` 与 `LICENSE.BEAST2-LGPL-2.1.txt` 记录这些捆绑类的来源与所承载的 LGPL-2.1 条款 |
 
 ## 数据流
 

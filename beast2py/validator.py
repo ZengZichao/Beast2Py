@@ -198,7 +198,7 @@ class XMLValidator:
             # the fully qualified ".Prior" spelling made `beast2py validate`
             # report five invented "has no <Prior>" errors on its own example
             # once the file was re-spelled the way the BEAST2 GUI and the
-            # official templates spell it .
+            # official templates spell it.
             spec = prior_elem.get("spec", "")
             if spec.rsplit(".", 1)[-1].lower() != "prior":
                 continue
@@ -332,7 +332,7 @@ class XMLValidator:
         Returns:
             ValidationResult with errors and warnings. An unreadable or missing
             file is reported inside that result rather than raised, so
-            `beast2py validate` always prints diagnostics .
+            `beast2py validate` always prints diagnostics.
         """
         try:
             with open(xml_file, "r", encoding="utf-8") as f:
@@ -354,7 +354,7 @@ class XMLValidator:
         A plain ``"VALID:" in output`` is satisfied by ``"INVALID: ..."``
         because VALID: is a substring of it, so the guard meant to stop an
         unrelated script exiting 0 from producing a false positive never
-        actually engaged . Match line-anchored markers on stdout
+        actually engaged. Match line-anchored markers on stdout
         only, and treat any INVALID line as a veto.
 
         Args:
@@ -382,7 +382,7 @@ class XMLValidator:
         ``validate_with_beast2`` reports a boolean, which cannot tell a rejected
         model apart from a missing BEAST2 installation. Callers that gate on
         exit codes need that distinction: an unavailable checker must never be
-        reported as a passed one .
+        reported as a passed one.
 
         Args:
             xml_file: Path to the XML file.
@@ -411,7 +411,7 @@ class XMLValidator:
 
         ``pyproject.toml`` used to package only ``beast2py*``, so an installed
         distribution had no script and validation silently degraded to
-        ``beast -validate`` and then to "not found" .
+        ``beast -validate`` and then to "not found".
 
         Returns:
             Path to the script, or None when it cannot be found.
@@ -494,7 +494,7 @@ class XMLValidator:
                     # a *missing* checker must never be reported as a passed
                     # -- or failed -- one, and "none was found" does not
                     # contain the substring "not found" that the status
-                    # heuristic used to rely on .
+                    # heuristic used to rely on.
                     output = f"SETUP-ERROR: {output}"
                 success = (
                     result.returncode == 0

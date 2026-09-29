@@ -72,7 +72,7 @@ calibrations:
       original_age_max: 75.0
       notes: "Secondary calibration from published divergence-time estimates"
 
-  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92, 95% HPD [7.02, 9.32]
+  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92, 95% HPD [7.02, 9.31]
   - name: "homininaMRCA"
     taxa: ["Homo_sapiens", "Pan"]
     monophyletic: true
