@@ -1,0 +1,22 @@
+{
+  "title": "Beast2Py",
+  "version": "0.1.0",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": {"id": "MIT"},
+  "creators": [
+    {
+      "name": "Zeng, Zichao",
+      "orcid": "0000-0001-6553-970X"
+    }
+  ],
+  "description": "<p>Beast2Py is a Python framework for reproducible divergence time estimation with BEAST2: declarative YAML configuration, calibration prior specification and conflict detection, three-gate validation, prior sensitivity analysis, analysis fingerprints, generated LaTeX methods descriptions, and pipeline generation. Beast2Py itself is MIT-licensed; the bundled BEAST2 package-management helper classes are LGPL-2.1 (see NOTICE in the repository).</p>",
+  "keywords": ["BEAST2", "phylogenetics", "divergence time", "calibration", "molecular clock"],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/ZengZichao/Beast2Py",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}
