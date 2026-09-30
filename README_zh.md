@@ -233,7 +233,7 @@ print(models["substitution_models"])
 
 测试套件共收集 361 个测试（340 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
 示例配置、`quick` 路径以及仓库内的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.8 解析器
-与模型初始化检查。当环境缺少 BEAST2 jar 或 JDK 17 时，这些测试直接跳过，不算失败。
+与模型初始化检查。当环境缺少 BEAST2 jar 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。
 
 ## 可重复性
 

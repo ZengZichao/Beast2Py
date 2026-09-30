@@ -248,7 +248,7 @@ The test suite comprises 361 collected tests (340 unit/semantic/release + 21 BEA
 integration). The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and
 check each with the real BEAST 2.7.8 parser and model initialisation. When the
-BEAST2 jars or JDK 17 are missing, those tests simply skip instead of failing.
+BEAST2 jars or JDK 17 are missing, those tests simply skip instead of failing. Two of those cases additionally require the BDSKY and nested-sampling add-ons, and the CI workflow treats a failed `beast -get` of either as a warning rather than an error, so those two cases can skip on a green run. A passing CI badge therefore does not by itself show that `config_bd_skyline.yaml` and `config_nested_sampling.yaml` cleared gate 3; run `pytest tests -rs` to see which integration cases actually executed and which skipped.
 
 ## Reproducibility
 
