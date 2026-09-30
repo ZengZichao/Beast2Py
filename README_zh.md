@@ -203,7 +203,7 @@ print(models["substitution_models"])
 
 - `beast2py/` — Beast2Py Python 包源代码（CLI、API、配置解析、XML 生成、诊断、可重复性、验证等模块）
 - `examples/` — 19 个示例配置文件、示例比对数据（FASTA）和示例输出制品
-- `tests/` — 测试套件（共收集 359 个测试：338 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
+- `tests/` — 测试套件（共收集 360 个测试：339 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
 - `beast2py/tools/` — 随包发布的无头 BEAST2 验证助手（`Beast2Validator.java` 源码，含预编译的 `classes/` 与 `launcher.jar`），由 `pyproject.toml` 以 `package-data` 随 wheel 打包发布；仓库根目录仅保留同名的薄包装 `beast2_validate.sh`
 - `docs/` — 使用手册、架构指南、教程、校准指南和 XML 格式指南（中英文）
 - `scripts/check_figure_export.py` — 三张 draw.io 图的导出后检查（它们没有可重绘的 Python 源）：读回已交付的 PDF 与 PNG，若导出件早于其 `.drawio` 源、字号低于 7.92 pt、字体超出 Helvetica 族、线宽低于 0.71 pt、或位图在页面自身宽度下不足 600 ppi，即报错退出（需 `pip install -e .[figures]`）
@@ -231,7 +231,7 @@ print(models["substitution_models"])
 当成通过。`--allow-unvalidated` 可以恢复“照样写出”的行为，此时不应把该 XML 称为“已通过 BEAST2
 验证”。所有结论仅针对 BEAST2 **v2.7.8** 核实。
 
-测试套件共收集 359 个测试（338 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
+测试套件共收集 360 个测试（339 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
 示例配置、`quick` 路径以及仓库内的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.8 解析器
 与模型初始化检查。当环境缺少 BEAST2 jar 或 JDK 17 时，这些测试直接跳过，不算失败。
 
