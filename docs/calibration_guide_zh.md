@@ -90,7 +90,7 @@ beast2py diagnose --config config.yaml --report report.html --sensitivity
 
 ### 4. 来源记录与实际先验不一致
 
-**问题**：记录的化石年龄范围与实际使用的先验是两个不同的年龄。BEAST2 只看得到分布，看不见这类稿件错误。
+**问题**：记录的化石年龄范围与实际使用的先验是两个不同的年龄。BEAST2 只看得到分布，看不见这类记录错误。
 
 **解决方案**：如实填写 `original_age_min` / `original_age_max`。Beast2Py 会在解析阶段把这两个范围与先验的 95% 区间比较：硬边界不一致判为错误，软边界不一致判为警告，提醒你在方法学里把两者一起交代清楚。
 

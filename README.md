@@ -1,7 +1,8 @@
 # Beast2Py
 
 **A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics.**
-[中文文档](README_zh.md) | [English README](README_en.md)
+
+English | [中文文档](README_zh.md)
 
 [![License: MIT AND LGPL-2.1-only](https://img.shields.io/badge/License-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
@@ -208,11 +209,9 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 
 - `beast2py/` — Source code of the Beast2Py Python package (CLI, API, configuration parsing, XML generation, diagnostics, reproducibility, and validation modules)
 - `examples/` — 19 example configurations, example alignments (FASTA), and example output artifacts
-- `tests/` — Test suite (361 collected tests: 340 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
+- `tests/` — Test suite (360 collected tests: 339 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
 - `beast2py/tools/` — Headless BEAST2 validation helper bundled *inside* the package (`Beast2Validator.java` source plus the precompiled `classes/` and `launcher.jar`), shipped as `package-data` by `pyproject.toml`; the repository root keeps only a thin `beast2_validate.sh` wrapper
 - `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English)
-- `scripts/check_figure_export.py` — Post-export gate for the three draw.io figures, which have no Python source to redraw them: it reads the delivered PDF and PNG back and fails on an export older than its `.drawio` source, a span under 7.92 pt, a font outside Helvetica, a rule under 0.71 pt, or a raster under 600 ppi at the page's own width (`pip install -e .[figures]`)
-- `scripts/check_submission_placeholders.py` — Pre-upload gate listing every unresolved archive identifier (Zenodo DOI, Dryad DOI and reviewer URL, TreeBASE accession) still present in the manuscript or cover letter, each with its paragraph or page; exits non-zero while any remain (`pip install -e .[figures]` enables the PDF pass)
 - `beast2_validate.sh` — Launcher script for headless BEAST2 validation (needs `BEAST.base.jar` and JDK 17 or newer; it auto-detects `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`, or set `BEAST2_JAR`)
 - `pyproject.toml` — Package build and dependency configuration
 
@@ -302,14 +301,14 @@ The package is MIT; the bundled BEAST2 package-management classes are LGPL-2.1 (
 
 ## Citation
 
-If you use Beast2Py in your research, please cite:
+If you use Beast2Py in your research, please cite the software:
 
-> Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics. (manuscript in preparation)
+> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.0. https://github.com/ZengZichao/Beast2Py
 
-## Authors
+Machine-readable citation metadata is available in [CITATION.cff](CITATION.cff).
 
-Author information will be added upon official release.
+## Author
 
-## Funding
-
-Funding information will be added upon official release.
+**Zichao Zeng (曾子超)**
+Email: zengzichao@sjtu.edu.cn
+ORCID: [0000-0001-6553-970X](https://orcid.org/0000-0001-6553-970X)

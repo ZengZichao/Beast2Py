@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use Beast2Py in your research, please cite it using the metadata below."
+title: Beast2Py
+version: 0.1.0
+date-released: "2026-09-30"
+license: MIT AND LGPL-2.1-only
+authors:
+  - family-names: Zeng
+    given-names: Zichao
+    email: zengzichao@sjtu.edu.cn
+    orcid: "https://orcid.org/0000-0001-6553-970X"
+repository-code: "https://github.com/ZengZichao/Beast2Py"
+abstract: "A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics."
+keywords:
+  - BEAST2
+  - phylogenetics
+  - divergence time
+  - calibration
+  - molecular clock

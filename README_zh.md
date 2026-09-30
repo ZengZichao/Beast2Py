@@ -2,6 +2,8 @@
 
 **一个用于可重复分歧时间估计的 Python 框架，具备自动化校准先验指定、验证和诊断功能。**
 
+[English](README.md) | 中文
+
 [![许可证: MIT AND LGPL-2.1-only](https://img.shields.io/badge/许可证-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![BEAST2 2.7.8](https://img.shields.io/badge/BEAST2-2.7.8-orange.svg)](https://www.beast2.org/)
@@ -203,11 +205,9 @@ print(models["substitution_models"])
 
 - `beast2py/` — Beast2Py Python 包源代码（CLI、API、配置解析、XML 生成、诊断、可重复性、验证等模块）
 - `examples/` — 19 个示例配置文件、示例比对数据（FASTA）和示例输出制品
-- `tests/` — 测试套件（共收集 361 个测试：340 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
+- `tests/` — 测试套件（共收集 360 个测试：339 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
 - `beast2py/tools/` — 随包发布的无头 BEAST2 验证助手（`Beast2Validator.java` 源码，含预编译的 `classes/` 与 `launcher.jar`），由 `pyproject.toml` 以 `package-data` 随 wheel 打包发布；仓库根目录仅保留同名的薄包装 `beast2_validate.sh`
 - `docs/` — 使用手册、架构指南、教程、校准指南和 XML 格式指南（中英文）
-- `scripts/check_figure_export.py` — 三张 draw.io 图的导出后检查（它们没有可重绘的 Python 源）：读回已交付的 PDF 与 PNG，若导出件早于其 `.drawio` 源、字号低于 7.92 pt、字体超出 Helvetica 族、线宽低于 0.71 pt、或位图在页面自身宽度下不足 600 ppi，即报错退出（需 `pip install -e .[figures]`）
-- `scripts/check_submission_placeholders.py` — 上传前检查：列出稿件或投稿信中仍遗留的全部未替换存档标识符（Zenodo DOI、Dryad DOI 与审稿链接、TreeBASE 登录号），并给出其段落或页码；只要还有未替换项即以非零码退出（PDF 检查需 `pip install -e .[figures]`）
 - `beast2_validate.sh` — 无头 BEAST2 验证启动脚本（需要 `BEAST.base.jar` 与 JDK 17+；自动探测 `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`，也可设 `BEAST2_JAR`）
 - `pyproject.toml` — 包构建与依赖配置
 
@@ -286,14 +286,14 @@ Beast2Py 的差异点在于把以下能力整合为一条配置阶段流水线�
 
 ## 引用
 
-如果你在研究中使用 Beast2Py，请引用：
+如果你在研究中使用 Beast2Py，请引用本软件：
 
-> Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics.（手稿准备中）
+> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.0. https://github.com/ZengZichao/Beast2Py
+
+机器可读的引用元数据见 [CITATION.cff](CITATION.cff)。
 
 ## 作者
 
-作者信息将在正式发布时补充。
-
-## 资助
-
-资助信息将在正式发布时补充。
+**曾子超（Zichao Zeng）**
+邮箱：zengzichao@sjtu.edu.cn
+ORCID：[0000-0001-6553-970X](https://orcid.org/0000-0001-6553-970X)

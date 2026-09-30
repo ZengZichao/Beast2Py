@@ -2,7 +2,7 @@
 name = "beast2py"
 dynamic = ["version"]
 description = "Python framework for reproducible divergence time estimation with calibration prior validation"
-readme = "README_en.md"
+readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT AND LGPL-2.1-only"}
 authors = [
@@ -32,7 +32,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=7.0", "pytest-cov", "black", "flake8", "mypy", "defusedxml>=0.7"]
 xml = ["lxml>=4.9"]
-figures = ["pymupdf>=1.23", "pillow>=10"]
 
 [project.scripts]
 beast2py = "beast2py.main:main"

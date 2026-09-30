@@ -1,14 +1,13 @@
-"""Release-integrity guards derived from the submission review.
+"""Release-integrity guards.
 
-Each test locks a defect that the review found, so it cannot silently return:
+Each test locks a defect that must not silently return:
 
-* the birthday-collision bound quoted to users (ISSUE-001),
-* comment text that lost a character to an earlier edit pass (ISSUE-023),
+* the birthday-collision bound quoted to users,
+* comment text that lost a character to an earlier edit pass,
 * the sidecar/XML pair that lets a reader verify an analysis without running
-  anything (ISSUE-031),
-* order-stability of the fingerprint serialiser (ISSUE-030),
-* what the built wheel and sdist must contain, checked from the declarations
-  (ISSUE-004, 015, 031),
+  anything,
+* order-stability of the fingerprint serialiser,
+* what the built wheel and sdist must contain, checked from the declarations,
 * the tutorial steps that pointed two commands at one output name, and the
   documented commands a reader is told to run.
 """
@@ -82,7 +81,7 @@ class TestSidecarPairing:
 
         The XML and its sidecar can age together behind a change in the writer, and
         the reader who runs the documented command would then get something other
-        than the committed example the paper says was validated.
+        than the committed example the documentation presents as validated.
         """
         import contextlib
         import io
@@ -222,11 +221,11 @@ class TestCommentIntegrity:
 
 
 class TestDistributionContents:
-    """What the deposited release must contain, checked without building it.
+    """What the distributed release must contain, checked without building it.
 
     The wheel and sdist are assembled from MANIFEST.in plus the package-data table, so a
-    licence file or authoring gate that is missing from those two declarations is missing
-    from the archive the paper cites, even though it is present in the working tree.
+    licence file that is missing from those two declarations is missing from the
+    archive users download, even though it is present in the working tree.
     """
 
     MANIFEST = (REPO / "MANIFEST.in").read_text(encoding="utf-8")
@@ -238,14 +237,8 @@ class TestDistributionContents:
         assert (PKG / "tools" / "NOTICE").exists()
         assert (PKG / "tools" / "LICENSE.BEAST2-LGPL-2.1.txt").exists()
 
-    def test_authoring_gates_are_shipped(self):
-        # ISSUE-015: the draw.io export gate has to travel with the deposited version.
-        assert "recursive-include scripts *.py" in self.MANIFEST
-        for script in ("check_figure_export.py", "check_submission_placeholders.py"):
-            assert (REPO / "scripts" / script).exists(), script
-
     def test_example_fingerprint_pair_is_shipped(self):
-        # ISSUE-031: the pairing is checkable "without running anything" only if both
+        # the pairing is checkable "without running anything" only if both
         # files are in the archive the reader downloads.
         assert "examples/output_basic.xml" in self.MANIFEST
         assert "output_basic.fingerprint.json" in self.MANIFEST
@@ -256,10 +249,10 @@ class TestDistributionContents:
 
 
 class TestRepositoryHygiene:
-    """What the repository publishes is the archived source of the paper.
+    """What the repository publishes is its public source.
 
-    Two failure modes are cheap to prevent and expensive to retract once a
-    deposit DOI is minted: an absolute path from the author's machine, and a
+    Two failure modes are cheap to prevent and expensive to retract once
+    published: an absolute path from the author's machine, and a
     credential committed by accident.  The scan covers exactly the files git
     would ship - tracked plus untracked-but-not-ignored - so agent state,
     build residue and caches are out of scope by construction, not by a

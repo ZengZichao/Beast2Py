@@ -16,6 +16,9 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 .mimosa/
+.probe_tmp/
+.v2c/
+.video_agent/
 
 # OS / editor noise
 .DS_Store
