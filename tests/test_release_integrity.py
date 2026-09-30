@@ -77,6 +77,35 @@ class TestSidecarPairing:
         assert embedded.group(2).decode() == side["data_hash"]
         assert side["config_hash"].startswith(side["fingerprint"].split("-")[1])
 
+    def test_committed_trio_is_what_the_shipped_code_produces(self):
+        """Self-consistency is not the same thing as being current.
+
+        The XML and its sidecar can age together behind a change in the writer, and
+        the reader who runs the documented command would then get something other
+        than the committed example the paper says was validated.
+        """
+        import contextlib
+        import io
+        import tempfile
+
+        from beast2py.api import generate_xml
+        from beast2py.config import ConfigParser
+
+        out = pathlib.Path(tempfile.mkdtemp()) / "output_basic.xml"
+        with contextlib.redirect_stdout(io.StringIO()):
+            generate_xml(str(EXAMPLES / "config_basic.yaml"), str(out), force=True)
+        assert out.read_bytes() == (EXAMPLES / "output_basic.xml").read_bytes(), (
+            "the committed exemplar XML is behind the writer")
+
+        config = ConfigParser().parse(EXAMPLES / "config_basic.yaml")
+        side = json.loads((EXAMPLES / "output_basic.fingerprint.json").read_text())
+        fresh = FingerprintGenerator.generate_fingerprint_dict(
+            config, xml_content=out.read_text(encoding="utf-8"))
+        volatile = {"generation_time"}
+        assert {k: v for k, v in side.items() if k not in volatile} == \
+            {k: v for k, v in fresh.items() if k not in volatile}, (
+            "the committed sidecar is behind what the shipped code writes")
+
 
 class TestCanonicalSerialisation:
     """A set must not be able to make the digest depend on PYTHONHASHSEED."""
