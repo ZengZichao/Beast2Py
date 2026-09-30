@@ -106,6 +106,43 @@ class TestSidecarPairing:
             {k: v for k, v in fresh.items() if k not in volatile}, (
             "the committed sidecar is behind what the shipped code writes")
 
+    def test_fingerprint_literals_in_docs_are_still_producible(self):
+        """Every digest the documentation shows must be one the tool emits today.
+
+        The XML-format page carried the real alignment digest together with a
+        configuration digest no example produces any more, which is exactly the
+        shape a reader would take as evidence that the fingerprint scheme is
+        reproducible -- and then fail to reproduce.
+        """
+        import contextlib
+        import io
+
+        from beast2py.config import ConfigParser
+
+        cfg_hashes, data_hashes = set(), set()
+        for cfg in sorted(EXAMPLES.glob("config_*.yaml")):
+            buf = io.StringIO()
+            try:
+                with contextlib.redirect_stdout(buf):
+                    parsed = ConfigParser().parse(cfg)
+            except Exception:  # noqa: BLE001 - a config this suite cannot parse is locked elsewhere
+                continue
+            cfg_hashes.add(FingerprintGenerator.config_hash(parsed))
+            data_hashes.add(FingerprintGenerator.data_hash(parsed))
+
+        stale = []
+        for md in sorted(REPO.rglob("*.md")):
+            if "subprojects" in str(md):
+                continue
+            text = md.read_text(encoding="utf-8", errors="replace")
+            for digest in re.findall(r"B2P-([0-9a-f]{12})-", text):
+                if digest not in cfg_hashes:
+                    stale.append("%s: config digest %s" % (md.name, digest))
+            for digest in re.findall(r"(?:Data: |\"data_hash\": \")([0-9a-f]{16})", text):
+                if digest not in data_hashes:
+                    stale.append("%s: data digest %s" % (md.name, digest))
+        assert not stale, "documentation shows digests the code cannot produce: %s" % stale[:6]
+
 
 class TestCanonicalSerialisation:
     """A set must not be able to make the digest depend on PYTHONHASHSEED."""

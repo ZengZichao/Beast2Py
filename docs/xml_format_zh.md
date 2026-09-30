@@ -182,7 +182,7 @@ UCLN 与 UCE 共用 `UCRelaxedClockModel` 这个 spec，区别只在分支速率
 工具在 XML 注释中嵌入分析指纹：
 
 ```xml
-<!-- Analysis Fingerprint: B2P-ba18c26ed61f-0.1.0 | Data: 30be5613d3ff6862 -->
+<!-- Analysis Fingerprint: B2P-04ab3d09277b-0.1.0 | Data: 30be5613d3ff6862 -->
 ```
 
 格式：`B2P-{配置哈希 12 位}-{工具版本} | Data: {数据哈希 16 位}`

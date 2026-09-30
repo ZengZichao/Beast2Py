@@ -672,7 +672,7 @@ beast2py fingerprint \
 | `--verbose` | `-v` | No | False | Show detailed fingerprint information |
 
 **Fingerprint format:** `B2P-{first 12 hex digits of the config digest}-{tool version}`,
-e.g. `B2P-ba18c26ed61f-0.1.0`. The identifier carries **no date and no time zone**, so
+e.g. `B2P-04ab3d09277b-0.1.0`. The identifier carries **no date and no time zone**, so
 rerunning the same configuration on the same data always reproduces it. Twelve hex
 digits are 48 bits of digest: by the birthday bound, a 50% chance of even one collision needs
 sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ distinct analyses — about 2 × 10⁷, not the 2**24 = 1.7 × 10⁷ that a
@@ -1933,7 +1933,7 @@ Once the dimensionless criterion became the default, a fixed `2.0` stopped meani
 
 ### 15.1 Analysis fingerprint
 
-The analysis fingerprint is a deterministic identifier generated from the SHA-256 hash of the *scientific* configuration, in the date-free format `B2P-{hash12}-{version}`, e.g. `B2P-ba18c26ed61f-0.1.0`. It carries **no date and no time zone**, so the same configuration over the same alignment data reproduces byte-for-byte on every rerun.
+The analysis fingerprint is a deterministic identifier generated from the SHA-256 hash of the *scientific* configuration, in the date-free format `B2P-{hash12}-{version}`, e.g. `B2P-04ab3d09277b-0.1.0`. It carries **no date and no time zone**, so the same configuration over the same alignment data reproduces byte-for-byte on every rerun.
 
 These changes alter the fingerprint, because `models.py::to_dict` includes them in the hash: the sequence content, the tree setting (`Partition.tree`), a crown/stem (`use_originate`) or `tipsonly` flag, a hyperprior, a `parameter_priors` entry, a tip date, or an operator weight. Renaming the output file alone does not.
 
@@ -2066,7 +2066,7 @@ you asked for the check explicitly, generation stops with exit code 2 unless you
 
 All **19** example configuration files pass all three gates: structural checks, calibration-conflict detection, and the BEAST2 `parseFile` and `initAndValidate` check. The third gate uses the native BEAST2 **v2.7.8** parser in headless mode, so no JavaFX is required. Two of the files depend on add-on packages — `config_bd_skyline.yaml` and `config_nested_sampling.yaml` — and were verified against the packages installed under `~/.beast/2.7/`, namely **BDSKY 1.5.1** and **NS 1.2.0**.
 
-The test suite comprises **360** collected tests: **339** unit, semantic and release-integrity tests and **21** BEAST2 integration tests. The integration tests generate XML from all 19 example configurations plus the `quick` path and the committed `output_basic.xml`, and check each with the real BEAST 2.7.8 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests simply skip instead of failing. All are passing.
+The test suite comprises **361** collected tests: **340** unit, semantic and release-integrity tests and **21** BEAST2 integration tests. The integration tests generate XML from all 19 example configurations plus the `quick` path and the committed `output_basic.xml`, and check each with the real BEAST 2.7.8 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests simply skip instead of failing. All are passing.
 
 ---
 
