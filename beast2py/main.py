@@ -106,12 +106,12 @@ def _validate_and_write(
        (``XMLParser`` calls ``initAndValidate`` on every object).
 
     Nothing is written until every gate that ran has passed, and a failed gate
-    returns non-zero. Previously ``generate`` printed
-    "BEAST2 validation reported issues" and still returned 0 after writing the
-    file, so a pipeline using exit codes recorded an invalid model as verified
-    . The three outcomes are reported with distinct wording so
-    that "[OK] structural checks passed" is never mistaken for "BEAST2 can run
-    this analysis".
+    returns non-zero. Were the file written before the gates had run,
+    ``generate`` would print "BEAST2 validation reported issues" and still exit
+    0 with an invalid model on disk, and a pipeline keyed on exit codes would
+    record that model as verified. The three outcomes are reported with
+    distinct wording so that "[OK] structural checks passed" is never mistaken
+    for "BEAST2 can run this analysis".
 
     Args:
         xml_str: The generated XML.
@@ -625,7 +625,7 @@ def _parse_calibration_yaml(yaml_path: str, known_taxa=None) -> List[Calibration
 
     The parsing is delegated to :meth:`ConfigParser._parse_calibration` so the
     ``--calibration-yaml`` shortcut gets exactly the same checks as a full YAML
-    configuration. Its own lenient copy used to accept ``monophyletic:
+    configuration; a separate lenient copy would have accepted ``monophyletic:
     "false"`` (inverted by Python truthiness), an inverted ``uniform`` bound
     and an unknown distribution type, all silently.
 

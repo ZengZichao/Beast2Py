@@ -77,9 +77,9 @@ class ConflictDetector:
     """Detect conflicts between calibration points."""
 
     # Threshold for distribution overlap warning (Wasserstein distance, in the
-    # analysis' time units). Kept for backward compatibility; the relative
-    # criterion below is the default because an absolute cut-off is
-    # scale-dependent.
+    # analysis' time units). Applied only when ``overlap_measure`` asks for
+    # it; the relative criterion below is the default because an absolute
+    # cut-off is scale-dependent.
     OVERLAP_DISTANCE_THRESHOLD = 2.0
     # Dimensionless threshold: W divided by the mean width of the two priors'
     # 95% intervals. Below ~0.15 the two priors are nearly interchangeable.
@@ -235,9 +235,9 @@ class ConflictDetector:
         If clade A contains clade B (A.taxa ⊃ B.taxa), then A's MRCA time
         should be >= B's MRCA time. A root calibration (``taxa is None``) nests
         every other clade, so it is compared as the parent of each of them:
-        skipping root pairs, as this function used to do, made "root younger
-        than its own descendant" — the most severe violation available — the one
-        thing the detector could never report.
+        without those comparisons, "root younger than its own descendant" — the
+        most severe violation available — would be the one thing the detector
+        could never report.
         """
         conflicts: List[Conflict] = []
 
@@ -281,7 +281,7 @@ class ConflictDetector:
         Two criteria are available:
 
         * absolute — the 1-Wasserstein distance below a fixed number of time
-          units (the historical behaviour, ``OVERLAP_DISTANCE_THRESHOLD``);
+          units (opt-in through ``overlap_measure``, ``OVERLAP_DISTANCE_THRESHOLD``);
         * relative — that distance divided by the mean width of the two
           priors' 95% intervals, which is dimensionless.
 

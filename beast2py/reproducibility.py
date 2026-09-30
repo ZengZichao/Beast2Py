@@ -109,9 +109,9 @@ class FingerprintGenerator:
     def data_hash(config: BEASTConfig) -> str:
         """Return a 16-hex digest over the content of every alignment.
 
-        Alignment *paths* used to be the only alignment information in the
-        fingerprint, so replacing a FASTA's sequences while keeping its name
-        left the "analysis identity" untouched.
+        The digest covers alignment *content*, not just the file paths, so
+        replacing a FASTA's sequences while keeping its name changes the
+        analysis identity instead of leaving it untouched.
 
         Args:
             config: BEAST configuration.

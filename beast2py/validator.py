@@ -413,8 +413,9 @@ class XMLValidator:
     def _bundled_validator_script() -> Optional[Path]:
         """Locate ``beast2_validate.sh`` next to the package or in site data.
 
-        ``pyproject.toml`` used to package only ``beast2py*``, so an installed
-        distribution had no script and validation silently degraded to
+        ``pyproject.toml`` ships ``beast2_validate.sh`` as package data next to
+        the ``beast2py*`` modules. Wherever it is missing (an installed
+        distribution without the data files), validation silently degrades to
         ``beast -validate`` and then to "not found".
 
         Returns:

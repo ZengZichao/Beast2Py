@@ -151,9 +151,9 @@ def _as_bool(value: Any, where: str) -> bool:
 def _normalised_frequencies(value: Any, dimension: int, where: str) -> str:
     """Validate and normalise an equilibrium-frequency vector.
 
-    ``value: 0.3, dimension: 4`` used to be written out verbatim
-    (summing to 1.2), and ``float(freq_raw) if freq_raw else 0.25`` turned an
-    explicit ``0.0`` into ``0.25``.
+    A vector that does not sum to 1 is renormalised or rejected rather than
+    written out verbatim, and an explicit ``0.0`` entry stays ``0.0`` instead
+    of falling back to a default through Python falsiness.
 
     Args:
         value: Scalar, list, or whitespace-separated string of frequencies.

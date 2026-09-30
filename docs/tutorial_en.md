@@ -287,7 +287,7 @@ the repository root) looks for `BEAST.base.jar` in this order:
 The script also appends any add-on packages installed under `~/.beast/2.7` to the class path.
 
 The script then searches a batch of candidate paths for a JDK 17 or newer instead of
-trusting `PATH` — an ancient Oracle `java` shim on `PATH` should no longer shadow a usable
+trusting `PATH` — an ancient Oracle `java` shim on `PATH` cannot shadow a usable
 `openjdk@17`. The search order is: `BEAST2_JAVA_CANDIDATES` (a colon-separated list),
 `JAVA_HOME`, `/usr/libexec/java_home`, the Homebrew and system JVM directories, and only
 then `java` on `PATH`.

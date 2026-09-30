@@ -251,10 +251,10 @@ class ConfigParser:
     def _norm_name(value: Any) -> Any:
         """Fold a model/prior name to lower case with surrounding space removed.
 
-        Substitution models, clock models and distributions have always been
-        matched case-insensitively, but the tree prior was not: ``type: HKY``
-        worked while ``type: Yule`` was rejected. Authors should not have to
-        guess which rule applies.
+        Substitution models, clock models, distributions and tree priors are
+        all matched case-insensitively, so a name resolves to the same key
+        however it is capitalised. Authors should not have to guess which rule
+        applies.
 
         Args:
             value: The configured name; non-strings pass through untouched.
@@ -1234,9 +1234,9 @@ class ConfigParser:
     ) -> TipDatesConfig:
         """Parse and validate a ``tip_dates`` block.
 
-        missing taxa used to be silently dropped (so they are
-        treated as contemporaneous samples) and an unrecognised ``trait_name``
-        produced valid-but-not-used XML.
+        Missing taxa are rejected rather than silently treated as
+        contemporaneous samples, and an unrecognised ``trait_name`` is an
+        error instead of producing valid-but-not-used XML.
 
         Args:
             td_raw: The raw tip_dates mapping.

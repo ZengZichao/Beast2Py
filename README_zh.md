@@ -39,7 +39,7 @@ Beast2Py 是一个 Python 框架，用于**规范化指定、验证和诊断 BEA
 - **校准分布：** Normal、LogNormal、Uniform、Exponential、Gamma、Beta、Laplace、InverseGamma、OneOnX、Poisson、ChiSquare
 - **多 Partition：** 多条比对（或同一比对的 `FilteredAlignment` 密码子位点子集），位点模型与时钟可独立或共享（`linked_to`）。所有 partition 都装配在**同一棵连锁拓扑**上：解析阶段会直接拒绝 `tree: separate` 与任何 partition 专属树 id，并给出解释，因为不连锁基因树（`*BEAST`、StarDivergence 一类的分析）尚未实现
 - **多 MRCA 先验：** 无限校准点
-- **末端日期：** 用 `TraitSet` 支持时序采样数据（`TipDatesRandomWalker` 在启用末端日期时即产出，不再依赖 `tipsonly` 校准）
+- **末端日期：** 用 `TraitSet` 支持时序采样数据（`TipDatesRandomWalker` 在启用末端日期时即产出，无需 `tipsonly` 校准）
 - **MCMC：** 标准 MCMC + Nested Sampling MCMC（嵌套抽样需要 [NS](https://github.com/BEAST2-Dev/nested-sampling) 插件包）
 - **初始化：** RandomTree、UPGMA、User Newick
 - **超参数先验：** 为校准分布的参数设置先验

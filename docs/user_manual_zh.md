@@ -692,7 +692,7 @@ xml_str = b2p.generate_xml(
 
 `config` 参数接受三种类型：YAML 文件路径（字符串）、配置字典（`dict`）或已解析的 `BEASTConfig` 对象。返回生成的 XML 字符串。
 
-给出 `output` 时，`generate_xml()` 让 XML 走**与 CLI 相同的闸门**（结构检查，随后是校准冲突检测），全部通过才写盘。任一闸门失败都会抛出 `ValueError`，并保持该文件原样；目标文件已存在时，需要 `force=True` 才会覆盖。这是刻意的设计：早期版本先写文件再检查，于是库与命令行对“已验证”的含义并不一致。如果只需要未经闸门的原始字符串，请直接调用 `XMLWriter(config).generate_xml()`。
+给出 `output` 时，`generate_xml()` 让 XML 走**与 CLI 相同的闸门**（结构检查，随后是校准冲突检测），全部通过才写盘。任一闸门失败都会抛出 `ValueError`，并保持该文件原样；目标文件已存在时，需要 `force=True` 才会覆盖。这是刻意的设计：若先写文件再检查，库与命令行对“已验证”的含义就会不一致，同一个配置可能在一侧通过、在另一侧失败。如果只需要未经闸门的原始字符串，请直接调用 `XMLWriter(config).generate_xml()`。
 
 ### 6.3 `quick_generate` — 快速生成
 
@@ -1081,7 +1081,7 @@ substitution_model:
   kappa: {value: 2.0, estimate: false}   # 固定：无 kappaScaler、无 trace 列
 ```
 
-**布尔值** 必须是真正的 YAML 布尔，或 `true/false/yes/no/on/off/1/0` 之一。解析器接受加引号的形式，并按字面含义解析。Python 中 `bool("false")` 为 `True`，因此过去加引号的 `"false"` 会反转设置。现在 `"false"` 按 false 解析，解析器会拒绝 `"nope"` 这类含糊值。
+**布尔值** 必须是真正的 YAML 布尔，或 `true/false/yes/no/on/off/1/0` 之一。解析器接受加引号的形式，并按字面含义解析。Python 中 `bool("false")` 为 `True`，因此加引号的形式按字面文本读取、不做布尔强转：加引号的 `"false"` 按 false 解析，解析器会拒绝 `"nope"` 这类含糊值。
 
 ---
 
@@ -1101,7 +1101,7 @@ substitution_model:
 | TIM | `tim` | `rateAG`、`rateCT`、`rateTransversions1`、`rateTransversions2` | 转换模型（两个相等的颠换率 ×2） |
 | TVM | `tvm` | `rateAC`、`rateAT`、`rateCG`、`rateGT`、`rateTransitions` | 颠换模型（四个自由颠换率 + 一个共享转换率） |
 
-**`rates:` 仅是 GTR/SYM 的便捷写法。** `rates:` 必须按 `rateAC rateAG rateAT rateCG rateCT rateGT` 的顺序列出**恰好六个**值，且不能与显式命名的 `rate*` 键混用，否则展开时会静默覆盖其中一项。解析器不再为短向量补 1.0，也不再截断长向量。TIM 与 TVM 施加的是速率**等式约束**，六个自由速率向量无法表达，因此在这两个模型上写 `rates` 时，解析器会报错，并给出应改用的参数名。
+**`rates:` 仅是 GTR/SYM 的便捷写法。** `rates:` 必须按 `rateAC rateAG rateAT rateCG rateCT rateGT` 的顺序列出**恰好六个**值，且不能与显式命名的 `rate*` 键混用，否则展开时会静默覆盖其中一项。长度不是六的向量一律报错，既不会补 1.0，也不会被截断。TIM 与 TVM 施加的是速率**等式约束**，六个自由速率向量无法表达，因此在这两个模型上写 `rates` 时，解析器会报错，并给出应改用的参数名。
 
 ```yaml
 # GTR via the vector
@@ -1143,7 +1143,7 @@ substitution_model:
 | `uniform` | `<frequencies spec="Frequencies" data="@aln" estimate="false"/>` | BEAST2 的“字符均匀分布”频率 |
 | `empirical` | `<frequencies spec="Frequencies" data="@aln" estimate="true"/>` | BEAST2 依据比对计数得到的频率 |
 
-> **为何引入 `mode`。** 在 BEAST2 中，`<frequencies estimate="false">` 的含义是*字符均匀分布*，**不**表示“用我给的数值”。因此过去 `estimate: false` 会静默地丢弃用户提供的向量。现在请明确表达意图：`mode: fixed` 写出你的向量，`mode: uniform` 向 BEAST2 索取等频率，`mode: empirical` 让 BEAST2 计数。为向后兼容，未显式给 `mode` 而在向量上写 `estimate: false` 时，解析器会把它读作 `mode: fixed`。`uniform` 与 `empirical` 需要 `data_id` 指向比对。`fixed`/`estimated` 向量必须是合法概率向量：逐项大于 0、长度匹配 `dimension`、和为 1（容差 2%，随后归一化）。
+> **为何需要 `mode`。** 在 BEAST2 中，`<frequencies estimate="false">` 的含义是*字符均匀分布*，**不**表示“用我给的数值”，因此要写自己的数值就必须有显式表达的方式。请明确表达意图：`mode: fixed` 写出你的向量，`mode: uniform` 向 BEAST2 索取等频率，`mode: empirical` 让 BEAST2 计数。为向后兼容，未显式给 `mode` 而在向量上写 `estimate: false` 时，解析器会把它读作 `mode: fixed`。`uniform` 与 `empirical` 需要 `data_id` 指向比对。`fixed`/`estimated` 向量必须是合法概率向量：逐项大于 0、长度匹配 `dimension`、和为 1（容差 2%，随后归一化）。
 
 > **SYM 的注意事项。** SYM *就是*“碱基频率相等的 GTR”，但生成器不会主动替你施加这一约束：没有任何 `frequencies:` 块时，它产出的是一个自由的（被估计的）频率向量，于是模型实际上成了 GTR。若要得到 `examples/config_subst_sym.yaml` 那样的等频率 SYM，请写 `frequencies: {mode: uniform}`。
 
@@ -1244,7 +1244,7 @@ clock_model:
 
 **注意**
 
-- **生成器会兑现上下界。** 过去生成器会在 `clock_rate`、`ucld.mean` 与 `gamma_shape` 上丢弃 `upper`，使 `ucld.stdev` 上方无界——这正是经典的 UCLN 标准差漂移。如今 `lower`/`upper` 都会传入 XML；不给任何界时，生成器按参数角色套用默认界（`ucld.mean`、`clock.rate` 大于 0；`ucld.stdev` 落在 `[0, 1]`）。
+- **生成器会兑现上下界。** 若在 `clock_rate`、`ucld.mean` 与 `gamma_shape` 上丢弃 `upper`，会使 `ucld.stdev` 上方无界——这正是经典的 UCLN 标准差漂移。`lower`/`upper` 都会传入 XML；不给任何界时，生成器按参数角色套用默认界（`ucld.mean`、`clock.rate` 大于 0；`ucld.stdev` 落在 `[0, 1]`）。
 - **固定的时钟速率不能是唯一的时间尺度。** `clock_rate: {estimate: false}` 如今同样得到兑现：该参数以 `estimate="false"` 内联写出，离开状态空间、算子集合与轨迹。如果此时没有给出任何校准，绝对时间不可识别，解析器会拒绝这次运行（错误信息见[第 22.1 节](#221-严格校验被拒绝的输入及其错误信息)）。
 - **`ucld.mean` 归一化。** 松弛时钟 XML 以 `normalize="true"` 产出，与 BEAUti 的参考版式一致，从而保持速率与节点年龄可识别。
 
@@ -1597,7 +1597,7 @@ tip_dates:
 - **日期必须为数值。** CSV 中第二列若非数值，解析器会报错（表头行除外）。
 - **保持单一时间轴。** `units` 和末端数值必须与校准共用同一时间轴。`units: year` 且日期为 0～20，旁边却是一个以 Ma 计的根校准，两者就相差六个数量级。要么全部用年表达（并相应缩放时钟速率），要么全部保持 Ma。
 
-**会产出什么。** 启用末端日期后，生成器把 `TraitSet` 挂到树上，*并*为已定年的末端产出一个 `TipDatesRandomWalker` 算子，无需任何 `tipsonly` 校准。过去该算子受 `tipsonly` 校准门控：常见的 BEAUti 式“日期是性状而非校准”配置虽然产出 `TraitSet`，却没有算子移动它，运行因此返回一棵看起来已定年、实际未定年的树。
+**会产出什么。** 启用末端日期后，生成器把 `TraitSet` 挂到树上，*并*为已定年的末端产出一个 `TipDatesRandomWalker` 算子，无需任何 `tipsonly` 校准。该算子之所以不受 `tipsonly` 校准门控，是因为一旦那样门控，常见的 BEAUti 式“日期是性状而非校准”配置就会产出一个没有任何算子会移动的 `TraitSet`，运行返回一棵看起来已定年、实际未定年的树。
 
 该算子只覆盖日期非零的末端。若全部末端都在同一时刻采样，就没有可移动的日期，也就不会产出 `TipDatesRandomWalker`——`examples/config_tip_dates.yaml` 正是这种情况，它的 12 个灵长类皆为现生样本。该行为已对 BEAST 2.7.8 验证：把其中一个末端改为早 1.5 Ma 的变体仍可解析并初始化。
 
@@ -1690,7 +1690,7 @@ diagnostics:
 - `overlap_measure` 决定启用哪些判据。`relative`（默认）即上文的尺度无关比值；`absolute` 恢复旧有的固定距离测试；`both` 在任一判据越界时告警。解析器会拒绝无法识别的值，并给出 `diagnostics.overlap_measure must be relative, absolute or both, got ...`。
 - `overlap_threshold`（默认 `2.0`）与 `relative_overlap_threshold`（默认 `0.15`）是两个阈值，只有 `overlap_measure` 点名的判据才会生效。
 
-默认改用无量纲判据后，固定的 `2.0` 在同一棵树内节点年龄悬殊时就不再含义一致。如今警告只在两个先验*相对于自身宽度*几乎可以互换时触发，这才是冗余校准信息的尺度无关含义。
+在无量纲判据为默认的口径下，固定的 `2.0` 在同一棵树内节点年龄悬殊时含义并不一致：警告只在两个先验*相对于自身宽度*几乎可以互换时触发，这才是冗余校准信息的尺度无关含义。
 
 ---
 

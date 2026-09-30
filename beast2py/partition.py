@@ -113,12 +113,11 @@ class PartitionManager:
         """Get the alignment id of the first partition.
 
         Returns:
-            The *alignment* id (``partition.alignment.id``). This used to
-            return the partition id, which only worked because the parser
-            forces the two to be equal; constructing partitions with different
-            ids through the Python API produced a duplicated ``<data>`` element
-            and an ``@`` reference to an alignment that never existed
-            .
+            The *alignment* id (``partition.alignment.id``) — not the partition
+            id. The parser forces the two to be equal, so parsed files agree,
+            but partitions built with different ids through the Python API
+            would otherwise duplicate the ``<data>`` element and reference an
+            alignment that never exists.
         """
         first = next(iter(self.partitions.values()))
         return first.alignment.id
