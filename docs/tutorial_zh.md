@@ -217,7 +217,7 @@ Filter 表达式遵循 BEAST2 自己的 `FilteredAlignment.parseFilterSpec` 语�
 beast2py methods --config config.yaml --output methods.tex
 ```
 
-此命令生成一段描述分析配置的 LaTeX 文本，适合在论文中使用。省略 `--output` 则改为直接打印。
+此命令生成一段描述分析配置的 LaTeX 文本，适合写入论文的方法学部分。省略 `--output` 则改为直接打印。
 
 ## 7. 生成管道文件
 

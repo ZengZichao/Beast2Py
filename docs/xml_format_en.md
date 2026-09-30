@@ -208,5 +208,4 @@ same fingerprint on every machine and on every day. Changing any model component
 calibration, MCMC setting or sequence changes the fingerprint with it.
 
 The generation time is recorded separately in the JSON sidecar file and never
-becomes part of the identifier. The manuscript's Supplementary Section S4
-documents the digest inputs and the truncation length.
+becomes part of the identifier.

@@ -130,15 +130,15 @@ class TestMethodsGenerator:
         cfg = Path(__file__).resolve().parents[1] / "examples" / name
         return MethodsGenerator.generate_methods(ConfigParser().parse(cfg))
 
-    def test_citations_use_the_journals_in_text_form(self):
-        """The paragraph is meant to be pasted into a manuscript.
+    def test_citations_use_the_author_year_in_text_form(self):
+        """The paragraph is meant to be pasted into a methods section.
 
-        Systematic Biology cites in the text as Jones (1970) or (Jones 1970), so a
+        In-text citations follow the author-year form (Jones 1970), so a
         parenthetical may not nest another parenthesis, carry journal titles, or
         spell co-authors with an ampersand.
         """
         methods = self._methods_for_example("config_basic.yaml")
-        assert "&" not in methods, "ampersand is not the journal's in-text form"
+        assert "&" not in methods, "ampersand is not the author-year in-text form"
         assert not re.search(r"\([^()]*\(", methods), "a citation nests parentheses"
         for paren in re.findall(r"\(([^()]*)\)", methods):
             if re.search(r"\b(?:19|20)\d{2}\b", paren):

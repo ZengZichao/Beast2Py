@@ -619,7 +619,7 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home \
 
 ### 5.5 `methods` — Generate a methods description
 
-Automatically generates a LaTeX methods paragraph suitable for inclusion in a manuscript.
+Automatically generates a LaTeX methods paragraph suitable for inclusion in a methods section.
 
 ```bash
 beast2py methods \
@@ -1955,7 +1955,7 @@ print(f"Analysis fingerprint: {fp}")
 
 ### 15.2 Methods description
 
-Automatically generates a LaTeX methods paragraph describing the substitution model (with citations), clock model, tree prior, calibration points (with distribution parameters and provenance), MCMC settings, and the analysis fingerprint. It can be inserted directly into a manuscript.
+Automatically generates a LaTeX methods paragraph describing the substitution model (with citations), clock model, tree prior, calibration points (with distribution parameters and provenance), MCMC settings, and the analysis fingerprint. It can be inserted directly into a methods section.
 
 ```bash
 beast2py methods --config config.yaml --output methods.tex

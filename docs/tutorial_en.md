@@ -245,7 +245,7 @@ alignment length, or a term that selects no site at all.
 beast2py methods --config config.yaml --output methods.tex
 ```
 
-This generates a LaTeX paragraph describing the analysis configuration, suitable for inclusion in a manuscript. Omit `--output` to print it instead.
+This generates a LaTeX paragraph describing the analysis configuration, suitable for inclusion in a methods section. Omit `--output` to print it instead.
 
 ## 7. Generating Pipeline Files
 

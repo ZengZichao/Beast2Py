@@ -272,8 +272,8 @@ class MethodsGenerator:
     def cite(key: str) -> str:
         """In-text form of a reference, e.g. "Bouckaert et al. 2014".
 
-        The paragraph is pasted into a manuscript, so citations must follow the
-        journal's author-year form; the full strings are emitted after it.
+        The paragraph is pasted into a methods section, so in-text citations
+        follow the author-year form; the full strings are emitted after it.
         """
         full = MethodsGenerator.CITATIONS.get(key, "")
         m = re.match(r"^(.*?) \((\d{4})\)", full)
@@ -293,7 +293,7 @@ class MethodsGenerator:
         if not lines:
             return ""
         return ("\n\n% Cited author-year keys. The reference list must name every author and"
-                "\n% give the full title, so expand each line below before submitting:\n"
+                "\n% give the full title, so expand each line below into full references:\n"
                 + "\n".join(lines))
 
     @staticmethod

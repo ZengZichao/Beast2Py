@@ -95,7 +95,7 @@ This generates N+1 prior-only sampling XMLs (N is the number of calibrations): o
 
 ### 4. A Provenance Record That Disagrees With the Prior
 
-**Problem**: The recorded fossil range and the prior actually used are two different ages. BEAST2 only ever sees the distribution, so this kind of manuscript error stays invisible to it.
+**Problem**: The recorded fossil range and the prior actually used are two different ages. BEAST2 only ever sees the distribution, so this kind of recording error stays invisible to it.
 
 **Solution**: Fill in `original_age_min` / `original_age_max` honestly. Beast2Py compares the two recorded ranges with the prior's 95% interval at parse time: a hard-bound disagreement is an error, a soft-bound one is a warning that the two should be explained together in the methods text.
 
