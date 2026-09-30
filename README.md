@@ -208,7 +208,7 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 
 - `beast2py/` — Source code of the Beast2Py Python package (CLI, API, configuration parsing, XML generation, diagnostics, reproducibility, and validation modules)
 - `examples/` — 19 example configurations, example alignments (FASTA), and example output artifacts
-- `tests/` — Test suite (360 collected tests: 339 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
+- `tests/` — Test suite (361 collected tests: 340 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
 - `beast2py/tools/` — Headless BEAST2 validation helper bundled *inside* the package (`Beast2Validator.java` source plus the precompiled `classes/` and `launcher.jar`), shipped as `package-data` by `pyproject.toml`; the repository root keeps only a thin `beast2_validate.sh` wrapper
 - `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English)
 - `scripts/check_figure_export.py` — Post-export gate for the three draw.io figures, which have no Python source to redraw them: it reads the delivered PDF and PNG back and fails on an export older than its `.drawio` source, a span under 7.92 pt, a font outside Helvetica, a rule under 0.71 pt, or a raster under 600 ppi at the page's own width (`pip install -e .[figures]`)
@@ -244,7 +244,7 @@ a pass. `--allow-unvalidated` restores the write-anyway behaviour, in which case
 must not be described as BEAST2-verified. Everything has been verified against
 BEAST2 **v2.7.8** only.
 
-The test suite comprises 360 collected tests (339 unit/semantic/release + 21 BEAST2
+The test suite comprises 361 collected tests (340 unit/semantic/release + 21 BEAST2
 integration). The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and
 check each with the real BEAST 2.7.8 parser and model initialisation. When the
@@ -254,7 +254,7 @@ BEAST2 jars or JDK 17 are missing, those tests simply skip instead of failing.
 
 Beast2Py generates the following reproducibility artifacts:
 
-- **Analysis fingerprint** — deterministic identifier `B2P-{sha256(config)[:12]}-{version}` (e.g. `B2P-ba18c26ed61f-0.1.0`). It contains **no date component**, so the same configuration plus the same alignment data yields the same bytes and the same identifier in any time zone and at any rerun time. Renaming the output file does not change the fingerprint; changing the sequence content, the tree setting, a crown/stem flag, a hyperprior, a parameter prior, a tip date or an operator weight does
+- **Analysis fingerprint** — deterministic identifier `B2P-{sha256(config)[:12]}-{version}` (e.g. `B2P-04ab3d09277b-0.1.0`). It contains **no date component**, so the same configuration plus the same alignment data yields the same bytes and the same identifier in any time zone and at any rerun time. Renaming the output file does not change the fingerprint; changing the sequence content, the tree setting, a crown/stem flag, a hyperprior, a parameter prior, a tip date or an operator weight does
 - **Data digest** — besides the identifier, the XML comment carries a separate digest: 16 hex characters over the alignment *content*. The wall-clock generation time appears only in the `.fingerprint.json` sidecar file, never in the XML
 - **LaTeX methods description** — Publication-ready methods paragraph
 - **Snakemake/Nextflow pipeline** — End-to-end reproducible workflow files
