@@ -126,6 +126,47 @@ class TestMethodsGenerator:
         assert "calibration" in methods.lower()
         assert "Normal" in methods
 
+    def _methods_for_example(self, name):
+        cfg = Path(__file__).resolve().parents[1] / "examples" / name
+        return MethodsGenerator.generate_methods(ConfigParser().parse(cfg))
+
+    def test_citations_use_the_journals_in_text_form(self):
+        """The paragraph is meant to be pasted into a manuscript.
+
+        Systematic Biology cites in the text as Jones (1970) or (Jones 1970), so a
+        parenthetical may not nest another parenthesis, carry journal titles, or
+        spell co-authors with an ampersand.
+        """
+        methods = self._methods_for_example("config_basic.yaml")
+        assert "&" not in methods, "ampersand is not the journal's in-text form"
+        assert not re.search(r"\([^()]*\(", methods), "a citation nests parentheses"
+        for paren in re.findall(r"\(([^()]*)\)", methods):
+            if re.search(r"\b(?:19|20)\d{2}\b", paren):
+                for journal in ("PLoS", "J Mol Evol", "Syst Biol", "BMC", "Mol Biol Evol"):
+                    assert journal not in paren, "full reference inside a citation: %s" % paren
+        assert "(Bouckaert et al. 2014)" in methods
+        assert "(Hasegawa et al. 1985)" in methods
+
+    def test_full_references_are_kept_after_the_paragraph(self):
+        """Shortening in-text citations must not lose the bibliography entries."""
+        methods = self._methods_for_example("config_basic.yaml")
+        tail = methods[methods.find("\n\n"):] if "\n\n" in methods else ""
+        assert "PLoS Comput Biol 10: e1003537" in tail
+        assert "Hasegawa" in tail and "1985" in tail
+
+    def test_tree_prior_is_named_in_words_not_config_keys(self):
+        """Every tree prior gets prose a reviewer can read, not a YAML keyword."""
+        methods = self._methods_for_example("config_bd_skyline.yaml")
+        assert "bd_skyline_serial" not in methods
+        assert re.search(r"birth[- ]death skyline", methods, re.I)
+
+    def test_committed_methods_artefact_is_what_the_code_generates(self):
+        """The shipped example paragraph must not age behind the generator."""
+        ex = Path(__file__).resolve().parents[1] / "examples"
+        generated = MethodsGenerator.generate_methods(
+            ConfigParser().parse(ex / "config_basic.yaml"))
+        assert (ex / "output_basic.methods.tex").read_text(encoding="utf-8") == generated
+
 
 class TestPipelineGenerator:
     """Test the PipelineGenerator class."""

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import math
 import hashlib
+import re
 import json
 import os
 from datetime import datetime
@@ -268,6 +269,34 @@ class MethodsGenerator:
     }
 
     @staticmethod
+    def cite(key: str) -> str:
+        """In-text form of a reference, e.g. "Bouckaert et al. 2014".
+
+        The paragraph is pasted into a manuscript, so citations must follow the
+        journal's author-year form; the full strings are emitted after it.
+        """
+        full = MethodsGenerator.CITATIONS.get(key, "")
+        m = re.match(r"^(.*?) \((\d{4})\)", full)
+        if not m:
+            return full
+        return m.group(1).replace(" & ", " and ") + " " + m.group(2)
+
+    @staticmethod
+    def references(paragraph: str) -> str:
+        """The full entries behind the short citations used in ``paragraph``."""
+        seen, lines = set(), []
+        for key, full in MethodsGenerator.CITATIONS.items():
+            short = MethodsGenerator.cite(key)
+            if short in paragraph and full not in seen:
+                seen.add(full)
+                lines.append("% " + full.replace(" & ", " and "))
+        if not lines:
+            return ""
+        return ("\n\n% Cited author-year keys. The reference list must name every author and"
+                "\n% give the full title, so expand each line below before submitting:\n"
+                + "\n".join(lines))
+
+    @staticmethod
     def generate_methods(config: BEASTConfig) -> str:
         """Generate a LaTeX-formatted methods description.
 
@@ -300,18 +329,18 @@ class MethodsGenerator:
         # Combine into full methods paragraph
         methods_text = (
             f"Divergence times were estimated using BEAST2 v{beast2_ver} "
-            f"({MethodsGenerator.CITATIONS['beast2']}). "
+            f"({MethodsGenerator.cite('beast2')}). "
             f"{subst_desc} "
             f"{clock_desc} "
             f"{tree_prior_desc} "
             f"{cal_desc} "
             f"{mcmc_desc} "
             f"The analysis was configured using Beast2Py v{__version__} "
-            f"({MethodsGenerator.CITATIONS['reproducible']}; "
+            f"({MethodsGenerator.cite('reproducible')}; "
             f"Analysis Fingerprint: {fingerprint})."
         )
 
-        return methods_text
+        return methods_text + MethodsGenerator.references(methods_text)
 
     @staticmethod
     def _describe_substitution_models(config: BEASTConfig) -> str:
@@ -337,14 +366,14 @@ class MethodsGenerator:
                 "blosum62": "BLOSUM62",
             }
             model_name = model_names.get(sm_type_lower, sm_type.upper())
-            citation = MethodsGenerator.CITATIONS.get(sm_type_lower, "")
+            citation = MethodsGenerator.cite(sm_type_lower)
 
             gamma_cats = p.site_model.gamma_categories
             gamma_desc = ""
             if gamma_cats > 0:
                 gamma_desc = (
                     f" with gamma-distributed rate heterogeneity "
-                    f"({gamma_cats} categories; {MethodsGenerator.CITATIONS['gamma']})"
+                    f"({gamma_cats} categories; {MethodsGenerator.cite('gamma')})"
                 )
 
             prop_inv = p.site_model.proportion_invariant
@@ -375,16 +404,16 @@ class MethodsGenerator:
             elif ct == ClockModelType.UCLN:
                 clock_descs[p.id] = (
                     f"an uncorrelated relaxed clock with lognormally distributed rates "
-                    f"({MethodsGenerator.CITATIONS['ucln']})"
+                    f"({MethodsGenerator.cite('ucln')})"
                 )
             elif ct == ClockModelType.UCE:
                 clock_descs[p.id] = (
                     f"an uncorrelated relaxed clock with exponentially distributed rates "
-                    f"({MethodsGenerator.CITATIONS['ucln']})"
+                    f"({MethodsGenerator.cite('ucln')})"
                 )
             elif ct == ClockModelType.RLC:
                 clock_descs[p.id] = (
-                    f"a random local clock model " f"({MethodsGenerator.CITATIONS['rlc']})"
+                    f"a random local clock model " f"({MethodsGenerator.cite('rlc')})"
                 )
 
         if not clock_descs:
@@ -407,48 +436,53 @@ class MethodsGenerator:
 
         if tp == TreePriorType.YULE:
             return (
-                f"A Yule speciation process ({MethodsGenerator.CITATIONS['yule']}) "
+                f"A Yule speciation process ({MethodsGenerator.cite('yule')}) "
                 f"was used as the tree prior."
             )
         elif tp == TreePriorType.BIRTH_DEATH:
             return (
                 f"A birth-death speciation process "
-                f"({MethodsGenerator.CITATIONS['birth_death']}) "
+                f"({MethodsGenerator.cite('birth_death')}) "
                 f"was used as the tree prior."
             )
         elif tp == TreePriorType.COALESCENT_CONSTANT:
             return (
                 f"A coalescent process with constant population size "
-                f"({MethodsGenerator.CITATIONS['coalescent']}) "
+                f"({MethodsGenerator.cite('coalescent')}) "
                 f"was used as the tree prior."
             )
         elif tp == TreePriorType.COALESCENT_EXPONENTIAL:
             return (
                 f"A coalescent process with exponential population growth "
-                f"({MethodsGenerator.CITATIONS['coalescent']}) "
+                f"({MethodsGenerator.cite('coalescent')}) "
                 f"was used as the tree prior."
             )
         elif tp == TreePriorType.BAYESIAN_SKYLINE:
             return (
                 f"A Bayesian skyline coalescent model "
-                f"({MethodsGenerator.CITATIONS['bsp']}) "
+                f"({MethodsGenerator.cite('bsp')}) "
                 f"was used as the tree prior."
             )
         elif tp == TreePriorType.CALIBRATED_YULE:
             return (
                 f"A calibrated Yule model "
-                f"({MethodsGenerator.CITATIONS['calibrated_yule']}) "
+                f"({MethodsGenerator.cite('calibrated_yule')}) "
                 f"was used as the tree prior, integrating calibration information "
                 f"directly into the tree prior."
             )
         elif tp == TreePriorType.EBSP:
             return (
                 f"An extended Bayesian skyline plot "
-                f"({MethodsGenerator.CITATIONS['ebsp']}) "
+                f"({MethodsGenerator.cite('ebsp')}) "
                 f"was used as the tree prior."
             )
+        elif tp == TreePriorType.BD_SKYLINE_SERIAL:
+            return (
+                "A birth-death skyline tree prior for serially sampled data "
+                "(bdsky add-on) was used as the tree prior."
+            )
         else:
-            return f"A {tp.value} tree prior was used."
+            return f"A {tp.value.replace('_', ' ')} tree prior was used."
 
     @staticmethod
     def _describe_calibrations(config: BEASTConfig) -> str:
@@ -461,8 +495,8 @@ class MethodsGenerator:
 
         parts.append(
             f"{n_cals} calibration point{'s were' if n_cals > 1 else ' was'} applied "
-            f"({MethodsGenerator.CITATIONS['mrca']}; "
-            f"{MethodsGenerator.CITATIONS['calibration_best_practice']})"
+            f"({MethodsGenerator.cite('mrca')}; "
+            f"{MethodsGenerator.cite('calibration_best_practice')})"
         )
 
         for cal in config.calibrations:
