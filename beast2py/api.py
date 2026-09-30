@@ -155,8 +155,8 @@ class Beast2Py:
             FileNotFoundError: If referenced files are not found.
             ValueError: If an output path was given and a validation gate
                 failed, or the file exists and ``force`` was not set. Nothing
-                is written in that case: previously the API wrote the file and
-                only then looked at the result.
+                is written in that case: writing first and gating afterwards
+                would leave a file on disk that never passed the checks.
 
         Example::
 

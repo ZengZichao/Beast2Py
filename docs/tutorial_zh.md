@@ -254,7 +254,7 @@ beast2py validate --xml output.xml --beast2
 
 脚本还会把 `~/.beast/2.7` 下安装的任何插件包追加到 class path。
 
-脚本按一批候选路径搜索 JDK 17 或更新版本，而不是轻信 `PATH`——`PATH` 上一个古老的 Oracle `java` 垫片不该再遮蔽可用的 `openjdk@17`。搜索顺序为：`BEAST2_JAVA_CANDIDATES`（冒号分隔列表）、`JAVA_HOME`、`/usr/libexec/java_home`、Homebrew 与系统 JVM 目录，最后才是 `PATH` 上的 `java`。
+脚本按一批候选路径搜索 JDK 17 或更新版本，而不是轻信 `PATH`——`PATH` 上一个古老的 Oracle `java` 垫片遮蔽不了可用的 `openjdk@17`。搜索顺序为：`BEAST2_JAVA_CANDIDATES`（冒号分隔列表）、`JAVA_HOME`、`/usr/libexec/java_home`、Homebrew 与系统 JVM 目录，最后才是 `PATH` 上的 `java`。
 
 两个开关可以移除对应的来源：`BEAST2_SKIP_JAVA_HOME_TOOL` 去掉 `/usr/libexec/java_home`，`BEAST2_SKIP_JDK_PROBES` 去掉 Homebrew 与系统 JVM 目录。设 `BEAST2_VALIDATE_TRACE` 会打印最终选中的 `java`。
 

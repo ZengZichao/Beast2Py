@@ -45,10 +45,10 @@ _FALSE_STRINGS = {"false", "no", "off", "0"}
 def as_strict_bool(value: Any, field: str) -> bool:
     """Coerce a configuration value to a bool without Python truthiness traps.
 
-    ``bool("false")`` is ``True`` in Python, so a quoted ``"false"`` in YAML
-    used to invert the user's intent silently. This helper only
-    accepts real booleans and an explicit set of spellings; everything else is
-    a configuration error.
+    ``bool("false")`` is ``True`` in Python, so casting a quoted ``"false"``
+    through Python truthiness would invert the user's intent silently. This
+    helper only accepts real booleans and an explicit set of spellings;
+    everything else is a configuration error.
 
     Args:
         value: The raw value.
@@ -171,10 +171,10 @@ _HPD_N_SAMPLES = 100_000
 def _analytic_hpd(dist, mass: float = 0.95) -> Tuple[float, float]:
     """Shortest interval carrying `mass` for a scipy (frozen) continuous dist.
 
-    The HPD used to come from a 100k-sample Monte Carlo, which put a
-    ~0.01 Ma discretisation error into a number that then *gates* a hard
-    ``calibration_type: hard`` check: a fossil that close to an interval edge
-    was classified by sampling noise rather than by the density.
+    A sampled HPD would carry Monte Carlo discretisation error into a number
+    that then *gates* a hard ``calibration_type: hard`` check: a fossil close
+    to an interval edge would be classified by sampling noise rather than by
+    the density.
     For a unimodal density the HPD is the width-minimising pair
     ``(ppf(q), ppf(q + mass))``, which this solves directly.
 
@@ -223,8 +223,9 @@ def gamma_scale(parameters: Dict[str, Any]) -> Tuple[float, float, str]:
     ``mode=ShapeScale`` (Gamma.java:22-31), i.e. ``beta`` is a *scale* and the
     mean is ``alpha * beta``.  ``mode=ShapeRate`` inverts it.  Both
     ``_frozen_distribution`` and ``compute_distribution_stats`` go through this
-    one function: they used to disagree -- the stats treated ``beta`` as a rate --
-    and so described a different distribution from the one BEAST2 samples.
+    one function, so both describe the same distribution BEAST2 samples --
+    treating ``beta`` as a rate where BEAST2 means a scale would silently
+    shift the prior.
     """
     alpha = float(parameters.get("alpha", 1.0))
     beta = float(parameters.get("beta", 1.0))

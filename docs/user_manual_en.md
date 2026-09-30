@@ -755,7 +755,7 @@ The `config` parameter accepts three types: a YAML file path (string), a configu
 
 When `output` is given, `generate_xml()` puts the XML through **the same gates as the CLI** (structural checks, then calibration conflict detection) and writes it only after all of them pass. A failing gate raises `ValueError` and leaves the file untouched; overwriting an existing file needs `force=True`.
 
-This behaviour is deliberate: an earlier version wrote the file and checked afterwards, so the library and the command line disagreed about what "validated" means. Call `XMLWriter(config).generate_xml()` directly if you only want the raw string with no gating.
+This behaviour is deliberate: writing the file first and checking afterwards would leave the library and the command line disagreeing about what "validated" means for one and the same configuration. Call `XMLWriter(config).generate_xml()` directly if you only want the raw string with no gating.
 
 ### 6.3 `quick_generate` — Quick generation
 
@@ -1177,9 +1177,9 @@ substitution_model:
 ```
 
 **Booleans** must be real YAML booleans or one of `true/false/yes/no/on/off/1/0`. The parser
-accepts quoted forms and reads them literally. `bool("false")` is `True` in Python, so a quoted
-`"false"` used to flip the setting. It now parses as false, and the parser rejects anything
-ambiguous such as `"nope"`.
+accepts quoted forms and reads them literally. `bool("false")` is `True` in Python, which is
+why quoted forms are read as literal text rather than cast: a quoted `"false"` parses as
+false, and the parser rejects anything ambiguous such as `"nope"`.
 
 ---
 
@@ -1205,7 +1205,7 @@ that does not accept it.
 **`rates:` is a GTR/SYM convenience only.** It must list **exactly six** values in the
 order `rateAC rateAG rateAT rateCG rateCT rateGT`, and it cannot be combined with
 explicitly named `rate*` keys, because the expansion would silently overwrite one of them.
-The parser no longer pads a short vector with 1.0 and no longer truncates a long one.
+A vector of any other length is an error: it is neither padded with 1.0 nor truncated.
 
 TIM and TVM impose rate *equalities*, which a six-free-rate vector cannot express. Writing
 `rates` on those two models is therefore an error, and the message names the parameters to
@@ -1253,9 +1253,9 @@ the amino-acid matrices carry their own. Four explicit modes exist:
 | `uniform` | `<frequencies spec="Frequencies" data="@aln" estimate="false"/>` | BEAST2's uniform-over-characters frequencies |
 | `empirical` | `<frequencies spec="Frequencies" data="@aln" estimate="true"/>` | Frequencies that BEAST2 counts from the alignment |
 
-> **Why `mode` exists.** In BEAST2, `<frequencies estimate="false">` means *uniform over
-> characters*, and does **not** mean "use the numbers I gave you". An `estimate: false`
-> therefore used to discard a user-supplied vector silently.
+> **Why `mode` is needed.** In BEAST2, `<frequencies estimate="false">` means *uniform over
+> characters*, and does **not** mean "use the numbers I gave you"; writing your own numbers
+> therefore needs a way to say so explicitly.
 
 > Say what you mean now: `mode: fixed` writes your vector, `mode: uniform` asks BEAST2 for
 > equal frequencies, `mode: empirical` asks BEAST2 to count them. For backward
@@ -1385,11 +1385,11 @@ clock_model:
 
 **Notes**
 
-- **The generator honours both bounds.** It used to drop `upper` for `clock_rate`,
-  `ucld.mean` and `gamma_shape`, which left `ucld.stdev` unbounded above — the classic UCLN
-  standard-deviation drift. Both `lower` and `upper` now reach the XML, and when you give
-  neither the generator applies the role defaults (`ucld.mean` and `clock.rate` above 0;
-  `ucld.stdev` within `[0, 1]`).
+- **The generator honours both bounds.** Dropping `upper` for `clock_rate`, `ucld.mean` or
+  `gamma_shape` would leave `ucld.stdev` unbounded above — the classic UCLN standard-deviation
+  drift. Both `lower` and `upper` reach the XML, and when you give neither the generator
+  applies the role defaults (`ucld.mean` and `clock.rate` above 0; `ucld.stdev` within
+  `[0, 1]`).
 - **A fixed clock rate must not be the only time scale.** The generator now honours
   `clock_rate: {estimate: false}` as well: it writes the parameter inline with
   `estimate="false"`, so that parameter leaves the state space, the operator set and the
@@ -1821,9 +1821,9 @@ tip_dates:
 
 **What gets emitted.** Enabling tip dates makes the generator attach the `TraitSet` to the
 tree *and* emit a `TipDatesRandomWalker` operator over the dated taxa, with no `tipsonly`
-calibration involved. Previously that operator was gated on a `tipsonly` calibration, so the
-common BEAUti-style configuration that treats "dates are a trait, not a calibration" produced
-a `TraitSet` no operator ever moved, and the run returned a tree that read as dated but was
+calibration involved. Gating that operator on a `tipsonly` calibration instead would leave the
+common BEAUti-style configuration that treats "dates are a trait, not a calibration" with a
+`TraitSet` no operator ever moves, and the run would return a tree that reads as dated but is
 not.
 
 The operator covers only tips whose date is non-zero. A fully contemporaneous sample
@@ -1925,7 +1925,7 @@ diagnostics:
 - `overlap_measure` decides which criteria run. `relative` (the default) is the scale-free ratio described above; `absolute` restores the previous fixed-distance test; `both` reports a warning when either criterion trips. The parser rejects an unrecognised value with `diagnostics.overlap_measure must be relative, absolute or both, got ...`.
 - `overlap_threshold` (default `2.0`) and `relative_overlap_threshold` (default `0.15`) are the two thresholds, and only the criteria named by `overlap_measure` take effect.
 
-Once the dimensionless criterion became the default, a fixed `2.0` stopped meaning the same thing across a tree with widely divergent node ages. A warning now fires when two priors are nearly interchangeable *relative to their own widths*, which is the scale-free notion of redundant calibration information.
+Under the dimensionless default criterion, a fixed `2.0` does not mean the same thing across a tree with widely divergent node ages. A warning fires when two priors are nearly interchangeable *relative to their own widths*, which is the scale-free notion of redundant calibration information.
 
 ---
 

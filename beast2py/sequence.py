@@ -28,9 +28,9 @@ def validate_alignment(alignment: Alignment) -> None:
 
     Rejects (rather than warns about): zero sequences, duplicated taxon names,
     ragged sequence lengths, empty or fully-missing sequences, and characters
-    outside the declared alphabet. unequal lengths (10/14/14/14)
-    and a repeated ``>Homo_sapiens`` header used to be written out unchecked,
-    while ``n_sites`` reported only the first sequence's length.
+    outside the declared alphabet — without those checks, unequal lengths and a
+    repeated ``>Homo_sapiens`` header would be written out unchecked, and
+    ``n_sites`` would report only the first sequence's length.
 
     Args:
         alignment: The parsed alignment to check.
