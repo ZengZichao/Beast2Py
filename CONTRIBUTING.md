@@ -250,14 +250,20 @@ Not enabled. The `pypi` job in `release.yml` is gated on a repository **variable
 `PYPI_PUBLISH` being set to the string `true`, and it is skipped with a visible notice
 otherwise. To enable it:
 
-1. Create a PyPI API token and add it as a repository secret named `PYPI_API_TOKEN`.
+1. On pypi.org, register this repository as a **trusted publisher** for the project:
+   owner `ZengZichao`, repository `Beast2Py`, workflow `release.yml`, environment `pypi`.
 2. Add a repository variable `PYPI_PUBLISH` with the value `true`.
 
-The gate is a variable rather than a test on the token because GitHub rejects an entire
-workflow file if `secrets` appears in any `if` expression, at job level or step level. Only
-`github`, `needs`, `vars` and `inputs` are available there. The publish action reads
-`PYPI_API_TOKEN` from the environment on its own, so the token never needs to appear in a
-condition.
+Authentication is Trusted Publishing (OIDC): the job requests a short-lived `id-token`
+and PyPI validates it against the trusted-publisher entry above. **No API token is
+stored in the repository**, so there is no long-lived secret to rotate or leak.
+
+The gate is a variable rather than a token because GitHub rejects an entire workflow
+file if `secrets` appears in any `if` expression, at job level or step level. Only
+`github`, `needs`, `vars` and `inputs` are available there — a variable keeps the
+opt-in visible in the workflow file. The publish action itself
+(`pypa/gh-action-pypi-publish`) is pinned to a commit SHA, since it sits on the
+release path.
 
 ## Security issues
 
