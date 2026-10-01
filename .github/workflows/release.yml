@@ -136,6 +136,16 @@ jobs:
             echo "Not a tag-triggered run; nothing to attach."
             exit 0
           fi
+          # A tag push fires this run before any hand-made release exists, and
+          # `gh release upload` fails on a missing release. The workflow owns
+          # release creation: idempotently create it when absent, then upload.
+          if ! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$GITHUB_REF_NAME" \
+              --repo "$GITHUB_REPOSITORY" \
+              --verify-tag \
+              --title "Beast2Py $GITHUB_REF_NAME" \
+              --generate-notes
+          fi
           gh release upload "$GITHUB_REF_NAME" dist/* --clobber
           echo "Attached to https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
 
