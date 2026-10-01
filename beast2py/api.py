@@ -581,7 +581,7 @@ class Beast2Py:
                 fingerprint information is written to this file.
 
         Returns:
-            The fingerprint string (e.g., "B2P-a3f7b2c9d1e8-0.1.0").
+            The fingerprint string (e.g., "B2P-a3f7b2c9d1e8-0.1.1").
 
         Example::
 
