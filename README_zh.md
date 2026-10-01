@@ -4,9 +4,10 @@
 
 [English](README.md) | 中文
 
+[![CI](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml)
 [![许可证: MIT AND LGPL-2.1-only](https://img.shields.io/badge/许可证-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![BEAST2 2.7.8](https://img.shields.io/badge/BEAST2-2.7.8-orange.svg)](https://www.beast2.org/)
+[![BEAST2 2.7.x](https://img.shields.io/badge/BEAST2-2.7.x-orange.svg)](https://www.beast2.org/)
 
 ---
 
@@ -52,7 +53,7 @@ Beast2Py 是一个 Python 框架，用于**规范化指定、验证和诊断 BEA
 ### 前置要求
 
 - Python 3.10 或更高版本
-- BEAST2 v2.7.8（已核实的版本；生成的 XML 面向 BEAST 2.7 的 `beast.base.*` 命名空间，其他 2.7.x 预期可用但未实测）。BEAST 2.7.x 的 class 文件要求 **JDK 17 或更新版本**
+- BEAST2 2.7.x。生成的 XML 面向 BEAST 2.7 的 `beast.base.*` 命名空间。持续集成使用 **2.7.7** 运行时，并将 `BEAST.base` 包升级到 **2.7.8**；其他 2.7.x 预期可用但未实测。BEAST 2.7.x 的 class 文件要求 **JDK 17 或更新版本**
 - JDK 17 或更新版本，仅在使用可选的 BEAST2 验证闸门（`--beast2-validate` / `validate --beast2`）时需要；其余功能为纯 Python
 
 ### 从源码安装
@@ -210,6 +211,11 @@ print(models["substitution_models"])
 - `docs/` — 使用手册、架构指南、教程、校准指南和 XML 格式指南（中英文）
 - `beast2_validate.sh` — 无头 BEAST2 验证启动脚本（需要 `BEAST.base.jar` 与 JDK 17+；自动探测 `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`，也可设 `BEAST2_JAR`）
 - `pyproject.toml` — 包构建与依赖配置
+- `.flake8` — 本地与 CI 共用的 lint 配置，使 `flake8 beast2py tests` 在两处行为一致
+- `.github/workflows/` — `ci.yml`（lint、测试矩阵、BEAST2 集成、打包，以及供分支保护要求的聚合检查 `ci-gate`）、`codeql.yml`、`release.yml`
+- `CONTRIBUTING.md` — 开发环境搭建、CI 实际强制的提交前检查，以及发版流程
+- `CHANGELOG.md` — 版本历史
+- `SECURITY.md` — 如何私下报告安全问题
 
 ## 验证
 
@@ -229,10 +235,14 @@ print(models["substitution_models"])
 闸门 3 只在装有 BEAST2 与 JDK 17 的环境里才会运行。若你显式要求 `--beast2-validate`，而环境中
 找不到 BEAST2，生成会以退出码 2 停止且不写任何文件——只读退出码的 CI 因此不会把“BEAST2 缺失”
 当成通过。`--allow-unvalidated` 可以恢复“照样写出”的行为，此时不应把该 XML 称为“已通过 BEAST2
-验证”。所有结论仅针对 BEAST2 **v2.7.8** 核实。
+验证”。持续集成用 BEAST2 **2.7.7** 运行时执行闸门 3，随后把 `BEAST.base` 包升级到 **2.7.8**。
+该升级是尽力而为的：若取包失败，工作流只记一条 warning 并继续在 2.7.7 上运行，因此一次全绿
+并不能证明当时用的就是 2.7.8。真正核实过的范围是 BEAST 2.7.7 / 2.7.8 这一区间；其他 2.7.x
+未实测。`integration` 作业会打印它实际解析到的版本，所以确切的版本组合在运行日志里可见，
+而不是靠假设。
 
-测试套件共收集 361 个测试（340 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
-示例配置、`quick` 路径以及仓库内的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.8 解析器
+测试套件共收集 360 个测试（339 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
+示例配置、`quick` 路径以及仓库内的 `output_basic.xml` 生成 XML，并用真实的 BEAST2 解析器
 与模型初始化检查。当环境缺少 BEAST2 jar 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。
 
 ## 可重复性
@@ -291,6 +301,29 @@ Beast2Py 的差异点在于把以下能力整合为一条配置阶段流水线�
 > Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.0. https://github.com/ZengZichao/Beast2Py
 
 机器可读的引用元数据见 [CITATION.cff](CITATION.cff)。
+
+**目前还没有 Zenodo DOI。** 仓库里提交了 `.zenodo.json` 用于描述归档所需的元数据，但该文件本身
+不会自动产生归档：需要维护者先在 Zenodo 侧连接并启用本仓库，之后发布的 GitHub release 才会被
+归档；这一步尚未完成，因此 v0.1.0 没有分配到 DOI。在 DOI 出现之前，请按上面的格式引用 release
+tag。归档流程见 `CONTRIBUTING.md`。
+
+## 开发
+
+```bash
+git clone https://github.com/ZengZichao/Beast2Py.git
+cd Beast2Py
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+flake8 beast2py tests   # 配置读自 .flake8，与 CI 完全一致
+black --check .
+pytest tests -v -rs
+```
+
+`main` 分支受保护：`ci-gate` 检查必须通过才能合并，因此测试、lint 或打包步骤失败的 PR 无法合入。
+完整检查清单、本地运行 BEAST2 验证闸门的方法，以及修改 `beast2py/tools/Beast2Validator.java`
+后需要注意的事项，都见 [CONTRIBUTING.md](CONTRIBUTING.md)。报告安全问题请勿开 issue，
+见 [SECURITY.md](SECURITY.md)。
 
 ## 作者
 

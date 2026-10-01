@@ -233,15 +233,12 @@ class SequenceReader:
                     sequence=str(record.seq).upper(),
                 )
             )
-            headers.append(str(getattr(record, "description", "") or "").strip()
-                           or str(record.id))
+            headers.append(str(getattr(record, "description", "") or "").strip() or str(record.id))
         SequenceReader._check_fasta_headers(sequences, headers, file_path)
         return sequences
 
     @staticmethod
-    def _check_fasta_headers(
-        sequences: List[Sequence], headers: List[str], file_path: str
-    ) -> None:
+    def _check_fasta_headers(sequences: List[Sequence], headers: List[str], file_path: str) -> None:
         """Report FASTA headers that a taxon name was truncated from.
 
         The FASTA id is the first whitespace-delimited token of the header and
@@ -263,9 +260,7 @@ class SequenceReader:
         for seq, header in zip(sequences, headers):
             by_name.setdefault(seq.taxon, []).append(header)
         collapsed = {
-            name: sorted(set(hdrs))
-            for name, hdrs in by_name.items()
-            if len(set(hdrs)) > 1
+            name: sorted(set(hdrs)) for name, hdrs in by_name.items() if len(set(hdrs)) > 1
         }
         if collapsed:
             detail = "; ".join(

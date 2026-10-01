@@ -1,0 +1,11 @@
+# CODEOWNERS for ZengZichao/Beast2Py
+#
+# @ZengZichao is the sole maintainer of this project, so every path defaults
+# to them: there is no second team to hand a subsystem to.
+#
+# Note: CODEOWNERS *requests* a review. It does not by itself satisfy a branch
+# protection rule that requires a number of approving reviews, so if branch
+# protection asks for a second approver, that has to be arranged separately.
+#
+# Syntax: one pattern per line, owners after whitespace, "#" starts a comment.
+*       @ZengZichao

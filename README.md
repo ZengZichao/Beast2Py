@@ -4,9 +4,10 @@
 
 English | [中文文档](README_zh.md)
 
+[![CI](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml)
 [![License: MIT AND LGPL-2.1-only](https://img.shields.io/badge/License-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
-[![BEAST2 2.7.8](https://img.shields.io/badge/BEAST2-2.7.8-orange.svg)](https://www.beast2.org/)
+[![BEAST2 2.7.x](https://img.shields.io/badge/BEAST2-2.7.x-orange.svg)](https://www.beast2.org/)
 
 ---
 
@@ -52,7 +53,7 @@ Beast2Py is a Python framework for **standardizing, validating, and diagnosing n
 ### Prerequisites
 
 - Python 3.10 or higher
-- BEAST2 v2.7.8, verified against this version (the generated XML targets the BEAST 2.7 `beast.base.*` namespace; other 2.7.x releases are expected to work but have not been tested). BEAST 2.7.x class files require **JDK 17 or newer**
+- BEAST2 2.7.x. The generated XML targets the BEAST 2.7 `beast.base.*` namespace. Continuous integration validates against a **2.7.7** runtime whose `BEAST.base` package is then upgraded to **2.7.8**; other 2.7.x releases are expected to work but have not been tested. BEAST 2.7.x class files require **JDK 17 or newer**
 - JDK 17 or newer, only for the optional BEAST2 validation gate (`--beast2-validate` / `validate --beast2`); everything else is pure Python
 
 ### Install from source
@@ -214,6 +215,11 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 - `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English)
 - `beast2_validate.sh` — Launcher script for headless BEAST2 validation (needs `BEAST.base.jar` and JDK 17 or newer; it auto-detects `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`, or set `BEAST2_JAR`)
 - `pyproject.toml` — Package build and dependency configuration
+- `.flake8` — Lint settings shared by local runs and CI, so `flake8 beast2py tests` behaves identically in both
+- `.github/workflows/` — `ci.yml` (lint, test matrix, BEAST2 integration, packaging, and the aggregating `ci-gate` check that branch protection requires), `codeql.yml`, `release.yml`
+- `CONTRIBUTING.md` — Development setup, the pre-commit checks CI enforces, and the release procedure
+- `CHANGELOG.md` — Release history
+- `SECURITY.md` — How to report a vulnerability privately
 
 ## Validation
 
@@ -240,13 +246,19 @@ Gate 3 only runs where BEAST2 and JDK 17 are installed. If you ask for
 `--beast2-validate` and BEAST2 cannot be found, generation stops with exit code 2 and
 writes nothing, so a CI job that reads only the exit code never treats "BEAST2 missing" as
 a pass. `--allow-unvalidated` restores the write-anyway behaviour, in which case the XML
-must not be described as BEAST2-verified. Everything has been verified against
-BEAST2 **v2.7.8** only.
+must not be described as BEAST2-verified.
 
-The test suite comprises 361 collected tests (340 unit/semantic/release + 21 BEAST2
+Continuous integration validates gate 3 against a BEAST2 **2.7.7** runtime whose
+`BEAST.base` package is then upgraded to **2.7.8**. That upgrade is best-effort: if the
+package download fails, the job logs a warning and continues on 2.7.7, so a green run does
+not prove 2.7.8 was the version in use. What has actually been verified is the BEAST 2.7.7 /
+2.7.8 band; other 2.7.x releases are untested. The `integration` job prints the version it
+resolved, so the exact combination is visible in the run log rather than assumed.
+
+The test suite comprises 360 collected tests (339 unit/semantic/release-integrity + 21 BEAST2
 integration). The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and
-check each with the real BEAST 2.7.8 parser and model initialisation. When the
+check each with the real BEAST2 parser and model initialisation. When the
 BEAST2 jars or JDK 17 are missing, those tests simply skip instead of failing. Two of those cases additionally require the BDSKY and nested-sampling add-ons, and the CI workflow treats a failed `beast -get` of either as a warning rather than an error, so those two cases can skip on a green run. A passing CI badge therefore does not by itself show that `config_bd_skyline.yaml` and `config_nested_sampling.yaml` cleared gate 3; run `pytest tests -rs` to see which integration cases actually executed and which skipped.
 
 ## Reproducibility
@@ -306,6 +318,32 @@ If you use Beast2Py in your research, please cite the software:
 > Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.0. https://github.com/ZengZichao/Beast2Py
 
 Machine-readable citation metadata is available in [CITATION.cff](CITATION.cff).
+
+**There is no Zenodo DOI yet.** A `.zenodo.json` file is committed and describes the
+software for an archive, but the file on its own does not create one: the repository has
+to be connected to Zenodo and enabled there by the maintainer before a GitHub release is
+archived, and that has not been done, so no DOI has been minted for v0.1.0. Until one
+exists, please cite the release tag as shown above. See `CONTRIBUTING.md` for the
+archiving procedure.
+
+## Development
+
+```bash
+git clone https://github.com/ZengZichao/Beast2Py.git
+cd Beast2Py
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+
+flake8 beast2py tests   # settings come from .flake8, same as CI
+black --check .
+pytest tests -v -rs
+```
+
+`main` is protected: the `ci-gate` check has to pass before anything can be merged, so a
+pull request with a failing test, lint or packaging step cannot land. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the full checklist, including how to run the BEAST2
+validation gate locally and what to do if you change `beast2py/tools/Beast2Validator.java`.
+To report a security problem, do not open an issue — see [SECURITY.md](SECURITY.md).
 
 ## Author
 

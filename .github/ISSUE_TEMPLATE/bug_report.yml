@@ -1,0 +1,122 @@
+name: Bug report
+description: Beast2Py crashes, refuses a configuration, or produces output that does not match what the documentation describes.
+title: "[bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing this. Two things before you go further.
+
+        - Questions, usage help and feature ideas are welcome, but they belong in
+          a blank issue rather than here. Pick the one that fits when you open the
+          issue.
+        - If this is a **security** problem, do not file it here. Follow
+          [SECURITY.md](https://github.com/ZengZichao/Beast2Py/blob/main/SECURITY.md)
+          so the details stay private until there is a fix.
+
+        A scientifically wrong divergence-time estimate is not a bug either. The
+        three validation gates check structure, calibration conflicts and whether
+        BEAST2 can initialise the model; none of them can tell you whether the
+        model answers your biological question.
+
+  - type: input
+    id: beast2py-version
+    attributes:
+      label: Beast2Py version
+      description: Output of `beast2py --version`.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      description: Output of `python3 --version`.
+      placeholder: "3.12.3"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "macOS 15.3 arm64, or Ubuntu 24.04 x86_64"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: beast2-version
+    attributes:
+      label: BEAST2 version
+      description: Needed only for the third validation gate. Pick "not installed" if there is none.
+      options:
+        - "2.7.8"
+        - "2.7.7"
+        - "2.7.6"
+        - "other 2.7.x"
+        - "not installed"
+    validations:
+      required: true
+
+  - type: input
+    id: jdk-version
+    attributes:
+      label: JDK version
+      description: Output of `java -version`. BEAST2 2.7 needs JDK 17 or newer; write "none" if there is no JDK.
+      placeholder: "17.0.9"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: beast2-gate
+    attributes:
+      label: Was the BEAST2 validation gate used?
+      description: 'Pass --beast2-validate to generate/quick, or --beast2 to validate. Without it the XML was never parsed by BEAST2.'
+      options:
+        - "yes, and BEAST2 was found"
+        - "yes, but BEAST2 was not found (exit code 2)"
+        - "no, structural checks only"
+        - "not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: The exact command you ran, and the smallest YAML configuration that still shows the problem. The full config is fine as a second step; start with the one that fails.
+      render: shell
+      placeholder: |
+        beast2py generate --config examples/config_basic.yaml --output out.xml
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Full traceback or error output
+      description: The complete text, not just the last line. Paste it inside a code block.
+      render: shell
+      placeholder: |
+        Traceback (most recent call last):
+          File "...", line ..., in ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Anything else
+      description: A link to a commit, a paper, a related issue, or the output file if you can share it. Leave empty if there is nothing.
+    validations:
+      required: false

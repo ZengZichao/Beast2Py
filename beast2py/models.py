@@ -10,7 +10,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
-
 # Metadata keys that document an analysis without describing it. They are kept
 # out of the fingerprint so that crediting a co-author or updating a prose
 # summary cannot make one analysis look like two.
@@ -458,9 +457,7 @@ class BEASTConfig:
         # documentary ones (who ran it, when, prose about it) used to change the
         # fingerprint, contradicting this module's own "deliberately contains no
         # calendar date" claim and splitting one analysis across several ids.
-        metadata = {
-            k: v for k, v in self.metadata.items() if k not in NON_SCIENCE_METADATA
-        }
+        metadata = {k: v for k, v in self.metadata.items() if k not in NON_SCIENCE_METADATA}
 
         def _param_repr(param: Any) -> Any:
             if param is None:

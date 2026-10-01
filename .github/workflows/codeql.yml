@@ -1,0 +1,57 @@
+name: CodeQL
+
+# Static analysis. The repository had code scanning switched off entirely
+# (the code-scanning alerts API returned "no analysis found"), which leaves
+# `beast2py/` - the part of the project most exposed to untrusted input, since
+# it parses user-supplied YAML and XML - without any automated review.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, Monday 04:17 UTC. Catches advisories published after a commit.
+    - cron: "17 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # Python only. The repository also contains a Java helper
+        # (beast2py/tools/Beast2Validator.java) and vendored precompiled
+        # BEAST2 classes; analysing those would mostly report findings inside
+        # third-party bytecode, so it is left out on purpose.
+        language: [python]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # Beast2Py is dual MIT/LGPL-2.1-only. codeql is not a code scanner,
+          # so nothing about the licence of the analysed code changes, but the
+          # flag keeps that distinction explicit if the config is ever copied.
+          setup-python: false
+
+      - name: Perform CodeQL analysis
+        # No `autobuild` step: for an interpreted language CodeQL analyses the
+        # source directly, and building the wheel would only slow this down.
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

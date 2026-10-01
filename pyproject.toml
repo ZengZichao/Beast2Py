@@ -4,7 +4,17 @@ dynamic = ["version"]
 description = "Python framework for reproducible divergence time estimation with calibration prior validation"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT AND LGPL-2.1-only"}
+# SPDX expression, per PEP 639. The TOML-table form
+# (`license = {text = "..."}`) is deprecated from setuptools 77 on and is
+# slated for removal; the two `License ::` trove classifiers that used to sit
+# in `classifiers` below must NOT be kept alongside an SPDX string, because a
+# build backend may then raise the classifier from a warning to an error.
+license = "MIT AND LGPL-2.1-only"
+license-files = [
+    "LICENSE",
+    "beast2py/tools/NOTICE",
+    "beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt",
+]
 authors = [
     {name = "曾子超 (Zichao Zeng)", email = "zengzichao@sjtu.edu.cn"},
 ]
@@ -12,8 +22,6 @@ keywords = ["BEAST2", "phylogenetics", "divergence time", "calibration", "molecu
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "License :: OSI Approved :: GNU Lesser General Public License v2 (LGPLv2)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -30,7 +38,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "pytest-cov", "black", "flake8", "mypy", "defusedxml>=0.7"]
+# Every entry is pinned to an exact version on purpose.
+#
+# These tools decide whether the CI gate passes or fails, so a silent minor
+# bump must never be able to turn a green build red: an unpinned `flake8`
+# resolved to 7.3.0 locally and 7.4.1 on CI, and the newer pycodestyle started
+# flagging E501 inside f-strings that the older one accepted. The pins below
+# are the versions the current tree is verified against, and every one of them
+# declares `Requires-Python >= 3.10`, so the 3.10-3.12 CI matrix is unaffected.
+dev = [
+    "pytest==9.1.1",
+    "pytest-cov==7.1.0",
+    "flake8==7.4.1",
+    "black==26.5.1",
+    "mypy==2.3.1",
+    "types-PyYAML==6.0.12.20260906",
+]
 xml = ["lxml>=4.9"]
 
 [project.scripts]
@@ -56,7 +79,11 @@ beast2py = [
 ]
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+# setuptools 77 is the floor for PEP 639 SPDX `license` / `license-files`
+# support. Declaring it explicitly stops a build frontend from resolving an
+# older setuptools in its isolated environment and then failing on metadata it
+# cannot parse.
+requires = ["setuptools>=77.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -70,6 +97,29 @@ version = {attr = "beast2py.__version__"}
 [tool.black]
 line-length = 100
 target-version = ["py310"]
+
+# NOTE: the line length above is duplicated in `.flake8` on purpose, because
+# flake8 does not read pyproject.toml. The CI lint step runs black, then flake8
+# with no command-line flags, so both tools pick up their own file.
+
+[tool.mypy]
+# `mypy` is currently an ADVISORY check, not a gate: the tree has pre-existing
+# type errors and turning them into a hard failure is a separate piece of work.
+# CI runs it through a ratchet (see `.github/workflows/ci.yml`) that fails only
+# when the error count exceeds `MYPY_BASELINE`, so new type errors are caught
+# while the existing backlog is not allowed to grow.
+#
+# When the count drops, lower MYPY_BASELINE in ci.yml to the new number.
+#
+# `python_version` is deliberately NOT pinned. numpy's bundled stubs now use
+# 3.12+ `type` statement syntax, so forcing a 3.10 target makes mypy abort while
+# parsing numpy's own .pyi instead of checking this package.
+files = ["beast2py"]
+# numpy / scipy / matplotlib / biopython ship no usable stubs, so every import
+# from them would otherwise be an `import-untyped` error.
+ignore_missing_imports = true
+warn_unused_configs = true
+show_error_codes = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

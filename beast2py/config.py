@@ -290,16 +290,13 @@ class ConfigParser:
             ConfigError: If no canonical name matches, listing the valid ones.
         """
         if not isinstance(value, str):
-            raise ConfigError(
-                f"{where}: {field} must be a string, got {value!r}"
-            )
+            raise ConfigError(f"{where}: {field} must be a string, got {value!r}")
         folded = "".join(ch for ch in value if ch not in " _-").lower()
         for name in names:
             if "".join(ch for ch in name if ch not in " _-").lower() == folded:
                 return name
         raise ConfigError(
-            f"{where}: invalid {field} '{value}' "
-            f"(valid: {', '.join(sorted(names))})"
+            f"{where}: invalid {field} '{value}' " f"(valid: {', '.join(sorted(names))})"
         )
 
     @staticmethod
@@ -405,9 +402,7 @@ class ConfigParser:
         # did, so `kappa: .inf` escaped as a raw ValueError from a later int()
         # cast and reached the user as a Python traceback.
         if not math.isfinite(value):
-            raise ConfigError(
-                f"'{where}.{key}' must be a finite number, got {raw[key]!r}"
-            )
+            raise ConfigError(f"'{where}.{key}' must be a finite number, got {raw[key]!r}")
         return value
 
     def parse(self, config_path: str) -> BEASTConfig:
@@ -797,9 +792,7 @@ class ConfigParser:
             if not candidate.is_absolute():
                 candidate = self.base_dir / candidate
             if not candidate.exists():
-                raise ConfigError(
-                    f"initialization.newick_file: file not found: {candidate}"
-                )
+                raise ConfigError(f"initialization.newick_file: file not found: {candidate}")
             newick_bytes = candidate.read_bytes()
             newick_path = str(candidate)
             # The starting tree is written into the XML, so it is part of the
@@ -992,9 +985,7 @@ class ConfigParser:
             errors: Accumulator list, extended in place.
         """
         by_id = {p.id: p for p in partitions}
-        raw_by_id = {
-            r["id"]: r for r in partitions_raw if isinstance(r, dict) and "id" in r
-        }
+        raw_by_id = {r["id"]: r for r in partitions_raw if isinstance(r, dict) and "id" in r}
 
         for p in partitions:
             raw = raw_by_id.get(p.id, {})
@@ -1007,9 +998,7 @@ class ConfigParser:
                 declared_sm = raw_sm.get("substitution_model")
                 if isinstance(declared_sm, dict) and "type" in declared_sm:
                     mine = ConfigParser._norm_name(declared_sm.get("type"))
-                    theirs = ConfigParser._norm_name(
-                        (target.substitution_model or {}).get("type")
-                    )
+                    theirs = ConfigParser._norm_name((target.substitution_model or {}).get("type"))
                     if mine and theirs and mine != theirs:
                         errors.append(
                             f"Partition '{p.id}': site_model.linked_to '{target_id}' "
@@ -1027,12 +1016,8 @@ class ConfigParser:
                             f"{target.gamma_categories}. Make them agree or stop linking."
                         )
                 if "proportion_invariant" in raw_sm:
-                    if bool(p.site_model.proportion_invariant) != bool(
-                        target.proportion_invariant
-                    ):
-                        missing = (
-                            "does not " if not target.proportion_invariant else ""
-                        )
+                    if bool(p.site_model.proportion_invariant) != bool(target.proportion_invariant):
+                        missing = "does not " if not target.proportion_invariant else ""
                         errors.append(
                             f"Partition '{p.id}': site_model.linked_to '{target_id}' "
                             f"ignores this partition's proportion_invariant setting; "
@@ -1165,9 +1150,7 @@ class ConfigParser:
         def value_of(key: str, default: float) -> float:
             raw = params.get(key, default)
             if isinstance(raw, dict):
-                return ConfigParser._num_or_default(
-                    raw, "value", f"tree_prior.{key}", default
-                )
+                return ConfigParser._num_or_default(raw, "value", f"tree_prior.{key}", default)
             try:
                 return as_number(raw, f"tree_prior.{key}")
             except ValueError as exc:
@@ -1429,8 +1412,11 @@ class ConfigParser:
 
         # Validate substitution model type
         sm_type = self._canonical_name(
-            subst_raw.get("type", "hky"), self.VALID_SUBSTITUTION_MODELS,
-            "substitution model", f"Partition '{partition_id}'")
+            subst_raw.get("type", "hky"),
+            self.VALID_SUBSTITUTION_MODELS,
+            "substitution model",
+            f"Partition '{partition_id}'",
+        )
 
         # Validate substitution-model keys against the registry's parameter list
         from .registry import ModelRegistry
@@ -1450,17 +1436,17 @@ class ConfigParser:
                 # Only the key names were checked, so `kappa: {value: .inf}`
                 # survived parsing and blew up during XML assembly as a raw
                 # "cannot convert float infinity to integer" traceback.
-                if "value" in val and val["value"] is not None and not isinstance(
-                    val["value"], str
+                if (
+                    "value" in val
+                    and val["value"] is not None
+                    and not isinstance(val["value"], str)
                 ):
                     try:
                         num = as_number(val["value"], f"{where_param}.value")
                     except ValueError as exc:
                         raise ConfigError(str(exc)) from exc
                     self._finite(where_param, num)
-                    self._check_bound(
-                        where_param, num, val.get("lower"), val.get("upper")
-                    )
+                    self._check_bound(where_param, num, val.get("lower"), val.get("upper"))
         # A rates vector is only meaningful where all six exchangeabilities are
         # free; catching it here turns "the generator raised later, or worse
         # ignored it" into a parse-time message naming the model.
@@ -1551,8 +1537,11 @@ class ConfigParser:
         """Parse clock model configuration."""
         self._check_keys(cm_raw, "clock_model", f"Partition '{partition_id}': clock_model")
         cm_type_str = self._canonical_name(
-            cm_raw.get("type", "strict"), self.VALID_CLOCK_MODELS,
-            "clock model", f"Partition '{partition_id}'")
+            cm_raw.get("type", "strict"),
+            self.VALID_CLOCK_MODELS,
+            "clock model",
+            f"Partition '{partition_id}'",
+        )
 
         prefix = f"Partition '{partition_id}': clock_model"
         clock_rate = None
@@ -1641,8 +1630,11 @@ class ConfigParser:
                 raise ConfigError(f"Calibration '{name}': distribution must be a mapping")
             self._check_keys(dist_raw, "distribution", f"Calibration '{name}': distribution")
             dist_type = self._canonical_name(
-                dist_raw.get("type", ""), self.VALID_DISTRIBUTIONS,
-                "distribution type", f"Calibration '{name}'")
+                dist_raw.get("type", ""),
+                self.VALID_DISTRIBUTIONS,
+                "distribution type",
+                f"Calibration '{name}'",
+            )
             parameters = dict(dist_raw.get("parameters", {}) or {})
             offset = self._as_num(dist_raw, "offset", f"Calibration '{name}'", 0.0) or 0.0
             dist = DistributionConfig(type=dist_type, parameters=parameters, offset=float(offset))
@@ -1684,8 +1676,11 @@ class ConfigParser:
                 raise ConfigError(f"{where_hp}: must be a mapping")
             self._check_keys(hp_config, "hyperprior", where_hp)
             hp_type = self._canonical_name(
-                hp_config.get("type", "uniform"), self.VALID_DISTRIBUTIONS,
-                "distribution type", where_hp)
+                hp_config.get("type", "uniform"),
+                self.VALID_DISTRIBUTIONS,
+                "distribution type",
+                where_hp,
+            )
             if param_name not in (dist.parameters if dist else {}):
                 raise ConfigError(
                     f"{where_hp}: '{param_name}' is not a parameter of the "
@@ -1735,9 +1730,7 @@ class ConfigParser:
         from .registry import ModelRegistry
 
         registry_spec = ModelRegistry.get_distribution_spec(dist.type) or {}
-        canonical = set(registry_spec.get("params", {})) | set(
-            registry_spec.get("bool_attrs", {})
-        )
+        canonical = set(registry_spec.get("params", {})) | set(registry_spec.get("bool_attrs", {}))
         allowed = canonical | self.DISTRIBUTION_EXTRA_KEYS.get(dist.type, set())
         unknown = set(params) - allowed
         if unknown:
@@ -1845,13 +1838,10 @@ class ConfigParser:
             return default
         value = as_number(raw[key], f"'{where}.{key}'")
         if not math.isfinite(value):
-            raise ConfigError(
-                f"'{where}.{key}' must be a finite number, got {raw[key]!r}"
-            )
+            raise ConfigError(f"'{where}.{key}' must be a finite number, got {raw[key]!r}")
         return value
 
-    def _int_or_default(self, raw: Dict[str, Any], key: str, where: str,
-                        default: int) -> int:
+    def _int_or_default(self, raw: Dict[str, Any], key: str, where: str, default: int) -> int:
         """Integer form of :meth:`_num_or_default`."""
         return int(self._num_or_default(raw, key, where, default))
 
@@ -1898,7 +1888,7 @@ class ConfigParser:
                 "mcmc.store_every = 0 is not a valid interval. Use a positive number of "
                 "samples to checkpoint every N logged samples, or -1 to disable "
                 "checkpointing; 0 is neither, and would be written into the XML as "
-                "storeEvery=\"0\"."
+                'storeEvery="0".'
             )
         if store_every < -1:
             raise ConfigError(
@@ -1957,8 +1947,7 @@ class ConfigParser:
                 if len(tokens) > 1:
                     try:
                         numeric = [
-                            self._finite(where, as_number(tok, f"{where}.value"))
-                            for tok in tokens
+                            self._finite(where, as_number(tok, f"{where}.value")) for tok in tokens
                         ]
                     except ValueError as exc:
                         raise ConfigError(str(exc)) from exc
@@ -1982,9 +1971,7 @@ class ConfigParser:
             return RealParameter(
                 value=value, lower=lower, upper=upper, dimension=dimension, estimate=estimate
             )
-        return RealParameter(
-            value=self._finite(where, as_number(raw, where)), estimate=True
-        )
+        return RealParameter(value=self._finite(where, as_number(raw, where)), estimate=True)
 
     @staticmethod
     def _finite(where: str, value: float) -> float:
