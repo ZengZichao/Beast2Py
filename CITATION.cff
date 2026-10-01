@@ -4,6 +4,13 @@ title: Beast2Py
 version: 0.1.1
 date-released: "2026-10-02"
 license: MIT AND LGPL-2.1-only
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23088756
+    description: Zenodo concept DOI for Beast2Py (resolves to the latest archived version)
+  - type: doi
+    value: 10.5281/zenodo.23088757
+    description: Zenodo version-specific DOI for version 0.1.1
 authors:
   - family-names: Zeng
     given-names: Zichao
