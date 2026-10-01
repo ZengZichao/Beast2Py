@@ -282,12 +282,18 @@ jobs:
         # and the LGPL-2.1 notice for the vendored BEAST2 classes into the
         # distribution. A typo in that list would otherwise only surface on
         # PyPI, after upload.
+        #
+        # The listing is captured before filtering on purpose: piping unzip into
+        # `grep -q` makes grep exit on the first match, which leaves unzip with
+        # a SIGPIPE, and `pipefail` then reports the whole pipeline as failed
+        # even though the match was found.
         run: |
           set -euo pipefail
+          listing="$(unzip -l dist/*.whl)"
           for expected in LICENSE beast2py/tools/NOTICE beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt; do
-            if ! unzip -l dist/*.whl | grep -q "licenses/$expected"; then
+            if ! grep -F "licenses/$expected" <<<"$listing" >/dev/null; then
               echo "::error::$expected is not present under dist-info/licenses in the wheel"
-              unzip -l dist/*.whl | grep -i licenses || true
+              grep -i licenses <<<"$listing" || true
               exit 1
             fi
             echo "ok: licenses/$expected"
