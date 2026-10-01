@@ -1,6 +1,6 @@
 # Beast2Py 使用手册
 
-- **版本：** 0.1.0
+- **版本：** 0.1.1
 - **作者：** 曾子超 (Zichao Zeng) · [ORCID: 0000-0001-6553-970X](https://orcid.org/0000-0001-6553-970X)
 - **日期：** 2026 年
 
@@ -131,14 +131,14 @@ pip install -e ".[xml]"
 ```bash
 # 检查版本
 beast2py --version
-# 输出: Beast2Py v0.1.0
+# 输出: Beast2Py v0.1.1
 
 # 列出支持的模型
 beast2py list-models
 
 # 验证 Python API
 python3 -c "import beast2py; print(beast2py.__version__)"
-# 输出: 0.1.0
+# 输出: 0.1.1
 ```
 
 未安装时，在克隆出的仓库根目录下，所有命令都可以改用 `python3 -m beast2py.main <子命令>` 运行。两种形式走的是同一个入口（`[project.scripts] beast2py = "beast2py.main:main"`）。
@@ -618,27 +618,27 @@ beast2py fingerprint \
 | `--output` | `-o` | 否 | 仅输出到终端 | 输出 JSON 文件路径 |
 | `--verbose` | `-v` | 否 | False | 显示详细指纹信息 |
 
-**指纹格式：** `B2P-{配置哈希前 12 位}-{工具版本}`，例如 `B2P-04ab3d09277b-0.1.0`。该标识符**不含日期与时区**，因此同一配置在同一比对数据上重跑，总能复现相同的字节与相同的标识符。12 个十六进制字符即 48 位摘要：按生日界估算，出现一次碰撞的概率达到 50% 需要 sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ 个不同分析——即约 2 × 10⁷，而不是开方捷径给出的 2**24 = 1.7 × 10⁷。它是变更检测令牌，不是全局唯一键。
+**指纹格式：** `B2P-{配置哈希前 12 位}-{工具版本}`，例如 `B2P-0d0a573b1298-0.1.1`。该标识符**不含日期与时区**，因此同一配置在同一比对数据上重跑，总能复现相同的字节与相同的标识符。12 个十六进制字符即 48 位摘要：按生日界估算，出现一次碰撞的概率达到 50% 需要 sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ 个不同分析——即约 2 × 10⁷，而不是开方捷径给出的 2**24 = 1.7 × 10⁷。它是变更检测令牌，不是全局唯一键。
 
 **指纹 JSON 文件内容**（对 `examples/config_basic.yaml` 的实测输出）：
 
 ```json
 {
-  "fingerprint": "B2P-04ab3d09277b-0.1.0",
-  "config_hash": "04ab3d09277b4acb25c69b820e1f806b04adb48b08cd3af5ed9dc5d54a0eb5d1",
-  "full_hash": "04ab3d09277b4acb25c69b820e1f806b04adb48b08cd3af5ed9dc5d54a0eb5d1",
+  "fingerprint": "B2P-0d0a573b1298-0.1.1",
+  "config_hash": "0d0a573b12981a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
+  "full_hash": "0d0a573b12981a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
   "data_hash": "30be5613d3ff6862",
   "hash_bits": 48,
   "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% chance of one collision needs sqrt(2 * 2**48 * ln 2), about 1.98e+07 distinct analyses, so it is a change-detection token rather than a globally unique key.",
-  "tool_version": "0.1.0",
+  "tool_version": "0.1.1",
   "beast2_version": "2.7.8",
   "generation_time": "2026-09-29T18:01:17.890711",
   "analysis_name": "primates_basic_calibration",
-  "xml_digest": "4f9352096f57259bcf987ba9853f943b406ee6c697f417185ed527c935ea0756"
+  "xml_digest": "249cbe9b06a720943f5d8d79dca5ba9e5675983bb661449119521a2bcc8dcb2b"
 }
 ```
 
-上述 `generation_time` 是采集该样本的时刻；标识符本身不含时间成分，同一配置在同一比对数据上重跑总得到 `B2P-04ab3d09277b-0.1.0`。
+上述 `generation_time` 是采集该样本的时刻；标识符本身不含时间成分，同一配置在同一比对数据上重跑总得到 `B2P-0d0a573b1298-0.1.1`。
 
 `data_hash` 由每条比对内容的摘要再汇总而成，取前 16 位，会作为 `| Data: {hash16}` 附在 XML 的指纹注释里。`generation_time` **只**出现在这个侧车文件中；XML 本体带的是无时间戳的注释（见第 15.1 节）。
 
@@ -926,7 +926,7 @@ metadata:
   author: "你的名字"                     # 作者（可选）
   date: "2026-08-01"                    # 日期（可选）
   beast2_version: "2.7.8"              # BEAST2 版本（默认 2.7.8）
-  tool_version: "0.1.0"                # Beast2Py 版本（默认 0.1.0）
+  tool_version: "0.1.1"                # Beast2Py 版本（默认 0.1.1）
 
 # === 序列数据 ===
 alignments:
@@ -1698,7 +1698,7 @@ diagnostics:
 
 ### 15.1 分析指纹
 
-分析指纹是基于*科学性*配置 SHA-256 哈希生成的确定性标识符，采用不含日期的格式 `B2P-{hash12}-{version}`，例如 `B2P-04ab3d09277b-0.1.0`。它**不含日期与时区**，因此同一配置在同一比对数据上每次重跑都逐字节复现。
+分析指纹是基于*科学性*配置 SHA-256 哈希生成的确定性标识符，采用不含日期的格式 `B2P-{hash12}-{version}`，例如 `B2P-0d0a573b1298-0.1.1`。它**不含日期与时区**，因此同一配置在同一比对数据上每次重跑都逐字节复现。
 
 以下变化会改变指纹（`models.py::to_dict` 把这些都纳入哈希）：序列内容、树设置（`Partition.tree`）、冠群/茎群（`use_originate`）或 `tipsonly` 标志、超先验、`parameter_priors` 条目、末端日期、算子权重。只改输出文件名**不会**改变指纹。
 

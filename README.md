@@ -266,7 +266,7 @@ BEAST2 jars or JDK 17 are missing, those tests simply skip instead of failing. T
 
 Beast2Py generates the following reproducibility artifacts:
 
-- **Analysis fingerprint** — deterministic identifier `B2P-{sha256(config)[:12]}-{version}` (e.g. `B2P-04ab3d09277b-0.1.0`). It contains **no date component**, so the same configuration plus the same alignment data yields the same bytes and the same identifier in any time zone and at any rerun time. Renaming the output file does not change the fingerprint; changing the sequence content, the tree setting, a crown/stem flag, a hyperprior, a parameter prior, a tip date or an operator weight does
+- **Analysis fingerprint** — deterministic identifier `B2P-{sha256(config)[:12]}-{version}` (e.g. `B2P-0d0a573b1298-0.1.1`). It contains **no date component**, so the same configuration plus the same alignment data yields the same bytes and the same identifier in any time zone and at any rerun time. Renaming the output file does not change the fingerprint; changing the sequence content, the tree setting, a crown/stem flag, a hyperprior, a parameter prior, a tip date or an operator weight does
 - **Data digest** — besides the identifier, the XML comment carries a separate digest: 16 hex characters over the alignment *content*. The wall-clock generation time appears only in the `.fingerprint.json` sidecar file, never in the XML
 - **LaTeX methods description** — Publication-ready methods paragraph
 - **Snakemake/Nextflow pipeline** — End-to-end reproducible workflow files
@@ -316,14 +316,14 @@ The package is MIT; the bundled BEAST2 package-management classes are LGPL-2.1 (
 
 If you use Beast2Py in your research, please cite the software:
 
-> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.0. https://github.com/ZengZichao/Beast2Py
+> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.1. https://github.com/ZengZichao/Beast2Py
 
 Machine-readable citation metadata is available in [CITATION.cff](CITATION.cff).
 
 **There is no Zenodo DOI yet.** A `.zenodo.json` file is committed and describes the
 software for an archive, but the file on its own does not create one: the repository has
 to be connected to Zenodo and enabled there by the maintainer before a GitHub release is
-archived, and that has not been done, so no DOI has been minted for v0.1.0. Until one
+archived, and that has not been done, so no DOI has been minted for v0.1.1. Until one
 exists, please cite the release tag as shown above. See `CONTRIBUTING.md` for the
 archiving procedure.
 

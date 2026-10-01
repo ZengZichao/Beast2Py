@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Set
 
 import yaml
 
+from . import __version__
 from .models import (
     BEASTConfig,
     CalibrationMethod,
@@ -460,7 +461,10 @@ class ConfigParser:
         if not metadata.get("analysis_name"):
             metadata["analysis_name"] = "unnamed_analysis"
         metadata.setdefault("beast2_version", "2.7.8")
-        metadata.setdefault("tool_version", "0.1.0")
+        # Single source of truth is beast2py.__version__ (pyproject.toml); this
+        # used to be a hardcoded literal, which silently kept stamping 0.1.0
+        # into fingerprints after any release bump.
+        metadata.setdefault("tool_version", __version__)
 
         # --- Alignments and Partitions ---
         alignments_raw = raw.get("alignments", [])
