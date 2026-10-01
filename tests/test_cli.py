@@ -48,7 +48,11 @@ class TestCLI:
         with pytest.raises(SystemExit):
             main(["--version"])
         captured = capsys.readouterr()
-        assert "v0.1.0" in captured.out
+        # Track the single source of truth instead of a literal that rots on
+        # every release bump.
+        from beast2py import __version__
+
+        assert f"v{__version__}" in captured.out
 
     def test_generate_command(self):
         """Test the generate subcommand."""
