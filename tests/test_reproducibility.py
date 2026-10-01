@@ -150,7 +150,7 @@ class TestMethodsGenerator:
     def test_full_references_are_kept_after_the_paragraph(self):
         """Shortening in-text citations must not lose the bibliography entries."""
         methods = self._methods_for_example("config_basic.yaml")
-        tail = methods[methods.find("\n\n"):] if "\n\n" in methods else ""
+        tail = methods[methods.find("\n\n") :] if "\n\n" in methods else ""
         assert "PLoS Comput Biol 10: e1003537" in tail
         assert "Hasegawa" in tail and "1985" in tail
 
@@ -164,7 +164,8 @@ class TestMethodsGenerator:
         """The shipped example paragraph must not age behind the generator."""
         ex = Path(__file__).resolve().parents[1] / "examples"
         generated = MethodsGenerator.generate_methods(
-            ConfigParser().parse(ex / "config_basic.yaml"))
+            ConfigParser().parse(ex / "config_basic.yaml")
+        )
         assert (ex / "output_basic.methods.tex").read_text(encoding="utf-8") == generated
 
 
@@ -238,7 +239,8 @@ class TestPipelineGenerator:
         assert len(referenced) == 1
         target = os.path.realpath(str(moved / referenced[0]))
         assert target == os.path.realpath(str(moved.parent / "test.fasta")), (
-            "Snakefile still points outside the relocated tree: %s" % referenced[0])
+            "Snakefile still points outside the relocated tree: %s" % referenced[0]
+        )
 
     def test_generate_nextflow(self):
         """Test Nextflow pipeline generation."""
@@ -267,10 +269,12 @@ class TestPipelineGenerator:
         config_path = self.tmpdir / "config.yaml"
         config_path.write_text(TEST_CONFIG_YAML)
         config = ConfigParser().parse(config_path)
-        gen = (PipelineGenerator.generate_snakemake if kind == "sm"
-               else PipelineGenerator.generate_nextflow)
-        path = gen(config, output_dir=self.tmpdir / ("pipeline_" + kind),
-                   config_file="config.yaml")
+        gen = (
+            PipelineGenerator.generate_snakemake
+            if kind == "sm"
+            else PipelineGenerator.generate_nextflow
+        )
+        path = gen(config, output_dir=self.tmpdir / ("pipeline_" + kind), config_file="config.yaml")
         return config, Path(path).read_text()
 
     def test_run_rule_declares_only_outputs_the_run_produces(self):

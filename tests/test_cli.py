@@ -260,9 +260,12 @@ class TestUserYamlErrorReporting:
             capsys,
             [
                 "quick",
-                "-a", str(self.tmpdir / "test.fasta"),
-                "-o", str(self.tmpdir / "out.xml"),
-                "--calibration-yaml", str(bad),
+                "-a",
+                str(self.tmpdir / "test.fasta"),
+                "-o",
+                str(self.tmpdir / "out.xml"),
+                "--calibration-yaml",
+                str(bad),
             ],
             "Invalid YAML in",
         )
@@ -272,9 +275,12 @@ class TestUserYamlErrorReporting:
             capsys,
             [
                 "quick",
-                "-a", str(self.tmpdir / "test.fasta"),
-                "-o", str(self.tmpdir / "out.xml"),
-                "--calibration-yaml", str(self.tmpdir / "nope.yaml"),
+                "-a",
+                str(self.tmpdir / "test.fasta"),
+                "-o",
+                str(self.tmpdir / "out.xml"),
+                "--calibration-yaml",
+                str(self.tmpdir / "nope.yaml"),
             ],
             "Calibration file not found",
         )
@@ -286,9 +292,12 @@ class TestUserYamlErrorReporting:
             capsys,
             [
                 "quick",
-                "-a", str(self.tmpdir / "test.fasta"),
-                "-o", str(self.tmpdir / "out.xml"),
-                "--calibration-yaml", str(mapping),
+                "-a",
+                str(self.tmpdir / "test.fasta"),
+                "-o",
+                str(self.tmpdir / "out.xml"),
+                "--calibration-yaml",
+                str(mapping),
             ],
             "must be a list",
         )
@@ -307,9 +316,12 @@ class TestUserYamlErrorReporting:
             capsys,
             [
                 "quick",
-                "-a", str(self.tmpdir / "test.fasta"),
-                "-o", str(self.tmpdir / "out.xml"),
-                "--calibration-yaml", str(cal),
+                "-a",
+                str(self.tmpdir / "test.fasta"),
+                "-o",
+                str(self.tmpdir / "out.xml"),
+                "--calibration-yaml",
+                str(cal),
             ],
             "not found in any alignment",
         )
@@ -330,9 +342,12 @@ class TestUserYamlErrorReporting:
             capsys,
             [
                 "quick",
-                "-a", str(self.tmpdir / "test.fasta"),
-                "-o", str(out),
-                "--calibration-yaml", str(cal),
+                "-a",
+                str(self.tmpdir / "test.fasta"),
+                "-o",
+                str(out),
+                "--calibration-yaml",
+                str(cal),
             ],
         )
         assert ret == 0, text

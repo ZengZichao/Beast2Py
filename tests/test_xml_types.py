@@ -36,10 +36,16 @@ def aln():
     )
 
 
-def _make_config(aln, subst_type="hky", clock_type="strict",
-                 tree_prior="yule", tree_params=None,
-                 cal_dist="normal", cal_params=None,
-                 gamma_cats=4):
+def _make_config(
+    aln,
+    subst_type="hky",
+    clock_type="strict",
+    tree_prior="yule",
+    tree_params=None,
+    cal_dist="normal",
+    cal_params=None,
+    gamma_cats=4,
+):
     subst = {"type": subst_type}
     if subst_type in ("gtr", "sym"):
         subst["rates"] = "1.0 1.0 1.0 1.0 1.0 1.0"
@@ -49,8 +55,9 @@ def _make_config(aln, subst_type="hky", clock_type="strict",
         gamma_shape=RealParameter(value=0.5, lower=0.0) if gamma_cats > 0 else None,
     )
     clock = ClockModelConfig(type=ClockModelType(clock_type))
-    part = Partition(id="alignment", alignment=aln, site_model=site_model,
-                     clock_model=clock, tree="shared")
+    part = Partition(
+        id="alignment", alignment=aln, site_model=site_model, clock_model=clock, tree="shared"
+    )
     params = tree_params or {}
     cal = CalibrationPoint(
         name="rootCal",
@@ -62,8 +69,7 @@ def _make_config(aln, subst_type="hky", clock_type="strict",
         ),
     )
     return BEASTConfig(
-        metadata={"analysis_name": "test", "beast2_version": "2.7.8",
-                  "tool_version": "0.1.0"},
+        metadata={"analysis_name": "test", "beast2_version": "2.7.8", "tool_version": "0.1.0"},
         partitions=[part],
         tree_prior_type=TreePriorType(tree_prior),
         tree_prior_params=params,
@@ -119,12 +125,13 @@ def test_clock_model(aln, model):
 
 TREE_PRIORS = [
     ("yule", {}),
-    ("birth_death", {"birth_rate": {"value": 1.0, "lower": 0.0},
-                     "death_rate": {"value": 0.5, "lower": 0.0}}),
+    (
+        "birth_death",
+        {"birth_rate": {"value": 1.0, "lower": 0.0}, "death_rate": {"value": 0.5, "lower": 0.0}},
+    ),
     ("calibrated_yule", {}),
     ("coalescent_constant", {}),
-    ("coalescent_exponential", {"pop_size": {"value": 1.0, "lower": 0.0},
-                                "growth_rate": 0.0}),
+    ("coalescent_exponential", {"pop_size": {"value": 1.0, "lower": 0.0}, "growth_rate": 0.0}),
     ("bayesian_skyline", {}),
     ("ebsp", {}),
 ]
@@ -169,6 +176,7 @@ def test_calibration_distribution(aln, dist, params):
 
 # --- Multi-partition ---
 
+
 def test_multi_partition(aln):
     site_model_a = SiteModelConfig(
         substitution_model={"type": "hky"},
@@ -182,22 +190,26 @@ def test_multi_partition(aln):
     )
     clock_a = ClockModelConfig(type=ClockModelType.UCLN)
     clock_b = ClockModelConfig(type=ClockModelType.UCLN, linked_to="alignment")
-    part_a = Partition(id="alignment", alignment=aln, site_model=site_model_a,
-                       clock_model=clock_a, tree="shared")
-    part_b = Partition(id="alignment2", alignment=aln, site_model=site_model_b,
-                       clock_model=clock_b, tree="shared")
+    part_a = Partition(
+        id="alignment", alignment=aln, site_model=site_model_a, clock_model=clock_a, tree="shared"
+    )
+    part_b = Partition(
+        id="alignment2", alignment=aln, site_model=site_model_b, clock_model=clock_b, tree="shared"
+    )
     cal = CalibrationPoint(
-        name="root", taxa=None, monophyletic=False,
-        distribution=DistributionConfig(type="normal",
-                                        parameters={"mean": 10.0, "sigma": 1.0}),
+        name="root",
+        taxa=None,
+        monophyletic=False,
+        distribution=DistributionConfig(type="normal", parameters={"mean": 10.0, "sigma": 1.0}),
     )
     config = BEASTConfig(
-        metadata={"analysis_name": "multi", "beast2_version": "2.7.8",
-                  "tool_version": "0.1.0"},
+        metadata={"analysis_name": "multi", "beast2_version": "2.7.8", "tool_version": "0.1.0"},
         partitions=[part_a, part_b],
         tree_prior_type=TreePriorType.BIRTH_DEATH,
-        tree_prior_params={"birth_rate": {"value": 1.0, "lower": 0.0},
-                           "death_rate": {"value": 0.5, "lower": 0.0}},
+        tree_prior_params={
+            "birth_rate": {"value": 1.0, "lower": 0.0},
+            "death_rate": {"value": 0.5, "lower": 0.0},
+        },
         calibrations=[cal],
         calibration_method=CalibrationMethod.MRCA_PRIOR,
         mcmc=MCMCConfig(chain_length=1000000),
@@ -208,8 +220,10 @@ def test_multi_partition(aln):
 
 # --- Tip dates ---
 
+
 def test_tip_dates(aln):
     from beast2py.models import TipDatesConfig
+
     config = _make_config(aln)
     config.tip_dates = TipDatesConfig(
         enabled=True,
@@ -223,8 +237,10 @@ def test_tip_dates(aln):
 
 # --- Nested sampling MCMC ---
 
+
 def test_nested_sampling_mcmc(aln):
     from beast2py.models import MCMCType
+
     config = _make_config(aln)
     config.mcmc.type = MCMCType.NESTED_SAMPLING
     xml = XMLWriter(config).generate_xml()

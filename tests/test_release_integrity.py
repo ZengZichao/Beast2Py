@@ -35,7 +35,7 @@ class TestCollisionBound:
 
     def test_fifty_percent_bound_is_not_the_square_root_of_the_space(self):
         bits = FingerprintGenerator.collision_bits()
-        space = 2 ** bits
+        space = 2**bits
         n50 = FingerprintGenerator.collision_bound_50pct()
         # P(at least one collision) at the reported n must really be ~0.5
         p = 1 - math.exp(-n50 * (n50 - 1) / (2 * space))
@@ -93,17 +93,19 @@ class TestSidecarPairing:
         out = pathlib.Path(tempfile.mkdtemp()) / "output_basic.xml"
         with contextlib.redirect_stdout(io.StringIO()):
             generate_xml(str(EXAMPLES / "config_basic.yaml"), str(out), force=True)
-        assert out.read_bytes() == (EXAMPLES / "output_basic.xml").read_bytes(), (
-            "the committed exemplar XML is behind the writer")
+        assert (
+            out.read_bytes() == (EXAMPLES / "output_basic.xml").read_bytes()
+        ), "the committed exemplar XML is behind the writer"
 
         config = ConfigParser().parse(EXAMPLES / "config_basic.yaml")
         side = json.loads((EXAMPLES / "output_basic.fingerprint.json").read_text())
         fresh = FingerprintGenerator.generate_fingerprint_dict(
-            config, xml_content=out.read_text(encoding="utf-8"))
+            config, xml_content=out.read_text(encoding="utf-8")
+        )
         volatile = {"generation_time"}
-        assert {k: v for k, v in side.items() if k not in volatile} == \
-            {k: v for k, v in fresh.items() if k not in volatile}, (
-            "the committed sidecar is behind what the shipped code writes")
+        assert {k: v for k, v in side.items() if k not in volatile} == {
+            k: v for k, v in fresh.items() if k not in volatile
+        }, "the committed sidecar is behind what the shipped code writes"
 
     def test_fingerprint_literals_in_docs_are_still_producible(self):
         """Every digest the documentation shows must be one the tool emits today.
@@ -154,10 +156,8 @@ class TestCanonicalSerialisation:
     def test_dicts_serialise_in_sorted_order(self):
         import json
 
-        one = json.dumps({"b": 1, "a": 2}, default=FingerprintGenerator._canonical,
-                         sort_keys=True)
-        two = json.dumps({"a": 2, "b": 1}, default=FingerprintGenerator._canonical,
-                         sort_keys=True)
+        one = json.dumps({"b": 1, "a": 2}, default=FingerprintGenerator._canonical, sort_keys=True)
+        two = json.dumps({"a": 2, "b": 1}, default=FingerprintGenerator._canonical, sort_keys=True)
         assert one == two
 
 
@@ -180,27 +180,17 @@ class TestCommentIntegrity:
             if stripped.startswith("#") or re.match(r"^\s{4,}\S", line):
                 yield no, line
 
-    @pytest.mark.parametrize(
-        "path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name
-    )
+    @pytest.mark.parametrize("path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name)
     def test_no_space_before_sentence_period(self, path):
         bad = [n for n, line in self._prose_lines(path) if self.ANCHOR.search(line)]
         assert not bad, f"{path.name}: stray space before '.' at line(s) {bad}"
 
-    @pytest.mark.parametrize(
-        "path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name
-    )
+    @pytest.mark.parametrize("path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name)
     def test_no_orphan_period_comment(self, path):
-        bad = [
-            n
-            for n, line in self._prose_lines(path)
-            if self.EMPTY.match(line.strip())
-        ]
+        bad = [n for n, line in self._prose_lines(path) if self.EMPTY.match(line.strip())]
         assert not bad, f"{path.name}: comment that is only a '.' at line(s) {bad}"
 
-    @pytest.mark.parametrize(
-        "path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name
-    )
+    @pytest.mark.parametrize("path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name)
     def test_comment_blocks_have_balanced_parentheses(self, path):
         lines = path.read_text(encoding="utf-8").split("\n")
         block, start, problems = [], 0, []
@@ -259,28 +249,50 @@ class TestRepositoryHygiene:
     hand-maintained exclusion list.
     """
 
-    SUFFIXES = {".py", ".md", ".toml", ".txt", ".yaml", ".yml", ".sh", ".java",
-                ".json", ".in", ".cfg", ".xml"}
+    SUFFIXES = {
+        ".py",
+        ".md",
+        ".toml",
+        ".txt",
+        ".yaml",
+        ".yml",
+        ".sh",
+        ".java",
+        ".json",
+        ".in",
+        ".cfg",
+        ".xml",
+    }
     SECRET = re.compile(
         r"(?i)\b(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|"
         r"client[_-]?secret|private[_-]?key|password)\b\s*[:=]\s*\S"
         r"|\bgh[pousr]_[A-Za-z0-9]{18,}\b|\bAKIA[0-9A-Z]{16}\b"
-        r"|-----BEGIN [A-Z ]*PRIVATE KEY-----|\bxox[baprs]-[A-Za-z0-9-]{10,}")
-    HOME = re.compile(r"(?<!\w)(?:/Users/[\w.\-]+/|/home/[\w.\-]+/"
-                      r"|[A-Za-z]:\\\\Users\\\\[\w.\-]+\\\\)")
+        r"|-----BEGIN [A-Z ]*PRIVATE KEY-----|\bxox[baprs]-[A-Za-z0-9-]{10,}"
+    )
+    HOME = re.compile(
+        r"(?<!\w)(?:/Users/[\w.\-]+/|/home/[\w.\-]+/" r"|[A-Za-z]:\\\\Users\\\\[\w.\-]+\\\\)"
+    )
 
     @staticmethod
     def _shipped_text_files():
         import subprocess
+
         try:
             listed = subprocess.run(
                 ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
-                cwd=str(REPO), capture_output=True, text=True, check=True)
-        except Exception:                                  # no git: skip cleanly
+                cwd=str(REPO),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+        except Exception:  # no git: skip cleanly
             pytest.skip("git is not available to enumerate shipped files")
-        names = [n for n in listed.stdout.splitlines()
-                 if pathlib.Path(n).suffix.lower() in TestRepositoryHygiene.SUFFIXES
-                 and not pathlib.Path(n).name.startswith("LICENSE.BEAST2")]
+        names = [
+            n
+            for n in listed.stdout.splitlines()
+            if pathlib.Path(n).suffix.lower() in TestRepositoryHygiene.SUFFIXES
+            and not pathlib.Path(n).name.startswith("LICENSE.BEAST2")
+        ]
         return [REPO / n for n in names if (REPO / n).is_file()]
 
     def test_the_scan_is_not_silently_empty(self):
@@ -292,7 +304,7 @@ class TestRepositoryHygiene:
         for path in self._shipped_text_files():
             text = path.read_text(encoding="utf-8", errors="ignore")
             for m in self.HOME.finditer(text):
-                ctx = text[max(0, m.start() - 40):m.end() + 30].replace("\n", " ")
+                ctx = text[max(0, m.start() - 40) : m.end() + 30].replace("\n", " ")
                 hits.append("%s: %s" % (path.relative_to(REPO), ctx))
         assert not hits, "absolute home paths in shipped files:\n  %s" % "\n  ".join(hits[:8])
 
@@ -321,10 +333,15 @@ class TestRepositoryHygiene:
 
     def test_no_junk_is_tracked(self):
         import subprocess
-        tracked = subprocess.run(["git", "ls-files"], cwd=str(REPO),
-                                 capture_output=True, text=True).stdout.splitlines()
-        junk = [n for n in tracked
-                if pathlib.Path(n).name in {".DS_Store"} or n.endswith((".pyc", ".mimosa"))]
+
+        tracked = subprocess.run(
+            ["git", "ls-files"], cwd=str(REPO), capture_output=True, text=True
+        ).stdout.splitlines()
+        junk = [
+            n
+            for n in tracked
+            if pathlib.Path(n).name in {".DS_Store"} or n.endswith((".pyc", ".mimosa"))
+        ]
         assert not junk, "junk files are tracked: %s" % junk[:5]
 
 
@@ -345,7 +362,7 @@ class TestTutorialWalkthrough:
                 line = re.sub(r"\s+", " ", line.strip())
                 if not line.startswith("beast2py "):
                     continue
-                if re.search(r"\[[^\]]*\]", line[len("beast2py"):]):
+                if re.search(r"\[[^\]]*\]", line[len("beast2py") :]):
                     continue  # a synopsis line, not something to run
                 if "--help" in line or "--version" in line:
                     continue
@@ -354,8 +371,7 @@ class TestTutorialWalkthrough:
 
     def _writes(self, cmd):
         toks = cmd.split()
-        return [toks[i + 1] for i, t in enumerate(toks)
-                if t in self.WRITERS and i + 1 < len(toks)]
+        return [toks[i + 1] for i, t in enumerate(toks) if t in self.WRITERS and i + 1 < len(toks)]
 
     @pytest.mark.parametrize("rel", TUTORIALS)
     def test_no_two_steps_write_the_same_file(self, rel):
@@ -369,7 +385,10 @@ class TestTutorialWalkthrough:
                 written.setdefault(path, []).append(cmd)
         clash = {p: c for p, c in written.items() if len(c) > 1}
         assert not clash, "%s writes %s more than once: %s" % (
-            rel, sorted(clash), clash[sorted(clash)[0]][0])
+            rel,
+            sorted(clash),
+            clash[sorted(clash)[0]][0],
+        )
 
     @pytest.mark.parametrize("rel", TUTORIALS)
     def test_the_walkthrough_names_commands_that_exist(self, rel):
@@ -389,11 +408,15 @@ class TestErrorDocumentation:
     diagnose a failure, searches for the documented wording, and finds no match.
     """
 
-    MESSAGES = ("Invalid YAML in",
-                "Calibration file not found",
-                "must be a list of calibration points")
-    MANUALS = [("docs/user_manual_en.md", "## 22. Troubleshooting"),
-               ("docs/user_manual_zh.md", "## 22. \u6545\u969c\u6392\u9664")]
+    MESSAGES = (
+        "Invalid YAML in",
+        "Calibration file not found",
+        "must be a list of calibration points",
+    )
+    MANUALS = [
+        ("docs/user_manual_en.md", "## 22. Troubleshooting"),
+        ("docs/user_manual_zh.md", "## 22. \u6545\u969c\u6392\u9664"),
+    ]
 
     def test_the_code_still_emits_these_messages(self, tmp_path):
         from beast2py.config import ConfigError, ConfigParser
@@ -420,6 +443,6 @@ class TestErrorDocumentation:
     def test_both_manuals_document_them(self, rel, heading):
         text = (REPO / rel).read_text(encoding="utf-8")
         assert heading in text, "%s has no troubleshooting section" % rel
-        section = text[text.index(heading):]
+        section = text[text.index(heading) :]
         missing = [m for m in self.MESSAGES if m not in section]
         assert not missing, "%s does not document: %s" % (rel, missing)

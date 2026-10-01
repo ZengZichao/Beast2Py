@@ -137,15 +137,18 @@ class TestPriorCoverageRule:
     def test_continuous_parameter_without_a_prior_is_refused(self):
         xml = self._xml(
             '<parameter id="x" spec="beast.base.inference.parameter.RealParameter" '
-            'value="1" lower="0" estimate="true"/>')
+            'value="1" lower="0" estimate="true"/>'
+        )
         result = XMLValidator.validate(xml)
         assert not result.is_valid
         assert any("has no <Prior>" in e for e in result.errors), result.errors
 
     def test_a_continuous_parameter_with_a_prior_passes_the_rule(self):
         # non-vacuity: the same file with the prior written down is accepted
-        node = ('<parameter id="x" spec="beast.base.inference.parameter.RealParameter" '
-                'value="1" lower="0" estimate="true"/>')
+        node = (
+            '<parameter id="x" spec="beast.base.inference.parameter.RealParameter" '
+            'value="1" lower="0" estimate="true"/>'
+        )
         result = XMLValidator.validate(self._xml(node, self.PRIOR))
         assert not any("has no <Prior>" in e for e in result.errors), result.errors
 
@@ -156,6 +159,7 @@ class TestPriorCoverageRule:
             'lower="0" dimension="4" estimate="true"/> '
             '<parameter id="indicators" '
             'spec="beast.base.inference.parameter.BooleanParameter" value="0 0 0 0" '
-            'dimension="4" estimate="true"/>')
+            'dimension="4" estimate="true"/>'
+        )
         result = XMLValidator.validate(self._xml(nodes))
         assert not any("has no <Prior>" in e for e in result.errors), result.errors

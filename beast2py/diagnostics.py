@@ -165,9 +165,7 @@ class ConflictDetector:
             # identical to a pair that was evaluated and found consistent, so
             # `one_on_x` calibrations -- whose quantiles are unbounded --
             # produced a green "No conflicts detected.".
-            unclear = [
-                c.name for c, s in ((parent, stats_a), (child, stats_b)) if not s
-            ]
+            unclear = [c.name for c, s in ((parent, stats_a), (child, stats_b)) if not s]
             return [
                 Conflict(
                     conflict_type="unchecked",

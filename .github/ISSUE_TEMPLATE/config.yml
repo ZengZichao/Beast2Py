@@ -1,0 +1,12 @@
+# Chooser for the issue tracker. blank_issues_enabled stays true on purpose:
+# there is no feature-request form yet, and forcing everyone who wants to ask a
+# question or propose an idea through the bug form would be worse than asking
+# them to start from the chooser.
+blank_issues_enabled: true
+contact_links:
+  - name: Bug report
+    url: https://github.com/ZengZichao/Beast2Py/issues/new/choose
+    about: Start from the bug report form; it asks for the version, config and traceback.
+  - name: Documentation question
+    url: https://github.com/ZengZichao/Beast2Py/issues/new/choose
+    about: Start from the chooser; a documentation question is a blank issue naming the page and the section.

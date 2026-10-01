@@ -192,17 +192,26 @@ class TestOverlapCriterionIsRelativeToDefault:
     the caller asks for the absolute measure.
     """
 
-    WIDTH = 2 * 1.96 * 0.05          # each prior's own 95% interval width
+    WIDTH = 2 * 1.96 * 0.05  # each prior's own 95% interval width
 
     def _pair(self):
         from beast2py.models import CalibrationPoint, DistributionConfig
+
         return [
-            CalibrationPoint(name="A", taxa=["t1", "t2"],
-                             distribution=DistributionConfig(
-                                 type="normal", parameters={"mean": 10.0, "sigma": 0.05})),
-            CalibrationPoint(name="B", taxa=["t3", "t4"],
-                             distribution=DistributionConfig(
-                                 type="normal", parameters={"mean": 10.5, "sigma": 0.05})),
+            CalibrationPoint(
+                name="A",
+                taxa=["t1", "t2"],
+                distribution=DistributionConfig(
+                    type="normal", parameters={"mean": 10.0, "sigma": 0.05}
+                ),
+            ),
+            CalibrationPoint(
+                name="B",
+                taxa=["t3", "t4"],
+                distribution=DistributionConfig(
+                    type="normal", parameters={"mean": 10.5, "sigma": 0.05}
+                ),
+            ),
         ]
 
     @staticmethod
@@ -222,18 +231,25 @@ class TestOverlapCriterionIsRelativeToDefault:
 
     @pytest.mark.parametrize("measure", ["absolute", "both"])
     def test_absolute_criterion_applies_when_requested(self, measure):
-        out = ConflictDetector.detect_conflicts(self._pair(),
-                                                settings={"overlap_measure": measure})
+        out = ConflictDetector.detect_conflicts(self._pair(), settings={"overlap_measure": measure})
         hits = self._overlap(out)
         assert len(hits) == 1
         assert hits[0].severity == "warning"
 
     def test_relative_requested_explicitly_matches_the_default(self):
-        assert self._overlap(ConflictDetector.detect_conflicts(
-            self._pair(), settings={"overlap_measure": "relative"})) == []
+        assert (
+            self._overlap(
+                ConflictDetector.detect_conflicts(
+                    self._pair(), settings={"overlap_measure": "relative"}
+                )
+            )
+            == []
+        )
 
     def test_unknown_measure_is_rejected_not_silently_ignored(self):
         from beast2py.config import ConfigError
+
         with pytest.raises((ConfigError, ValueError)):
             ConflictDetector.detect_conflicts(
-                self._pair(), settings={"overlap_measure": "whichever"})
+                self._pair(), settings={"overlap_measure": "whichever"}
+            )

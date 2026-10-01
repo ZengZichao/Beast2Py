@@ -20,6 +20,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(ci)"
     # 屏蔽 major 升级：action 跨大版本会更换 Node 运行时
@@ -28,3 +29,10 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    # 一次升级 PR 提交所有 action 的改动。CI 依赖这些 action 的组合可用：
+    # setup-java 与 setup-python 的升级若分散在多个 PR 里，中间态的 PR
+    # 会用旧 action 跑新矩阵，容易产生无法复现的红灯。
+    groups:
+      all-github-actions-bumps:
+        patterns:
+          - "*"

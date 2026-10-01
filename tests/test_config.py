@@ -195,23 +195,24 @@ class TestNameSpellingsAreCaseInsensitive:
         return ConfigParser().parse(path)
 
     @pytest.mark.parametrize("spelling,canonical,params", TABLE_S1)
-    def test_calibration_distribution_accepts_the_printed_name(
-            self, spelling, canonical, params):
+    def test_calibration_distribution_accepts_the_printed_name(self, spelling, canonical, params):
         """Every Table S1 name resolves, including the three with underscores."""
+
         def mutate(cfg):
-            cfg["calibrations"][0]["distribution"] = {
-                "type": spelling, "parameters": params}
+            cfg["calibrations"][0]["distribution"] = {"type": spelling, "parameters": params}
+
         config = self._parse(mutate)
         assert config.calibrations[0].distribution.type == canonical
 
     @pytest.mark.parametrize("spelling", ["Strict", "STRICT", "ucln", "UCLN", "RLC", "UCE"])
     def test_clock_model_accepts_any_case(self, spelling):
         """The clock followed a different rule from the site model."""
+
         def mutate(cfg):
             cfg["partitions"][0]["clock_model"]["type"] = spelling
+
         config = self._parse(mutate)
-        assert config.partitions[0].clock_model.type.value in (
-            "strict", "ucln", "rlc", "uce")
+        assert config.partitions[0].clock_model.type.value in ("strict", "ucln", "rlc", "uce")
 
     def test_emitted_file_is_the_same_whichever_spelling_is_used(self):
         """Folding must not change what gets written for the same prior."""
@@ -219,10 +220,10 @@ class TestNameSpellingsAreCaseInsensitive:
 
         def emit(spelling):
             import yaml
+
             cfg = yaml.safe_load(TEST_CONFIG_YAML)
             cfg["alignments"][0]["file"] = str(self.tmpdir / "test.fasta")
-            cfg["calibrations"][0]["distribution"] = {
-                "type": spelling, "parameters": {"dof": 4.0}}
+            cfg["calibrations"][0]["distribution"] = {"type": spelling, "parameters": {"dof": 4.0}}
             path = self.tmpdir / ("%s.yaml" % spelling)
             path.write_text(yaml.safe_dump(cfg))
             out = self.tmpdir / ("%s.xml" % spelling)
@@ -233,9 +234,10 @@ class TestNameSpellingsAreCaseInsensitive:
 
     def test_unknown_names_are_still_rejected_with_the_valid_list(self):
         """The gate is not widened into accepting anything."""
+
         def mutate(cfg):
-            cfg["calibrations"][0]["distribution"] = {
-                "type": "bananasplit", "parameters": {}}
+            cfg["calibrations"][0]["distribution"] = {"type": "bananasplit", "parameters": {}}
+
         with pytest.raises(ConfigError) as exc:
             self._parse(mutate)
         assert "valid:" in str(exc.value)

@@ -2,14 +2,97 @@ name: CI
 
 on:
   push:
-    branches: [main, master, dev]
+    branches: [main]
   pull_request:
-    branches: [main, master]
+    branches: [main]
+
+# Cancel superseded runs on the same ref. A new push to a pull request makes
+# the previous run irrelevant, but a push to main is the release signal and is
+# always allowed to finish.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Least privilege. The repository default is already `read`; stating it here
+# means a later change to the repository default cannot silently widen this
+# workflow's token.
+permissions:
+  contents: read
 
 jobs:
+  # Lint/format/type checks are split out of the test matrix so that a style
+  # failure is reported in seconds instead of after a full test run, and so
+  # that every matrix leg tests the same code.
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Check formatting with black
+        # Settings come from [tool.black] in pyproject.toml.
+        run: black --check .
+
+      - name: Lint with flake8
+        # No command-line flags on purpose: everything is read from .flake8 so
+        # that a local run reproduces this gate exactly.
+        run: flake8 beast2py tests --count --statistics
+
+      - name: Validate the workflow files themselves
+        # A workflow can be valid YAML and still be rejected by GitHub, which
+        # then reports a run with zero jobs under the file's path rather than
+        # its name. Duplicate job display names are the easiest way to hit
+        # this, and the symptom is very hard to read from the run list.
+        run: python .github/validate_workflows.py
+
+      - name: Type-check with mypy (ratchet)
+        # mypy is advisory, not a gate. The tree has pre-existing type errors
+        # and clearing them is separate work, so instead of either ignoring
+        # mypy or failing on the backlog, this ratchet fails only when the
+        # count EXCEEDS the baseline: new type errors are caught immediately
+        # while the existing backlog may not grow.
+        #
+        # To refresh after deliberately fixing some: lower MYPY_BASELINE to the
+        # number mypy now reports.
+        env:
+          MYPY_BASELINE: 20
+        run: |
+          set -uo pipefail
+          errors="$(mypy 2>&1 | grep -cE 'error:' || true)"
+          echo "mypy reported $errors errors; baseline is $MYPY_BASELINE"
+          if [ "$errors" -gt "$MYPY_BASELINE" ]; then
+            echo "::error::mypy error count rose above the baseline ($errors > $MYPY_BASELINE)"
+            echo "Fix the new errors, or raise MYPY_BASELINE deliberately if the increase is intended."
+            mypy || true
+            exit 1
+          fi
+          if [ "$errors" -lt "$MYPY_BASELINE" ]; then
+            echo "::warning::mypy error count dropped to $errors - lower MYPY_BASELINE in .github/workflows/ci.yml to keep the ratchet tight"
+          fi
+
   test:
+    name: test (${{ matrix.os }}, py${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     strategy:
+      # The macOS runner pool is small. Without a cap, legs of this 6-way
+      # matrix get reported as `cancelled` rather than `failed`, which reads
+      # like a broken build but is only queue pressure.
+      max-parallel: 4
+      # One broken leg should not hide the state of the other five.
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12"]
@@ -21,6 +104,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -32,10 +116,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-
-      - name: Lint with flake8 (gate)
-        run: |
-          flake8 beast2py tests --count --max-line-length=100 --statistics
 
       - name: Run tests
         # -rs makes skipped tests visible: the BEAST2 integration tests in
@@ -52,10 +132,11 @@ jobs:
           fail_ci_if_error: false
 
   integration:
-    # End-to-end BEAST2 validation: installs BEAST 2.7.8 and runs the
+    # End-to-end BEAST2 validation: installs BEAST 2.7 and runs the
     # integration tests (including XMLParser validation of every example
     # config) instead of silently skipping them.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -63,6 +144,7 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -71,54 +153,60 @@ jobs:
           java-version: "17"
 
       - name: Install BEAST runtime (v2.7.7 tarball)
-        # v2.7.8 是「纯包发布」(package-only)：其 release 只含
-        # BEAST.base/app .package zip，没有任何完整运行时，官方说明为
-        # "to install, install v2.7.7 and update the BEAST.base and BEAST.app
-        # packages"。先前直接下载 BEAST.v2.7.8.Linux.tgz 恒为 404，
-        # 导致 integration job 每次都在安装步骤失败。
+        # v2.7.8 is a "package-only" release: its assets contain only the
+        # BEAST.base/app .package zips, with no complete runtime, and upstream
+        # states that to install it you install v2.7.7 and then update the
+        # BEAST.base and BEAST.app packages. Downloading BEAST.v2.7.8.Linux.tgz
+        # directly is a permanent 404, which used to fail this job at the
+        # install step on every run.
         #
-        # 因此这里装 v2.7.7 的 Linux 运行时（含 bin/beast 启动脚本与 JDK 17
-        # 兼容性已验证），再在下一步把 BEAST.base 升到 2.7.8。
+        # So: install the v2.7.7 Linux runtime (its bin/beast launcher and JDK
+        # 17 compatibility are verified), then bump the BEAST.base package in
+        # the next step.
         run: |
           set -euo pipefail
           curl -fsSL -o beast.tgz \
             https://github.com/CompEvol/beast2/releases/download/v2.7.7/BEAST.v2.7.7.Linux.x86.tgz
           tar -xzf beast.tgz
-          test -x beast/bin/beast || { echo "::error::tarball 结构异常，beast/bin/beast 不可执行"; ls -la beast/; exit 1; }
-          # 必须保持 ~/.beast/2.7/BEAST.base/<version>/lib/BEAST.base.jar 布局：
-          # beast2py/beast2_validate.sh 只按这个 glob 定位 jar。
-          # 先清空目标目录：若 2.7.7 已存在，`mv beast <dir>` 会把 beast 嵌成
-          # 2.7.7/beast/，后续所有路径都错位。
+          test -x beast/bin/beast || { echo "::error::tarball structure is wrong, beast/bin/beast is not executable"; ls -la beast/; exit 1; }
+          # The ~/.beast/2.7/BEAST.base/<version>/lib/BEAST.base.jar layout is
+          # load-bearing: beast2py/beast2_validate.sh locates the jar with
+          # exactly that glob. Clear the destination first, because when 2.7.7
+          # already exists `mv beast <dir>` nests the tree as 2.7.7/beast/ and
+          # every later path is wrong.
           DEST="$HOME/.beast/2.7/BEAST.base/2.7.7"
           mkdir -p "$HOME/.beast/2.7/BEAST.base"
           rm -rf "$DEST"
           mv beast "$DEST"
-          # tarball 里 jar 位于 lib/packages/BEAST.base.jar，而
-          # beast2py/beast2_validate.sh 只按
-          #   ~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar
-          # 这个 glob 定位 jar，匹配不上会直接 exit 2
-          # （"BEAST.base.jar not found."）。补一个符号链接对齐布局。
+          # The jar ships at lib/packages/BEAST.base.jar, but the script globs
+          # lib/BEAST.base.jar, and a miss exits 2 with
+          # "BEAST.base.jar not found.". Symlink the layout into agreement.
           if [ -f "$DEST/lib/packages/BEAST.base.jar" ] && [ ! -f "$DEST/lib/BEAST.base.jar" ]; then
             ln -s packages/BEAST.base.jar "$DEST/lib/BEAST.base.jar"
           fi
           ls -la "$DEST/lib/BEAST.base.jar"
-          # 自带 JRE 可能不完整，显式确认可执行并打印真实错误而非 exit 127
+          # The bundled JRE can be incomplete, so confirm it runs and print the
+          # real error instead of a bare exit 127.
           ls -la "$DEST/bin/beast"
           if ! "$DEST/bin/beast" -version; then
-            echo "::error::BEAST 启动脚本无法执行，打印目录结构与 JRE 状态"
+            echo "::error::the BEAST launcher cannot run; dumping tree and JRE state"
             ls -la "$DEST"
             ls -la "$DEST/jre/bin/java" 2>&1 || true
             exit 1
           fi
 
-      - name: Upgrade BEAST.base to 2.7.8
-        # 用包管理器升级 base 包，拿到 2.7.8 的实际代码变更；
-        # 失败不阻断——下方 add-on 与测试步骤会各自可见地 skip/失败。
+      - name: Verify the BEAST version this job actually validated
+        # The exact version combination is reported, because it is not the same
+        # as the "verified against BEAST2 2.7.8 only" phrasing that used to
+        # appear in the README: the runtime is 2.7.7 and only the BEAST.base
+        # package is bumped.
         run: |
           set -uo pipefail
           BEAST="$HOME/.beast/2.7/BEAST.base/2.7.7/bin/beast"
+          "$BEAST" -version || true
           "$BEAST" -get BEAST.base v2.7.8 \
-            || echo "::warning::could not upgrade BEAST.base to v2.7.8; continuing on v2.7.7 runtime"
+            || echo "::warning::could not upgrade BEAST.base to v2.7.8; continuing on the v2.7.7 runtime"
+          "$HOME/.beast/2.7/BEAST.base/2.7.7/bin/beast" -version || true
 
       - name: Install BEAST2 add-ons used by two examples (non-fatal)
         # config_bd_skyline.yaml and config_nested_sampling.yaml reference
@@ -141,16 +229,32 @@ jobs:
         run: |
           pytest tests/test_beast2_validation.py -v -rs
 
+      - name: Re-run the gate with the prebuilt classes removed
+        # beast2py/tools/classes/*.class and tools/launcher.jar are committed,
+        # and beast2_validate.sh prefers the bytecode over
+        # Beast2Validator.java. Editing the .java without recompiling therefore
+        # leaves CI validating with stale bytecode and nothing notices.
+        # Deleting the classes forces the JDK single-file source mode, so this
+        # step fails whenever the committed bytecode and the .java source have
+        # drifted apart.
+        run: |
+          rm -rf beast2py/tools/classes
+          test ! -d beast2py/tools/classes
+          echo "classes removed; the validator must now run from Beast2Validator.java"
+          pytest tests/test_beast2_validation.py -v -rs
+
   packaging:
     # The BEAST2 validation helper must be present after a
     # plain `pip install .`, otherwise validation silently degrades to
     # "executable not found" while the command still exits 0.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
       - name: Install the distribution (not the source tree)
         run: |
           python -m pip install --upgrade pip build
@@ -173,3 +277,74 @@ jobs:
         run: |
           cd /tmp
           beast2py list-models >/dev/null
+      - name: Assert the licence files ship in the wheel
+        # license-files in pyproject.toml (PEP 639) is what puts the MIT text
+        # and the LGPL-2.1 notice for the vendored BEAST2 classes into the
+        # distribution. A typo in that list would otherwise only surface on
+        # PyPI, after upload.
+        #
+        # The listing is captured before filtering on purpose: piping unzip into
+        # `grep -q` makes grep exit on the first match, which leaves unzip with
+        # a SIGPIPE, and `pipefail` then reports the whole pipeline as failed
+        # even though the match was found.
+        run: |
+          set -euo pipefail
+          listing="$(unzip -l dist/*.whl)"
+          for expected in LICENSE beast2py/tools/NOTICE beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt; do
+            if ! grep -F "licenses/$expected" <<<"$listing" >/dev/null; then
+              echo "::error::$expected is not present under dist-info/licenses in the wheel"
+              grep -i licenses <<<"$listing" || true
+              exit 1
+            fi
+            echo "ok: licenses/$expected"
+          done
+      - name: Assert the declared licence metadata is SPDX, not a deprecated table
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import email, glob, zipfile
+          whl = glob.glob("dist/*.whl")[0]
+          name = [n for n in zipfile.ZipFile(whl).namelist() if n.endswith("METADATA")][0]
+          meta = email.message_from_bytes(zipfile.ZipFile(whl).read(name))
+          print("License-Expression:", meta.get("License-Expression"))
+          assert meta.get("License-Expression"), "missing SPDX License-Expression in wheel metadata"
+          stale = [c for c in meta.get_all("Classifier") or [] if c.startswith("License ::")]
+          assert not stale, f"deprecated License :: classifiers still present: {stale}"
+          PY
+
+  # A single, stable check name for branch protection to require.
+  #
+  # Requiring the matrix legs directly would mean listing six
+  # `test (os, version)` context names, which breaks every time the matrix
+  # changes and can leave a pull request permanently unmergeable. This job
+  # aggregates all four and always reports under the same name.
+  ci-gate:
+    name: ci-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs: [lint, test, integration, packaging]
+    steps:
+      - name: Assert every required job succeeded
+        run: |
+          set -euo pipefail
+          failed=0
+          for result in \
+            "lint=${{ needs.lint.result }}" \
+            "test=${{ needs.test.result }}" \
+            "integration=${{ needs.integration.result }}" \
+            "packaging=${{ needs.packaging.result }}"; do
+            name="${result%%=*}"
+            value="${result#*=}"
+            if [ "$value" != "success" ]; then
+              echo "::error::required job '$name' finished as '$value'"
+              failed=1
+            else
+              echo "ok: $name"
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            echo "The ci-gate check is what branch protection requires on main."
+            exit 1
+          fi
+          echo "All required jobs succeeded."

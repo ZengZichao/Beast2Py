@@ -208,9 +208,7 @@ class FingerprintGenerator:
             # The sidecar used to certify only the YAML, so a hand-edited XML --
             # or a regression in the writer -- still "matched" its fingerprint.
             # What BEAST2 actually runs is the XML.
-            result["xml_digest"] = hashlib.sha256(
-                xml_content.encode("utf-8")
-            ).hexdigest()
+            result["xml_digest"] = hashlib.sha256(xml_content.encode("utf-8")).hexdigest()
         return result
 
     @staticmethod
@@ -292,9 +290,11 @@ class MethodsGenerator:
                 lines.append("% " + full.replace(" & ", " and "))
         if not lines:
             return ""
-        return ("\n\n% Cited author-year keys. The reference list must name every author and"
-                "\n% give the full title, so expand each line below into full references:\n"
-                + "\n".join(lines))
+        return (
+            "\n\n% Cited author-year keys. The reference list must name every author and"
+            "\n% give the full title, so expand each line below into full references:\n"
+            + "\n".join(lines)
+        )
 
     @staticmethod
     def generate_methods(config: BEASTConfig) -> str:
@@ -606,7 +606,8 @@ class PipelineGenerator:
         seq_files = sorted({a.source_file for a in config.all_alignments if a.source_file})
         if seq_files:
             seq_list = ",\n            ".join(
-                repr(_relative_to(str(f), str(output_dir))) for f in seq_files)
+                repr(_relative_to(str(f), str(output_dir))) for f in seq_files
+            )
             seq_input = ",\n        sequences = [\n            " + seq_list + "\n        ]"
         else:
             seq_input = ""

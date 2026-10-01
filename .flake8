@@ -1,0 +1,14 @@
+[flake8]
+# Single source of truth for lint settings.
+#
+# These values were previously passed only on the CI command line
+# (`flake8 beast2py tests --count --max-line-length=100`), which meant a local
+# run could never reproduce the gate. CI now runs a bare `flake8 beast2py tests`
+# and reads everything from here.
+max-line-length = 100
+
+# E203 (whitespace before ':') is emitted by black's slice formatting
+# (`ham[lower : upper + 1]`). black already guarantees exactly one space there,
+# so the check is both redundant and unsatisfiable alongside it. pycodestyle
+# does not ignore E203 by default, hence the explicit entry.
+extend-ignore = E203

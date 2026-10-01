@@ -311,9 +311,7 @@ class XMLValidator:
             try:
                 store_value = int(store)
             except ValueError:
-                result.add_error(
-                    f"<run storeEvery='{store}'>: must be an integer"
-                )
+                result.add_error(f"<run storeEvery='{store}'>: must be an integer")
                 continue
             if store_value == 0:
                 result.add_error(
@@ -501,9 +499,8 @@ class XMLValidator:
                     # contain the substring "not found" that the status
                     # heuristic used to rely on.
                     output = f"SETUP-ERROR: {output}"
-                success = (
-                    result.returncode == 0
-                    and XMLValidator._beast2_reported_valid(result.stdout)
+                success = result.returncode == 0 and XMLValidator._beast2_reported_valid(
+                    result.stdout
                 )
                 return success, output
             except subprocess.TimeoutExpired:
