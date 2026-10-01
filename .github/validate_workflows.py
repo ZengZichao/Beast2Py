@@ -111,6 +111,19 @@ def validate(path: pathlib.Path) -> list[str]:
         if unknown:
             problems.append(f"job {job_id!r} has unknown keys: {sorted(unknown)}")
 
+        # A job-level `if` is evaluated before the job starts and gets only the
+        # github / needs / vars / inputs contexts. Referencing `secrets` there
+        # makes GitHub reject the entire workflow file: the workflow is then
+        # registered under its path instead of its `name`, and every push
+        # produces a run with zero jobs. `secrets` is fine in a *step*-level
+        # `if`, which is where the check belongs.
+        job_if = job.get("if")
+        if isinstance(job_if, str) and "secrets" in job_if:
+            problems.append(
+                f"job {job_id!r} uses the secrets context in a job-level 'if'; "
+                "move the condition to a step, or use a repository variable"
+            )
+
         # A job must either declare its own runner or reuse a reusable workflow.
         if "uses" not in job and "runs-on" not in job:
             problems.append(f"job {job_id!r} has neither 'runs-on' nor 'uses'")
