@@ -5,6 +5,7 @@
 [English](README.md) | 中文
 
 [![CI](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23088756.svg)](https://doi.org/10.5281/zenodo.23088756)
 [![许可证: MIT AND LGPL-2.1-only](https://img.shields.io/badge/许可证-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![BEAST2 2.7.x](https://img.shields.io/badge/BEAST2-2.7.x-orange.svg)](https://www.beast2.org/)
@@ -299,14 +300,16 @@ Beast2Py 的差异点在于把以下能力整合为一条配置阶段流水线�
 
 如果你在研究中使用 Beast2Py，请引用本软件：
 
-> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.1. https://github.com/ZengZichao/Beast2Py
+> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.1. Zenodo. https://doi.org/10.5281/zenodo.23088757
 
 机器可读的引用元数据见 [CITATION.cff](CITATION.cff)。
 
-**目前还没有 Zenodo DOI。** 仓库里提交了 `.zenodo.json` 用于描述归档所需的元数据，但该文件本身
-不会自动产生归档：需要维护者先在 Zenodo 侧连接并启用本仓库，之后发布的 GitHub release 才会被
-归档；这一步尚未完成，因此 v0.1.1 没有分配到 DOI。在 DOI 出现之前，请按上面的格式引用 release
-tag。归档流程见 `CONTRIBUTING.md`。
+仓库已在 Zenodo 归档。概念 DOI
+[10.5281/zenodo.23088756](https://doi.org/10.5281/zenodo.23088756) 始终指向最新归档版本；
+v0.1.1 的版本 DOI 为
+[10.5281/zenodo.23088757](https://doi.org/10.5281/zenodo.23088757)。此后每个 GitHub release
+都会自动归档并获得各自的版本 DOI——默认引用概念 DOI，需要锁定版本时引用对应版本 DOI。两者均已
+录入 [CITATION.cff](CITATION.cff)。
 
 ## 开发
 

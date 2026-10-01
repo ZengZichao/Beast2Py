@@ -5,6 +5,7 @@
 English | [中文文档](README_zh.md)
 
 [![CI](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23088756.svg)](https://doi.org/10.5281/zenodo.23088756)
 [![License: MIT AND LGPL-2.1-only](https://img.shields.io/badge/License-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![BEAST2 2.7.x](https://img.shields.io/badge/BEAST2-2.7.x-orange.svg)](https://www.beast2.org/)
@@ -316,16 +317,17 @@ The package is MIT; the bundled BEAST2 package-management classes are LGPL-2.1 (
 
 If you use Beast2Py in your research, please cite the software:
 
-> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.1. https://github.com/ZengZichao/Beast2Py
+> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.1. Zenodo. https://doi.org/10.5281/zenodo.23088757
 
 Machine-readable citation metadata is available in [CITATION.cff](CITATION.cff).
 
-**There is no Zenodo DOI yet.** A `.zenodo.json` file is committed and describes the
-software for an archive, but the file on its own does not create one: the repository has
-to be connected to Zenodo and enabled there by the maintainer before a GitHub release is
-archived, and that has not been done, so no DOI has been minted for v0.1.1. Until one
-exists, please cite the release tag as shown above. See `CONTRIBUTING.md` for the
-archiving procedure.
+The repository is archived on Zenodo. The concept DOI
+[10.5281/zenodo.23088756](https://doi.org/10.5281/zenodo.23088756) always resolves to
+the latest archived version; v0.1.1 is archived as
+[10.5281/zenodo.23088757](https://doi.org/10.5281/zenodo.23088757). Every GitHub
+release is archived automatically and receives its own version DOI — cite the concept
+DOI by default, or the version DOI when you need to pin a version. Both are recorded
+in [CITATION.cff](CITATION.cff).
 
 ## Development
 

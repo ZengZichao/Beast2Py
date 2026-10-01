@@ -231,18 +231,21 @@ git push origin main --tags
 
 ### Archiving a release on Zenodo
 
-**No Zenodo DOI has been minted yet.** A `.zenodo.json` file in the repository does not by
-itself create an archive; the repository has to be connected to Zenodo and enabled there
-first, and that has not been done. To set it up:
+Archiving is live: the GitHub integration is enabled and every published release is
+archived automatically. The concept DOI is
+[10.5281/zenodo.23088756](https://doi.org/10.5281/zenodo.23088756) (it always resolves
+to the latest archived version) and each version gets its own version-specific DOI
+(v0.1.1 is [10.5281/zenodo.23088757](https://doi.org/10.5281/zenodo.23088757)).
+After each release:
 
-1. Sign in to Zenodo and, under your account settings, enable the GitHub integration and
-   then enable this repository.
-2. Publish a GitHub release. Zenodo archives the source at that tag and mints both a
-   concept DOI and a version-specific DOI.
-3. Copy the version-specific DOI badge into `README.md` and `README_zh.md`, and record the
-   DOI in `CITATION.cff` under `identifiers`.
+1. Confirm the new record appeared on Zenodo (the release job in `release.yml` does
+   not wait for it; archiving usually lands within minutes of publishing).
+2. Record the new version-specific DOI in `CITATION.cff` under `identifiers`.
+3. The DOI badge in `README.md` and `README_zh.md` carries the concept DOI, so it
+   needs no per-release update.
 
-Until a DOI exists, cite the release tag as shown in the README.
+The badge and the citation guidance in the READMEs point at the concept DOI; cite the
+version-specific DOI only when a version must be pinned.
 
 ### Publishing to PyPI
 
