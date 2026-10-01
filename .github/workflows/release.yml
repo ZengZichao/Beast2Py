@@ -115,7 +115,11 @@ jobs:
             beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt \
             beast2py/tools/Beast2Validator.java \
             beast2py/tools/launcher.jar; do
-            if ! grep -q "package/$expected" /tmp/sdist.txt; then
+            # setuptools prefixes every sdist member with the versioned top
+            # directory (beast2py-<version>/...), so the match must not anchor
+            # to a literal "package/" prefix — anchor on a path boundary and
+            # the end of the member name instead.
+            if ! grep -qE "(^|/)${expected}\$" /tmp/sdist.txt; then
               echo "::error::$expected is missing from the sdist"
               exit 1
             fi
