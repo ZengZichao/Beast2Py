@@ -163,13 +163,16 @@ jobs:
     environment: pypi
     permissions:
       contents: read
-    # The upload is gated per step rather than with a job-level `if`, and there
-    # is only one job instead of two mutually exclusive ones. `secrets` is not
-    # in the context list available to a job-level `if` (that position gets
-    # github / needs / vars / inputs only), so gating the job itself makes
-    # GitHub reject the whole workflow file - it then reports the workflow by
-    # file path instead of by name, with a run containing zero jobs. Step-level
-    # `if` does allow `secrets`.
+    # Opt-in, and deliberately keyed on a repository *variable* rather than on
+    # the token itself: GitHub rejects the entire workflow file if `secrets`
+    # appears in any `if` expression, at job level or step level. Only github /
+    # needs / vars / inputs are available there. `secrets` is fine in `env`,
+    # `run` and `with`, which is where the publish action picks the token up
+    # from.
+    #
+    # To enable: add a PYPI_API_TOKEN secret, then set the repository variable
+    # PYPI_PUBLISH=true.
+    if: ${{ vars.PYPI_PUBLISH == 'true' }}
     steps:
       # Rebuilt from the same tag rather than downloaded as an artifact: the
       # sdist and wheel must correspond to the source in this ref, and
@@ -183,22 +186,26 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Rebuild
-        if: ${{ secrets.PYPI_API_TOKEN != '' }}
         run: |
           python -m pip install --upgrade pip build
           python -m build
-      - name: Upload to PyPI
-        if: ${{ secrets.PYPI_API_TOKEN != '' }}
-        uses: pypa/gh-action-pypi-publish@release/v1
-      - name: Report that PyPI publishing is not configured
-        # Beast2Py has never been published to PyPI. This must never be the
-        # reason a release fails, so the absence of the secret is a notice
-        # rather than an error, and the GitHub release from the build job still
-        # stands.
-        if: ${{ secrets.PYPI_API_TOKEN == '' }}
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  pypi-not-enabled:
+    name: report that PyPI publishing is not enabled
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: ${{ vars.PYPI_PUBLISH != 'true' }}
+    steps:
+      # Beast2Py has never been published to PyPI, and this must never be the
+      # reason a release fails. A dedicated job rather than a conditional step
+      # keeps the notice visible in the run list.
+      - name: Report that PyPI publishing is not enabled
         run: |
-          echo "::notice title=PyPI publishing skipped::No PYPI_API_TOKEN secret is configured for this"
-          echo "::notice::repository, so nothing was uploaded to PyPI. The GitHub release was still"
-          echo "::notice::created by the build job. Publishing is on the project roadmap; see"
+          echo "::notice title=PyPI publishing skipped::The repository variable PYPI_PUBLISH is not"
+          echo "::notice::set to 'true', so nothing was uploaded to PyPI. The GitHub release was"
+          echo "::notice::still created by the build job. Publishing is on the project roadmap; see"
           echo "::notice::CONTRIBUTING.md for how to enable it."
+
 

@@ -111,17 +111,19 @@ def validate(path: pathlib.Path) -> list[str]:
         if unknown:
             problems.append(f"job {job_id!r} has unknown keys: {sorted(unknown)}")
 
-        # A job-level `if` is evaluated before the job starts and gets only the
-        # github / needs / vars / inputs contexts. Referencing `secrets` there
-        # makes GitHub reject the entire workflow file: the workflow is then
-        # registered under its path instead of its `name`, and every push
-        # produces a run with zero jobs. `secrets` is fine in a *step*-level
-        # `if`, which is where the check belongs.
+        # GitHub rejects the whole workflow file if `secrets` appears in any
+        # `if` expression, at job level or step level, quoted or not. Only the
+        # github / needs / vars / inputs contexts are available there. The
+        # symptom is distinctive and very hard to read from the run list: the
+        # workflow gets registered under its file path instead of its `name`,
+        # and every push produces a run containing zero jobs.
+        #
+        # `secrets` is fine in `env`, `run` and `with`.
         job_if = job.get("if")
         if isinstance(job_if, str) and "secrets" in job_if:
             problems.append(
                 f"job {job_id!r} uses the secrets context in a job-level 'if'; "
-                "move the condition to a step, or use a repository variable"
+                "use a repository variable, or move the condition to a step"
             )
 
         # A job must either declare its own runner or reuse a reusable workflow.
@@ -146,6 +148,13 @@ def validate(path: pathlib.Path) -> list[str]:
                 problems.append(f"job {job_id!r} step {i} has unknown keys: {sorted(unknown)}")
             if ("uses" in step) == ("run" in step):
                 problems.append(f"job {job_id!r} step {i} must set exactly one of 'uses' or 'run'")
+            step_if = step.get("if")
+            if isinstance(step_if, str) and "secrets" in step_if:
+                problems.append(
+                    f"job {job_id!r} step {i} uses the secrets context in 'if'; "
+                    "GitHub rejects the entire file for this, so gate on a "
+                    "repository variable instead"
+                )
 
     return problems
 
