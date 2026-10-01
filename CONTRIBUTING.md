@@ -28,7 +28,9 @@ python -m pip install --upgrade pip
 pip install -e ".[dev]"
 ```
 
-The `dev` extra installs pytest, pytest-cov, black, flake8 and mypy. Python 3.10
+The `dev` extra installs pytest, pytest-cov, flake8, black, mypy and types-PyYAML, all
+pinned to exact versions. The pins are deliberate: these tools decide whether the CI gate
+passes, so a silent minor bump must not be able to turn a green build red. Python 3.10
 or newer is required. Everything except the optional BEAST2 validation gate is
 pure Python, so a plain virtualenv is enough. To confirm the install, run
 `beast2py --version` and `beast2py list-models`; without the console script,
@@ -36,12 +38,16 @@ pure Python, so a plain virtualenv is enough. To confirm the install, run
 
 ## Before you open a pull request
 
-Run these three things. They mirror what CI enforces.
+These mirror what CI enforces. `main` is protected, and the `ci-gate` check has to pass
+before anything can merge, so a red local run is a red pull request.
 
-1. Lint — a hard gate in CI, not a suggestion:
+1. Formatting and lint — both hard gates in CI. flake8 reads its settings from
+   `.flake8`, so pass no command-line flags; the 100-column limit used to live only in
+   the CI command and could not be reproduced locally.
 
    ```bash
-   flake8 beast2py tests --max-line-length=100
+   black --check .
+   flake8 beast2py tests
    ```
 
 2. The test suite. Keep `-rs`, which prints the reason for every skipped test.
@@ -51,7 +57,26 @@ Run these three things. They mirror what CI enforces.
    pytest tests/ -v -rs --cov=beast2py
    ```
 
-3. The BEAST2 integration tests, if you have BEAST2 2.7.x and JDK 17 or newer.
+3. The workflow files, if you touched anything under `.github/workflows/`:
+
+   ```bash
+   python .github/validate_workflows.py
+   ```
+
+   This catches workflows that are valid YAML but that GitHub will not accept — most
+   easily two jobs sharing a display name, which GitHub reports as a run with zero jobs
+   under the file's path rather than under the workflow name.
+
+4. Types, if you touched `beast2py/`. mypy is advisory in CI and gated by a ratchet: it
+   fails only if the error count rises above the current baseline of 20, recorded as
+   `MYPY_BASELINE` in `.github/workflows/ci.yml`. So running it locally and keeping the
+   count flat is enough; you are not expected to fix the existing backlog:
+
+   ```bash
+   mypy
+   ```
+
+5. The BEAST2 integration tests, if you have BEAST2 2.7.x and JDK 17 or newer.
    The 21 tests in `tests/test_beast2_validation.py` generate XML for all 19
    example configurations and check it against the real BEAST2 `XMLParser`.
    Without a BEAST2 install they skip rather than fail, so such a run proves

@@ -186,7 +186,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   pypi-not-configured:
-    name: publish to PyPI
+    name: report that PyPI publishing is not configured
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 5

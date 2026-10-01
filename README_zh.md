@@ -213,6 +213,7 @@ print(models["substitution_models"])
 - `pyproject.toml` — 包构建与依赖配置
 - `.flake8` — 本地与 CI 共用的 lint 配置，使 `flake8 beast2py tests` 在两处行为一致
 - `.github/workflows/` — `ci.yml`（lint、测试矩阵、BEAST2 集成、打包，以及供分支保护要求的聚合检查 `ci-gate`）、`codeql.yml`、`release.yml`
+- `.github/validate_workflows.py` — 对工作流文件本身做结构校验，已作为 CI 的一步运行
 - `CONTRIBUTING.md` — 开发环境搭建、CI 实际强制的提交前检查，以及发版流程
 - `CHANGELOG.md` — 版本历史
 - `SECURITY.md` — 如何私下报告安全问题

@@ -50,6 +50,13 @@ jobs:
         # that a local run reproduces this gate exactly.
         run: flake8 beast2py tests --count --statistics
 
+      - name: Validate the workflow files themselves
+        # A workflow can be valid YAML and still be rejected by GitHub, which
+        # then reports a run with zero jobs under the file's path rather than
+        # its name. Duplicate job display names are the easiest way to hit
+        # this, and the symptom is very hard to read from the run list.
+        run: python .github/validate_workflows.py
+
       - name: Type-check with mypy (ratchet)
         # mypy is advisory, not a gate. The tree has pre-existing type errors
         # and clearing them is separate work, so instead of either ignoring

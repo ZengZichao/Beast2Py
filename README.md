@@ -217,6 +217,7 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 - `pyproject.toml` — Package build and dependency configuration
 - `.flake8` — Lint settings shared by local runs and CI, so `flake8 beast2py tests` behaves identically in both
 - `.github/workflows/` — `ci.yml` (lint, test matrix, BEAST2 integration, packaging, and the aggregating `ci-gate` check that branch protection requires), `codeql.yml`, `release.yml`
+- `.github/validate_workflows.py` — Structural check for the workflow files themselves, run as part of CI
 - `CONTRIBUTING.md` — Development setup, the pre-commit checks CI enforces, and the release procedure
 - `CHANGELOG.md` — Release history
 - `SECURITY.md` — How to report a vulnerability privately
