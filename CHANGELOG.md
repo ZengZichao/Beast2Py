@@ -12,13 +12,23 @@ observed behaviour even if no API changes.
 
 ## [Unreleased]
 
-Maintenance only. No user-facing behaviour change is recorded here yet.
+Nothing recorded yet.
+
+## [0.1.1] - 2026-10-02
+
+Maintenance release: no change to generated BEAST2 XML semantics, validation
+rules, or the Python API. Tag and release
+[v0.1.1](https://github.com/ZengZichao/Beast2Py/releases/tag/v0.1.1), published
+2026-10-02.
 
 ### Added
 
 - A structured bug report issue form, a pull request template, and a changelog.
 - A security disclosure policy (`SECURITY.md`) and a `CODEOWNERS` file naming the
   sole maintainer.
+- The tag-to-release path is now fully automatic: when a tag push finds no
+  existing GitHub release, the Release workflow creates one and attaches the
+  built sdist and wheel.
 
 ### Changed
 
@@ -41,10 +51,16 @@ Maintenance only. No user-facing behaviour change is recorded here yet.
   registering the repository as a trusted publisher on pypi.org and setting
   the `PYPI_PUBLISH` variable, with no long-lived token to rotate. The
   publish action is pinned to a commit SHA.
+- Version strings across docs, example configurations and docstrings updated
+  to this release.
 
 ### Fixed
 
-- None yet.
+- `ConfigParser` hardcoded `"0.1.0"` as the default `metadata.tool_version`,
+  bypassing `beast2py.__version__` (the declared single source of truth), so
+  fingerprints kept a stale version suffix after any release bump. The default
+  now reads `__version__`, and the committed basic-example XML, fingerprint
+  sidecar and methods paragraph were regenerated with it.
 
 ## [0.1.0] - 2026-09-30
 
@@ -111,5 +127,6 @@ First public release. Tag and release
 - No validation gate can tell you whether a model answers your biological
   question. A model that initialises cleanly may still be the wrong model.
 
-[Unreleased]: https://github.com/ZengZichao/Beast2Py/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ZengZichao/Beast2Py/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/ZengZichao/Beast2Py/releases/tag/v0.1.1
 [0.1.0]: https://github.com/ZengZichao/Beast2Py/releases/tag/v0.1.0
