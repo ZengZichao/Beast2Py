@@ -31,6 +31,11 @@ Maintenance only. No user-facing behaviour change is recorded here yet.
   and licence text continue to ship with it.
 - Documentation: contributor and security pages added. Documentation remains
   bilingual, so every `docs/*_en.md` change is mirrored in `docs/*_zh.md`.
+- CI moved off the deprecated Node 20 runtime: the pinned `actions/checkout`,
+  `actions/setup-python`, `actions/setup-java` and `codecov/codecov-action`
+  are bumped to their current major versions across all three workflows.
+  Major bumps stay excluded from Dependabot, so this was done deliberately
+  and verified by the CI gate.
 
 ### Fixed
 
