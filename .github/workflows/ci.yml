@@ -128,7 +128,9 @@ jobs:
         uses: codecov/codecov-action@v7
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         with:
-          file: ./coverage.xml
+          # v5+ renamed the input from `file` to `files`; the old name is
+          # rejected with a warning and the report is only found by accident.
+          files: ./coverage.xml
           fail_ci_if_error: false
 
   integration:
