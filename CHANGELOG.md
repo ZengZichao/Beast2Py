@@ -12,7 +12,14 @@ observed behaviour even if no API changes.
 
 ## [Unreleased]
 
-Nothing recorded yet.
+### Added
+
+- Zenodo archiving is live: the concept DOI is
+  [10.5281/zenodo.23088756](https://doi.org/10.5281/zenodo.23088756) and v0.1.1 is
+  archived as [10.5281/zenodo.23088757](https://doi.org/10.5281/zenodo.23088757).
+  Both DOIs are recorded in `CITATION.cff`; the READMEs (en/zh) carry a concept-DOI
+  badge and updated citation guidance, and `CONTRIBUTING.md` documents the
+  per-release archiving checks.
 
 ## [0.1.1] - 2026-10-02
 
