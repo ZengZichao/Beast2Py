@@ -152,6 +152,11 @@ jobs:
           fi
           gh release upload "$GITHUB_REF_NAME" dist/* --clobber
           echo "Attached to https://github.com/$GITHUB_REPOSITORY/releases/tag/$GITHUB_REF_NAME"
+        env:
+          # The job already carries `permissions: contents: write`; without
+          # this the runner's gh has no credentials at all and every call
+          # exits 4 ("set the GH_TOKEN environment variable").
+          GH_TOKEN: ${{ github.token }}
 
       - name: Summarise what was released
         run: |
