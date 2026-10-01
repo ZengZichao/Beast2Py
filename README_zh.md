@@ -250,7 +250,7 @@ print(models["substitution_models"])
 
 Beast2Py 生成以下可重复性制品：
 
-- **分析指纹** — 确定性标识符 `B2P-{sha256(config)[:12]}-{version}`（例如 `B2P-04ab3d09277b-0.1.0`）。其中**不含日期分量**，因此同一配置加同一比对数据，在任何时区、任何时刻重跑都得到相同的字节与相同的标识符。只改输出文件名不会改变指纹；序列内容、树设置、冠群/茎群标志、超先验、参数先验、末端日期、算子权重，任何一项变化都会改变指纹
+- **分析指纹** — 确定性标识符 `B2P-{sha256(config)[:12]}-{version}`（例如 `B2P-0d0a573b1298-0.1.1`）。其中**不含日期分量**，因此同一配置加同一比对数据，在任何时区、任何时刻重跑都得到相同的字节与相同的标识符。只改输出文件名不会改变指纹；序列内容、树设置、冠群/茎群标志、超先验、参数先验、末端日期、算子权重，任何一项变化都会改变指纹
 - **数据摘要** — XML 注释里除标识符外还带一个独立的摘要：16 位十六进制，覆盖比对的**内容**。生成时刻的墙钟时间只出现在 `.fingerprint.json` 侧车文件里，绝不写进 XML
 - **LaTeX 方法学描述** — 可直接用于论文的方法学段落
 - **Snakemake/Nextflow 管道** — 端到端可重复工作流文件
@@ -299,13 +299,13 @@ Beast2Py 的差异点在于把以下能力整合为一条配置阶段流水线�
 
 如果你在研究中使用 Beast2Py，请引用本软件：
 
-> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.0. https://github.com/ZengZichao/Beast2Py
+> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.1. https://github.com/ZengZichao/Beast2Py
 
 机器可读的引用元数据见 [CITATION.cff](CITATION.cff)。
 
 **目前还没有 Zenodo DOI。** 仓库里提交了 `.zenodo.json` 用于描述归档所需的元数据，但该文件本身
 不会自动产生归档：需要维护者先在 Zenodo 侧连接并启用本仓库，之后发布的 GitHub release 才会被
-归档；这一步尚未完成，因此 v0.1.0 没有分配到 DOI。在 DOI 出现之前，请按上面的格式引用 release
+归档；这一步尚未完成，因此 v0.1.1 没有分配到 DOI。在 DOI 出现之前，请按上面的格式引用 release
 tag。归档流程见 `CONTRIBUTING.md`。
 
 ## 开发
