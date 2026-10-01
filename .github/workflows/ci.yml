@@ -70,13 +70,55 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install BEAST 2.7.8
+      - name: Install BEAST runtime (v2.7.7 tarball)
+        # v2.7.8 是「纯包发布」(package-only)：其 release 只含
+        # BEAST.base/app .package zip，没有任何完整运行时，官方说明为
+        # "to install, install v2.7.7 and update the BEAST.base and BEAST.app
+        # packages"。先前直接下载 BEAST.v2.7.8.Linux.tgz 恒为 404，
+        # 导致 integration job 每次都在安装步骤失败。
+        #
+        # 因此这里装 v2.7.7 的 Linux 运行时（含 bin/beast 启动脚本与 JDK 17
+        # 兼容性已验证），再在下一步把 BEAST.base 升到 2.7.8。
         run: |
-          curl -L -o beast.tgz \
-            https://github.com/CompEvol/beast2/releases/download/v2.7.8/BEAST.v2.7.8.Linux.tgz
+          set -euo pipefail
+          curl -fsSL -o beast.tgz \
+            https://github.com/CompEvol/beast2/releases/download/v2.7.7/BEAST.v2.7.7.Linux.x86.tgz
           tar -xzf beast.tgz
-          mkdir -p ~/.beast/2.7/BEAST.base
-          mv beast ~/.beast/2.7/BEAST.base/2.7.8
+          test -x beast/bin/beast || { echo "::error::tarball 结构异常，beast/bin/beast 不可执行"; ls -la beast/; exit 1; }
+          # 必须保持 ~/.beast/2.7/BEAST.base/<version>/lib/BEAST.base.jar 布局：
+          # beast2py/beast2_validate.sh 只按这个 glob 定位 jar。
+          # 先清空目标目录：若 2.7.7 已存在，`mv beast <dir>` 会把 beast 嵌成
+          # 2.7.7/beast/，后续所有路径都错位。
+          DEST="$HOME/.beast/2.7/BEAST.base/2.7.7"
+          mkdir -p "$HOME/.beast/2.7/BEAST.base"
+          rm -rf "$DEST"
+          mv beast "$DEST"
+          # tarball 里 jar 位于 lib/packages/BEAST.base.jar，而
+          # beast2py/beast2_validate.sh 只按
+          #   ~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar
+          # 这个 glob 定位 jar，匹配不上会直接 exit 2
+          # （"BEAST.base.jar not found."）。补一个符号链接对齐布局。
+          if [ -f "$DEST/lib/packages/BEAST.base.jar" ] && [ ! -f "$DEST/lib/BEAST.base.jar" ]; then
+            ln -s packages/BEAST.base.jar "$DEST/lib/BEAST.base.jar"
+          fi
+          ls -la "$DEST/lib/BEAST.base.jar"
+          # 自带 JRE 可能不完整，显式确认可执行并打印真实错误而非 exit 127
+          ls -la "$DEST/bin/beast"
+          if ! "$DEST/bin/beast" -version; then
+            echo "::error::BEAST 启动脚本无法执行，打印目录结构与 JRE 状态"
+            ls -la "$DEST"
+            ls -la "$DEST/jre/bin/java" 2>&1 || true
+            exit 1
+          fi
+
+      - name: Upgrade BEAST.base to 2.7.8
+        # 用包管理器升级 base 包，拿到 2.7.8 的实际代码变更；
+        # 失败不阻断——下方 add-on 与测试步骤会各自可见地 skip/失败。
+        run: |
+          set -uo pipefail
+          BEAST="$HOME/.beast/2.7/BEAST.base/2.7.7/bin/beast"
+          "$BEAST" -get BEAST.base v2.7.8 \
+            || echo "::warning::could not upgrade BEAST.base to v2.7.8; continuing on v2.7.7 runtime"
 
       - name: Install BEAST2 add-ons used by two examples (non-fatal)
         # config_bd_skyline.yaml and config_nested_sampling.yaml reference
@@ -85,7 +127,7 @@ jobs:
         # SKIP (visible via -rs), which must never be read as a pass: the
         # add-on-dependent specs are otherwise unverified in CI.
         run: |
-          BEAST=~/.beast/2.7/BEAST.base/2.7.8/beast/bin/beast
+          BEAST="$HOME/.beast/2.7/BEAST.base/2.7.7/bin/beast"
           "$BEAST" -get BDSKY v1.5.1 || echo "::warning::BDSKY add-on not installed; bd_skyline example will be skipped"
           "$BEAST" -get NS || echo "::warning::nested-sampling add-on not installed; nested_sampling example will be skipped"
           ls ~/.beast/2.7 || true

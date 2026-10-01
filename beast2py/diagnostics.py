@@ -798,7 +798,10 @@ class ReportGenerator:
     <meta charset="UTF-8">
     <title>Beast2Py Diagnostic Report</title>
     <style>
-        body {{ font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; background: #f8f9fa; color: #333; }}
+        body {{
+          font-family: 'Segoe UI', Arial, sans-serif;
+          margin: 20px; background: #f8f9fa; color: #333;
+        }}
         h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
         h2 {{ color: #2c3e50; margin-top: 30px; }}
         .section {{ background: white; padding: 20px; margin: 15px 0; border-radius: 8px;
@@ -825,7 +828,8 @@ class ReportGenerator:
     <div class="section">
         <h2>1. Analysis Overview</h2>
         <p><strong>Analysis:</strong> {html.escape(config.metadata.get('analysis_name', 'N/A'))}</p>
-        <p><strong>Description:</strong> {html.escape(config.metadata.get('analysis_description', 'N/A'))}</p>
+        <p><strong>Description:</strong>
+           {html.escape(config.metadata.get('analysis_description', 'N/A'))}</p>
         <p><strong>Partitions:</strong> {len(config.partitions)}</p>
         <p><strong>Calibration points:</strong> {len(config.calibrations)}</p>
         <p><strong>Tree prior:</strong> {config.tree_prior_type.value}</p>
@@ -837,7 +841,9 @@ class ReportGenerator:
             <div class="stat-label">Errors</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number {'stat-warnings' if n_warnings else 'stat-ok'}">{n_warnings}</div>
+            <div class="stat-number
+                 {'stat-warnings' if n_warnings else 'stat-ok'}">
+              {n_warnings}</div>
             <div class="stat-label">Warnings</div>
         </div>
         <div class="stat-card">
