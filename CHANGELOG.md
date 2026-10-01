@@ -36,6 +36,11 @@ Maintenance only. No user-facing behaviour change is recorded here yet.
   are bumped to their current major versions across all three workflows.
   Major bumps stay excluded from Dependabot, so this was done deliberately
   and verified by the CI gate.
+- The opt-in PyPI publish job authenticates via Trusted Publishing (OIDC)
+  instead of a stored `PYPI_API_TOKEN`: enabling publication now means
+  registering the repository as a trusted publisher on pypi.org and setting
+  the `PYPI_PUBLISH` variable, with no long-lived token to rotate. The
+  publish action is pinned to a commit SHA.
 
 ### Fixed
 

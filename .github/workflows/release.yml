@@ -6,9 +6,10 @@ name: Release
 # builds and attaches, and refuses to proceed when the version numbers in the
 # tree disagree with the tag.
 #
-# Publishing to PyPI is included but conditional: it only runs when a
-# `PYPI_API_TOKEN` repository secret exists, so it cannot break a release that
-# is not yet configured for PyPI.
+# Publishing to PyPI is included but conditional: it only runs when the
+# `PYPI_PUBLISH` repository variable is set to `true`, and it authenticates via
+# Trusted Publishing (OIDC) — no API token is stored in the repository — so it
+# cannot break a release that is not yet configured for PyPI.
 on:
   push:
     tags: ["v*"]
@@ -161,17 +162,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: pypi
+    # `id-token: write` is what lets the publish action mint an OIDC token for
+    # PyPI Trusted Publishing. No API token is stored in this repository at
+    # all; PyPI validates the token against the trusted-publisher entry that
+    # must be registered on pypi.org for this repo, workflow and environment.
     permissions:
       contents: read
-    # Opt-in, and deliberately keyed on a repository *variable* rather than on
-    # the token itself: GitHub rejects the entire workflow file if `secrets`
-    # appears in any `if` expression, at job level or step level. Only github /
-    # needs / vars / inputs are available there. `secrets` is fine in `env`,
-    # `run` and `with`, which is where the publish action picks the token up
-    # from.
+      id-token: write
+    # Opt-in, keyed on a repository *variable*: GitHub rejects the entire
+    # workflow file if `secrets` appears in any `if` expression, at job level
+    # or step level. Only github / needs / vars / inputs are available there.
     #
-    # To enable: add a PYPI_API_TOKEN secret, then set the repository variable
-    # PYPI_PUBLISH=true.
+    # To enable: register this repo as a trusted publisher on pypi.org
+    # (owner ZengZichao, repo Beast2Py, workflow release.yml, environment
+    # pypi), then set the repository variable PYPI_PUBLISH=true. See
+    # CONTRIBUTING.md.
     if: ${{ vars.PYPI_PUBLISH == 'true' }}
     steps:
       # Rebuilt from the same tag rather than downloaded as an artifact: the
@@ -189,7 +194,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip build
           python -m build
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      # This is the publish path, so the action is pinned to a commit SHA
+      # rather than the mutable `release/v1` branch ref. Without a `password`
+      # input it uses Trusted Publishing (OIDC) by default.
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
 
   pypi-not-enabled:
     name: report that PyPI publishing is not enabled
