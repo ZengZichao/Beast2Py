@@ -161,12 +161,15 @@ class TestBEAST2Validation:
         _list_example_configs(),
         ids=lambda p: p.name,
     )
-    def test_config_xml_validates(self, config_path):
+    def test_config_xml_validates(self, config_path, tmp_path):
         """Test that an example config generates BEAST2-valid XML."""
         if not _config_addon_available(config_path.name):
             pytest.skip(f"add-on package required by {config_path.name} not found")
+        # Written under tmp_path, never beside the committed examples: an interrupted run must
+        # not be able to leave a stray XML inside the directory the article and the deposit
+        # both point at.
         with tempfile.NamedTemporaryFile(
-            suffix=".xml", mode="w", delete=False, dir=str(EXAMPLES_DIR)
+            suffix=".xml", mode="w", delete=False, dir=str(tmp_path)
         ) as f:
             xml_path = Path(f.name)
         # The CLI refuses to truncate an existing output without --force, so
@@ -190,7 +193,7 @@ class TestBEAST2Validation:
         assert success, f"BEAST2 validation failed:\n{output}"
         assert "VALID" in output
 
-    def test_quick_command_xml_validates(self):
+    def test_quick_command_xml_validates(self, tmp_path):
         """Test that XML generated via quick command passes BEAST2 validation."""
         from beast2py.main import main
 
@@ -198,7 +201,7 @@ class TestBEAST2Validation:
         cal_path = str(EXAMPLES_DIR / "calibrations.yaml")
 
         with tempfile.NamedTemporaryFile(
-            suffix=".xml", mode="w", delete=False, dir=str(EXAMPLES_DIR)
+            suffix=".xml", mode="w", delete=False, dir=str(tmp_path)
         ) as f:
             xml_path = Path(f.name)
         # The CLI refuses to truncate an existing output without --force, so

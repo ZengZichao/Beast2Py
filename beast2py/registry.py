@@ -72,7 +72,13 @@ class ModelRegistry:
             "is_aminoacid": False,
         },
         "tim": {
-            # TIM2: rateAG, rateCT and two transversion rates (BEAST2 TIM inputs)
+            # TIM: four free rates. The transversion classes are grouped in pairs while both
+            # transitions stay separate, which is what distinguishes it from TVM and from SYM.
+            # The input names are the four that the BEAST2 v2.7.8 class declares, read from its
+            # source, beast/base/evolution/substitutionmodel/TIM.java: rateAG and rateCT for the
+            # two transition types, rateTransversions1 for A to C and G to T, and
+            # rateTransversions2 for C to G and A to T. A note here used to call this parameter
+            # set TIM2; TIM2 groups the transitions instead, so that label was wrong and is gone.
             "spec": "TIM",
             "params": {
                 "rateAG": {"attr": "rateAG", "dim": 1, "default": 1.0, "lower": 0.0},
