@@ -655,9 +655,9 @@ class TestDistributionContents:
         import tomllib
 
         classifiers = tomllib.loads(self.PYPROJECT).get("project", {}).get("classifiers", [])
-        assert not any(c.startswith("License ::") for c in classifiers), (
-            f"a License :: classifier must not sit beside the PEP 639 SPDX expression: {classifiers}"
-        )
+        assert not any(
+            c.startswith("License ::") for c in classifiers
+        ), f"a License :: classifier must not sit beside the PEP 639 SPDX expression: {classifiers}"
 
     def test_the_bundled_classes_keep_their_own_licence_text(self):
         """LGPL-2.1 is only honoured if the text and the notice travel with it."""
