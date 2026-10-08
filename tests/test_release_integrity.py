@@ -883,3 +883,125 @@ class TestErrorDocumentation:
         section = text[text.index(heading) :]
         missing = [m for m in self.MESSAGES if m not in section]
         assert not missing, "%s does not document: %s" % (rel, missing)
+
+
+class TestPublicSurface:
+    """What a reader may import, and with which defaults, is itself a claim.
+
+    The article advertises the CLI "and equivalent Python functions". Two places made that
+    claim weaker than it reads: the package root did not re-export the data classes the API
+    returns, so `from beast2py import Alignment` raised ImportError, and `read_sequence`
+    defaulted to declared nucleotide data where `beast2py quick` defaults to inferring the
+    type from the residues -- an amino-acid alignment worked from the CLI and silently did not
+    work from the function of the same name. `api.py` also had no `__all__`, so nothing in the
+    package said which of its module-level names were public at all.
+    """
+
+    ROOT_REEXPORTS = ["Alignment", "Sequence", "HyperpriorConfig", "NON_SCIENCE_METADATA"]
+
+    def test_package_root_reexports_the_data_classes_the_api_returns(self):
+        import beast2py.api as api
+
+        aln = api.read_sequence(str(EXAMPLES / "primates.fasta"))
+        assert isinstance(aln, beast2py.Alignment), "the returned class is not importable by name"
+        for name in self.ROOT_REEXPORTS:
+            assert hasattr(beast2py, name), "from beast2py import %s fails" % name
+            assert name in beast2py.__all__, "%s is importable but not declared public" % name
+
+    def test_both_public_surfaces_are_declared_and_honest(self):
+        import beast2py.api as api
+
+        for mod in (beast2py, api):
+            promised = [n for n in mod.__all__ if not hasattr(mod, n)]
+            assert not promised, "%s.__all__ promises %s that the module lacks" % (
+                mod.__name__,
+                promised,
+            )
+
+    def test_api_declares_every_public_name_it_defines(self):
+        """A later addition to api.py must be declared public or this test fails."""
+        import ast
+        import beast2py.api as api
+
+        tree = ast.parse((PKG / "api.py").read_text(encoding="utf-8"))
+        defined = sorted(
+            n.name
+            for n in tree.body
+            if isinstance(n, (ast.FunctionDef, ast.ClassDef)) and not n.name.startswith("_")
+        )
+        undeclared = [n for n in defined if n not in api.__all__]
+        assert not undeclared, "api.py defines %s but keeps them off __all__" % undeclared
+
+    def test_read_sequence_defaults_to_the_same_inference_as_the_cli(self):
+        import inspect
+        import beast2py.api as api
+        from beast2py.main import build_parser
+        from beast2py.models import DataType
+
+        cli_default = (
+            build_parser().parse_args(["quick", "-a", "in.fasta", "-o", "out.xml"]).data_type
+        )
+        assert cli_default == "auto", "the CLI stopped defaulting to inference"
+        for target in (api.read_sequence, api.Beast2Py.read_sequence):
+            default = inspect.signature(target).parameters["data_type"].default
+            assert default == cli_default, "%s defaults to %r, the CLI defaults to %r" % (
+                target.__qualname__,
+                default,
+                cli_default,
+            )
+
+        inferred = api.read_sequence(str(EXAMPLES / "aminoacid.fasta"))
+        assert inferred.data_type is DataType.AMINOACID, (
+            "reading the shipped amino-acid example without arguing about its type is the "
+            "behaviour this parity claim is about; got %r" % (inferred.data_type,)
+        )
+        nucleotides = api.read_sequence(str(EXAMPLES / "primates.fasta"))
+        assert nucleotides.data_type is DataType.NUCLEOTIDE
+
+    def test_quick_mode_is_the_same_function_from_either_entry_point(self, tmp_path):
+        """The API's quick mode used to read every alignment as nucleotides.
+
+        ``beast2py quick`` infers the data type unless told, which is what its own help text
+        says makes a protein alignment work at all. The Python function of the same name had no
+        such knob and hardcoded a declared nucleotide type, so the article's "equivalent Python
+        functions" was false for the shipped amino-acid example: the two entry points emitted
+        different XML from the same input.
+        """
+        from beast2py.api import Beast2Py
+        from beast2py.main import main
+
+        aa = str(EXAMPLES / "aminoacid.fasta")
+        cli_out = tmp_path / "cli.xml"
+        api_out = tmp_path / "api.xml"
+        assert (
+            main(
+                [
+                    "quick",
+                    "-a",
+                    aa,
+                    "-o",
+                    str(cli_out),
+                    "--subst-model",
+                    "jtt",
+                    "--clock-model",
+                    "strict",
+                ]
+            )
+            == 0
+        ), "quick mode on the shipped protein example must work from the CLI"
+        Beast2Py().quick_generate(
+            alignment=aa,
+            output=str(api_out),
+            subst_model="jtt",
+            clock_model="strict",
+        )
+        cli_xml = cli_out.read_text(encoding="utf-8")
+        api_xml = api_out.read_text(encoding="utf-8")
+        assert cli_xml == api_xml, (
+            "quick mode must not depend on which entry point was used; the CLI emits %d "
+            "bytes, the API %d" % (len(cli_xml), len(api_xml))
+        )
+        assert "Dayhoff" in cli_xml or "JTT" in cli_xml, (
+            "the protein model must be present in either output, so this comparison cannot "
+            "pass by both sides being equally wrong"
+        )

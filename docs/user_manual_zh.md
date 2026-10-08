@@ -889,7 +889,8 @@ models = list_models()
 
 ### 6.17 直接使用配置类型
 
-API 同时提供所有配置数据类，可用于程序化构建配置：
+API 同时提供所有配置数据类，可用于程序化构建配置。`read_sequence` 返回由 `Sequence` 对象
+构成的 `Alignment`，因此读者最终拿在手里的数据类，都能用函数文档中的名字直接从包根导入：
 
 ```python
 from beast2py import (
@@ -902,8 +903,16 @@ from beast2py import (
     MCMCConfig,
     CalibrationPoint,
     DistributionConfig,
+    HyperpriorConfig,
     RealParameter,
+    Alignment,
+    Sequence,
+    read_sequence,
 )
+
+# 读取比对文件：数据类型按残基自动推断，与默认行为一致的还有 `beast2py quick`
+alignment = read_sequence("primates.fasta")
+print(alignment.data_type, len(alignment.sequences))
 
 # 程序化构建配置
 site_model = SiteModelConfig(
@@ -914,7 +923,7 @@ site_model = SiteModelConfig(
 
 clock_model = ClockModelConfig(type=ClockModelType.UCLN)
 
-# ... 构建 Partition, Alignment 等对象
+# ... 构建 Partition 等对象
 ```
 
 ---

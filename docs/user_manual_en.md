@@ -967,7 +967,10 @@ models = list_models()
 
 ### 6.17 Direct use of configuration types
 
-The API also exposes all configuration dataclasses, which can be used to build configurations programmatically:
+The API also exposes all configuration dataclasses, which can be used to build configurations
+programmatically. `read_sequence` returns an `Alignment` of `Sequence` objects, so the data
+classes a reader ends up holding are importable from the package root under the same names the
+function's documentation uses:
 
 ```python
 from beast2py import (
@@ -980,8 +983,17 @@ from beast2py import (
     MCMCConfig,
     CalibrationPoint,
     DistributionConfig,
+    HyperpriorConfig,
     RealParameter,
+    Alignment,
+    Sequence,
+    read_sequence,
 )
+
+# Read an alignment: the data type is inferred from the residues, as it is for
+# `beast2py quick`, which defaults to the same inference.
+alignment = read_sequence("primates.fasta")
+print(alignment.data_type, len(alignment.sequences))
 
 # Build a configuration programmatically
 site_model = SiteModelConfig(
@@ -992,7 +1004,7 @@ site_model = SiteModelConfig(
 
 clock_model = ClockModelConfig(type=ClockModelType.UCLN)
 
-# ... build Partition, Alignment, and other objects
+# ... build Partition, and other objects
 ```
 
 ---
