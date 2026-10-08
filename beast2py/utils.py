@@ -160,11 +160,15 @@ def serialize_xml(root: ET.Element, indent: bool = True) -> str:
     return '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' + body
 
 
-# Deterministic default seed for Monte Carlo summaries. Reproducibility of
-# the diagnostics output must not depend on ambient random state.
+# Deterministic default seed for the sampled summaries in
+# ``compute_wasserstein_distance`` / ``_sample_distribution``. Reproducibility
+# of the diagnostics output must not depend on ambient random state.
 DEFAULT_SEED = 42
 
-# Monte Carlo sample count used for shortest-interval HPD estimation
+# Sample count for the legacy shortest-interval HPD estimator. The HPD bounds
+# returned by ``compute_distribution_stats`` do NOT use it: they come from
+# ``_analytic_hpd``, which works on the quantile function and draws no samples.
+# It is kept only because ``_shortest_interval`` below is its historical caller.
 _HPD_N_SAMPLES = 100_000
 
 
@@ -202,6 +206,12 @@ def _analytic_hpd(dist, mass: float = 0.95) -> Tuple[float, float]:
 
 def _shortest_interval(samples: "np.ndarray", mass: float = 0.95) -> Tuple[float, float]:
     """Return the shortest interval containing `mass` of the samples.
+
+    Deprecated legacy helper: it has no call sites in the package. The 95% HPD
+    intervals reported by ``compute_distribution_stats`` are found analytically
+    by ``_analytic_hpd`` on the quantile function, not from a sample, so this
+    estimator is retained only for reference and for callers that already hold
+    their own posterior samples.
 
     For a unimodal distribution this converges to the 95% HPD interval; for
     monotone densities it converges to the one-sided HPD region.
@@ -302,17 +312,27 @@ def compute_distribution_stats(
 ) -> Dict[str, Any]:
     """Compute summary statistics (mean, median, 95% HPD bounds) for a distribution.
 
-    Closed-form 95% HPD intervals are used where available (normal, uniform,
-    exponential, Laplace, one-sided gamma); for the remaining skewed
-    distributions the HPD interval is estimated from the shortest interval of
-    a large deterministic Monte Carlo sample. Poisson (discrete) uses the
-    central 95% probability interval.
+    No sampling is involved: every branch below is deterministic and
+    reproducible to machine precision, so ambient random state cannot change a
+    gate outcome. Closed forms are used where they exist (normal, uniform, the
+    one-sided exponential and the monotone alpha <= 1 gamma, Laplace). For the
+    skewed continuous families (gamma with alpha > 1, lognormal, beta,
+    inverse gamma, chi square) the HPD interval is found numerically by
+    ``_analytic_hpd``, which minimises the difference of the two quantile
+    function endpoints at ``q`` and ``q + 0.95`` over ``q`` with a bounded
+    scalar minimiser at a tolerance of 1e-12. Poisson (discrete) uses the
+    central 95% probability interval and is flagged
+    ``interval_type == "central"``.
 
     Args:
         dist_type: Distribution type name.
         parameters: Distribution parameters.
         offset: Distribution offset.
-        seed: Seed for deterministic Monte Carlo summaries.
+        seed: Accepted for backwards compatibility only and deliberately
+            unused: the summary above draws no samples, so no seed can change
+            the result. Sampling-based summaries live in
+            ``_sample_distribution`` and ``compute_wasserstein_distance``,
+            which do honour a seed.
 
     Returns:
         Dict with 'mean', 'median', 'hpd_lower', 'hpd_upper' and

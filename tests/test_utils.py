@@ -1,5 +1,7 @@
 """Tests for the utils module."""
 
+import numpy as np
+
 from beast2py.utils import (
     make_xml_id,
     ref,
@@ -86,6 +88,48 @@ class TestDistributionStats:
     def test_stats_with_offset(self):
         stats = compute_distribution_stats("normal", {"mean": 5.0, "sigma": 1.0}, offset=2.0)
         assert stats["mean"] == 7.0
+
+    def test_hpd_bounds_use_no_sampling(self):
+        """The docstring claims the HPD bounds are analytic; hold it to that.
+
+        ``compute_distribution_stats`` advertises that no sampling is involved
+        and that ``seed`` cannot change the result. Both claims are checked
+        here against every skewed family the docstring names, so a future
+        switch back to a Monte Carlo estimator fails this test instead of only
+        making the docs wrong again (CODE-005).
+        """
+        from scipy import stats as sp_stats
+
+        from beast2py.utils import DEFAULT_SEED, _analytic_hpd
+
+        cases = [
+            ("gamma", {"alpha": 2.0, "beta": 0.5}, sp_stats.gamma(2.0, scale=0.5)),
+            ("lognormal", {"M": 0.0, "S": 0.5}, sp_stats.lognorm(0.5, scale=1.0)),
+            ("beta", {"alpha": 2.0, "beta": 5.0}, sp_stats.beta(2.0, 5.0)),
+            ("inverse_gamma", {"alpha": 3.0, "beta": 2.0}, sp_stats.invgamma(3.0, scale=2.0)),
+            ("chi_square", {"dof": 4.0}, sp_stats.chi2(4.0)),
+        ]
+        for dist_type, params, frozen in cases:
+            reference = _analytic_hpd(frozen)
+            baseline = compute_distribution_stats(dist_type, params)
+            # Exact equality: the bounds are the quantile-minimiser output, not
+            # an estimate of it.
+            assert (baseline["hpd_lower"], baseline["hpd_upper"]) == reference, dist_type
+            # A seed cannot move the answer, because nothing is drawn.
+            for other_seed in (0, 1, DEFAULT_SEED + 1, 20261008):
+                seeded = compute_distribution_stats(dist_type, params, seed=other_seed)
+                assert seeded == baseline, (dist_type, other_seed)
+
+        # Neither can ambient random state: burn the global RNG and the legacy
+        # sampled estimator's own RNG, then re-check against the pre-burn result.
+        np.random.seed(20261008)
+        rng = np.random.default_rng(20261008)
+        rng.standard_normal(10_000)
+        np.random.standard_normal(10_000)
+        for dist_type, params, _frozen in cases:
+            after = compute_distribution_stats(dist_type, params)
+            assert after["hpd_lower"] == _analytic_hpd(_frozen)[0], dist_type
+            assert after["hpd_upper"] == _analytic_hpd(_frozen)[1], dist_type
 
 
 class TestWassersteinDistance:
