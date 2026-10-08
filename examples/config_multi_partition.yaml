@@ -101,11 +101,11 @@ calibrations:
       offset: 6.5
     provenance:
       source: "fossil"
-      reference: "DOI:10.1038/nature12323"
+      reference: "placeholder — no source consulted; replace with the reference you used"
       calibration_type: "soft"
       original_age_min: 7.0
       original_age_max: 9.5
-      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+      notes: "illustrative input, not a published age: Sahelanthropus tchadensis soft; soft minimum"
 
   # 根校准：这份比对的根是 Strepsirrhini vs Haplorhini（Lemur_catta vs 其余），
   # 不是阔鼻/狭鼻类之分。M=2.5, S=0.3 的中位数只有 12.2 Ma，比真正的灵长类根

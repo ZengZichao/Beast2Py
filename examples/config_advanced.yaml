@@ -100,11 +100,11 @@ calibrations:
           parameters: {M: 0.0, S: 0.5}
     provenance:
       source: "fossil"
-      reference: "DOI:10.1038/nature12323"
+      reference: "placeholder — no source consulted; replace with the reference you used"
       calibration_type: "soft"
       original_age_min: 7.0
       original_age_max: 9.5
-      notes: "Sahelanthropus tchadensis, 7.24 Ma; the prior's 95% HPD [6.4, 9.6] stays above it only softly"
+      notes: "illustrative input, not a published age: Sahelanthropus tchadensis soft; the prior's 95% HPD [6.4, 9.6] stays above it only softly"
 
   # lognormal(M=1.0, S=0.4) offset 12 -> median 14.7, 95% HPD [13.0, 17.4]
   - name: "hominidaeMRCA"
@@ -116,7 +116,7 @@ calibrations:
       offset: 12.0
     provenance:
       source: "fossil"
-      reference: "DOI:10.1126/science.1069883"
+      reference: "placeholder — no source consulted; replace with the reference you used"
       calibration_type: "soft"
       original_age_min: 12.5
       original_age_max: 17.5
@@ -133,7 +133,7 @@ calibrations:
     use_originate: true
     provenance:
       source: "secondary"
-      reference: "DOI:10.1093/molbev/msab286"
+      reference: "placeholder — no source consulted; replace with the reference you used"
       calibration_type: "soft"
       original_age_min: 55.0
       original_age_max: 75.0

@@ -68,7 +68,7 @@ tree_prior:
 # --- 校准点 ---
 # A soft minimum, not a hard bound: Sahelanthropus tchadensis from
 # Toros-Menalla is bracketed at 6.8-7.2 Ma by cosmogenic 10Be/9Be dating
-# (Lebatard et al. 2008); the 7.24 Ma often quoted for the locality lies at
+# (Lebatard et al. 2008 bracket the fossil at 6.8-7.2 Ma); the single 7.24 Ma figure
 # the older end of that bracket.  The fossil is *controversially* placed
 # near the human--chimp split, so the prior is a lognormal offset by 6.5 Ma
 # (BEAST2's OffsetLogNormalDistribution).  Checked with the tool's own
@@ -89,11 +89,11 @@ calibrations:
     use_originate: false
     provenance:
       source: "fossil"
-      reference: "DOI:10.1038/nature12323"
+      reference: "placeholder — no source consulted; replace with the reference you used"
       calibration_type: "soft"
       original_age_min: 7.0
       original_age_max: 9.5
-      notes: "Sahelanthropus tchadensis, Toros-Menalla 7.24 Ma; soft minimum"
+      notes: "illustrative input, not a published age: Sahelanthropus tchadensis soft minimum (Lebatard et al. 2008 bracket 6.8-7.2 Ma)"
 
 # --- 参数先验（显式声明关键两个；其余由默认弱信息先验补齐） ---
 parameter_priors:
