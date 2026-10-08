@@ -559,6 +559,16 @@ class TestDistributionContents:
     MANIFEST = (REPO / "MANIFEST.in").read_text(encoding="utf-8")
     PYPROJECT = (REPO / "pyproject.toml").read_text(encoding="utf-8")
 
+    @classmethod
+    def _included_paths(cls):
+        """Every path an ``include`` line names, whether alone or beside others."""
+        return {
+            token
+            for line in cls.MANIFEST.splitlines()
+            if line.strip().startswith("include")
+            for token in line.split()[1:]
+        }
+
     def test_licence_and_notice_are_shipped(self):
         assert "beast2py/tools/NOTICE" in self.MANIFEST
         assert "LICENSE.BEAST2-LGPL-2.1.txt" in self.MANIFEST
@@ -570,6 +580,39 @@ class TestDistributionContents:
         # files are in the archive the reader downloads.
         assert "examples/output_basic.xml" in self.MANIFEST
         assert "output_basic.fingerprint.json" in self.MANIFEST
+
+    def test_both_validator_launchers_are_declared(self):
+        """The archive must carry the launcher the test suite looks for by path.
+
+        ``tests/test_beast2_validation.py`` resolves ``beast2_validate.sh`` at the
+        repository root and skips all 21 BEAST2 integration tests when that one
+        file is absent. The package copy alone is not enough: an unpacked sdist
+        without the root wrapper therefore reports a fully green suite in which
+        gate 3 never ran, and the skips are only visible under ``-rs``. The root
+        file is a six-line wrapper that execs the package's own launcher, so both
+        have to ship.
+        """
+        declared = self._included_paths()
+        flat = " ".join(self.MANIFEST.split())
+        assert "beast2_validate.sh" in declared, sorted(declared)
+        assert "beast2py/beast2_validate.sh" in flat
+        assert (REPO / "beast2_validate.sh").is_file()
+        # and the package-data table must keep naming the inner one, which is
+        # what puts the launcher into the wheel
+        assert "beast2_validate.sh" in self.PYPROJECT
+
+    def test_the_test_harness_is_declared_for_the_sdist(self):
+        """A source install has to be able to *collect* the suite it advertises.
+
+        setuptools matches the ``test_*`` modules but nothing else in ``tests/``,
+        so an unpacked sdist shipped the tests without their fixtures and without
+        the package marker: every module imports them relatively, so pytest aborted
+        the whole run with "attempted relative import with no known parent
+        package", which is a louder but no better outcome than the silent skip.
+        """
+        declared = self._included_paths()
+        for harness in ("tests/conftest.py", "tests/__init__.py"):
+            assert harness in declared, sorted(declared)
 
     def test_declared_license_matches_the_bundled_classes(self):
         assert "MIT AND LGPL-2.1-only" in self.PYPROJECT
