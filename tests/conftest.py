@@ -28,7 +28,7 @@ EXAMPLES_DIR = Path(__file__).parent.parent / "examples"
 # These sequences carry real variation (four variable sites, three distinct
 # patterns). The previous fixture was four *identical* 32 bp sequences, i.e.
 # zero informative sites, so every code path that depends on site patterns,
-# state counts or frequency estimation was exercised on a degenerate sample
+# state counts or frequency estimation was exercised on a degenerate sample.
 #
 TEST_FASTA = """>taxonA
 ACGTACGTACGTACGTTTTGCAAGGCATCGATCGGG

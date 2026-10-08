@@ -1848,7 +1848,9 @@ class ConfigParser:
 
         ``x or default`` also swallows 0 and None, which silently overrode an
         author's explicit value and made the range guards that follow it
-        unreachable (1).
+        unreachable -- an explicit ``0`` never reached them, because the default
+        had already been substituted for it.  Defaulting therefore happens only
+        when the key is absent.
 
         Args:
             raw: The mapping to read.

@@ -198,6 +198,12 @@ class TestCommentIntegrity:
     # A numbered anchor is only meaningful as part of a list that starts at one
     # and does not skip.
     NUMBERED = re.compile(r"\((\d+)\)")
+    # A *sentence* closing on a bare numbered anchor is the other half of the same
+    # defect: the list its item belonged to was merged into prose and only the
+    # numbering survived. The sequence rule above cannot see it, because a lone
+    # anchor is trivially "a list that starts at one", so the shape needs its own
+    # test. Built from fragments: this file is one of the files the scan covers.
+    TAIL_ANCHOR = re.compile(r"\x28\d+\x29\s*(?=\.\s|\.$|\Z)")
     # Function words that cannot close a sentence: their presence at the end of a
     # docstring or comment block means an edit cut the text short, which is the
     # dominant defect class in this repository.
@@ -211,14 +217,32 @@ class TestCommentIntegrity:
         return path.read_text(encoding="utf-8").split("\n")
 
     @classmethod
+    def _prose_line_numbers(cls, path):
+        """Return the line numbers that hold prose: comments and docstring bodies.
+
+        Code is deliberately out of scope. Half of the repository builds BEAST2
+        XML and LaTeX out of multi-line string literals, and those carry the
+        punctuation of the *generated* document, not of a sentence an edit pass
+        can truncate.
+        """
+        wanted = set()
+        for start, text in cls._docstrings(path):
+            wanted.update(range(start, start + len(text.split("\n"))))
+        for no, line in enumerate(cls._lines(path), 1):
+            if line.strip().startswith("#"):
+                wanted.add(no)
+        return wanted
+
+    @classmethod
     def _prose_lines(cls, path):
-        """Yield every non-blank line with its number, with no indentation floor.
+        """Yield every prose line with its number, with no indentation floor.
 
         The floor the first version used excluded exactly the lines that were
         damaged: a module docstring and a top-of-file comment both sit at column 0.
         """
+        wanted = cls._prose_line_numbers(path)
         for no, line in enumerate(cls._lines(path), 1):
-            if line.strip():
+            if no in wanted and line.strip():
                 yield no, line
 
     @staticmethod
@@ -330,44 +354,58 @@ class TestCommentIntegrity:
             if cls.stray_numbered_anchors(text)
         ]
 
+    @classmethod
+    def sentence_tail_anchor_units(cls, path):
+        return [
+            (start, text[max(0, m.start() - 40) : m.end()])
+            for start, text in cls._prose_units(path)
+            for m in [cls.TAIL_ANCHOR.search(text)]
+            if m
+        ]
+
     # ---------------- the scans themselves ----------------
 
-    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
-    def test_no_space_before_sentence_period(self, path):
-        bad = self.anchor_lines(path)
-        assert not bad, f"{path}: stray space before '.' at line(s) {bad}"
+    # One case per rule rather than one per rule per file: the assertion names
+    # every offending file and the line inside it, so a failure is no harder to
+    # locate than under a per-file parametrisation, and the collected count stays
+    # a statement about distinct behaviours checked.
 
-    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
-    def test_no_orphan_period_line(self, path):
-        bad = self.empty_lines(path)
-        assert not bad, f"{path}: line that is only a '.' at line(s) {bad}"
+    @classmethod
+    def _scan(cls, predicate, message):
+        """Run `predicate` over every scanned file and report each hit in place."""
+        bad = []
+        for path in cls.TARGETS:
+            found = predicate(path)
+            if found:
+                bad.append("%s: %s at %s" % (path.relative_to(REPO), message, found))
+        assert not bad, "\n  ".join(bad)
 
-    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
-    def test_no_orphan_numbered_anchor_line(self, path):
-        bad = self.stray_anchor_lines(path)
-        assert not bad, f"{path}: line that is only a numbered anchor at line(s) {bad}"
+    def test_no_space_before_sentence_period(self):
+        self._scan(self.anchor_lines, "stray space before a sentence period")
 
-    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
-    def test_no_space_after_an_opening_parenthesis(self, path):
-        bad = self.open_paren_lines(path)
-        assert not bad, f"{path}: a word lost right after an opening parenthesis at line(s) {bad}"
+    def test_no_orphan_period_line(self):
+        self._scan(self.empty_lines, "prose line that is only a period")
 
-    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
-    def test_docstrings_and_comment_blocks_have_balanced_parentheses(self, path):
-        problems = self.unbalanced_units(path)
-        assert (
-            not problems
-        ), f"{path}: unbalanced parentheses in docstring/comment at line(s) {problems}"
+    def test_no_orphan_numbered_anchor_line(self):
+        self._scan(self.stray_anchor_lines, "prose line that is only a numbered anchor")
 
-    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
-    def test_docstrings_and_comment_blocks_are_not_truncated(self, path):
-        bad = self.truncated_units(path)
-        assert not bad, f"{path}: sentence cut off mid-phrase at line(s) {bad}"
+    def test_no_space_after_an_opening_parenthesis(self):
+        self._scan(self.open_paren_lines, "a word lost right after an opening parenthesis")
 
-    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
-    def test_numbered_anchors_point_at_a_list(self, path):
-        bad = self.stray_anchor_units(path)
-        assert not bad, f"{path}: numbered anchor without a matching list at line(s) {bad}"
+    def test_docstrings_and_comment_blocks_have_balanced_parentheses(self):
+        self._scan(self.unbalanced_units, "unbalanced parentheses in a docstring or comment")
+
+    def test_docstrings_and_comment_blocks_are_not_truncated(self):
+        self._scan(self.truncated_units, "sentence cut off mid-phrase")
+
+    def test_numbered_anchors_point_at_a_list(self):
+        self._scan(self.stray_anchor_units, "numbered anchor with no matching list")
+
+    def test_no_sentence_ends_on_a_numbered_anchor(self):
+        self._scan(
+            self.sentence_tail_anchor_units,
+            "sentence that ends on a numbered anchor and points at nothing",
+        )
 
     # ---------------- proof that each rule bites ----------------
     #
@@ -391,8 +429,7 @@ class TestCommentIntegrity:
         fixed = self._write(
             tmp_path,
             "fixed.py",
-            '"""Summary.\n\nSilent fallback was the largest source of wrong XML in this tool.\n"""\n'
-            "x = 1\n",
+            '"""Summary.\n\nSilent fallback was the largest source of wrong XML.\n"""\n' "x = 1\n",
         )
         assert [start for start, _ in self.truncated_units(broken)] == [1]
         assert not self.truncated_units(fixed)
@@ -410,21 +447,21 @@ class TestCommentIntegrity:
         fixed = self._write(
             tmp_path,
             "fixed.py",
-            'def f():\n    """Digests differ for two datasets.\n\n    Returns:\n        Nothing.\n    """\n'
+            'def f():\n    """Digests differ.\n\n    Returns:\n        Nothing.\n    """\n'
             "    return None\n",
         )
         assert self.unbalanced_units(broken) == [2]
         assert not self.unbalanced_units(fixed)
 
     def test_guard_sees_orphan_punctuation(self, tmp_path):
-        """A line that is only a period, or only a numbered anchor, used to match nothing."""
+        """A prose line that is only a period, or only a numbered anchor, was invisible."""
         broken = self._write(
             tmp_path,
             "broken.py",
-            "x = 1\n" + ".\n" + "# (3).\n",
+            '"""Summary.\n.\n"""\n' + "# (3).\n" + "x = 1\n",
         )
         assert self.empty_lines(broken) == [2]
-        assert self.stray_anchor_lines(broken) == [3]
+        assert self.stray_anchor_lines(broken) == [4]
 
     def test_guard_sees_a_stray_numbered_anchor_inside_prose(self, tmp_path):
         """An anchor with no list to point at is reported, a real list is not."""
@@ -440,6 +477,26 @@ class TestCommentIntegrity:
         )
         assert self.stray_anchor_units(broken) == [(1, [0])]
         assert not self.stray_anchor_units(listed)
+
+    def test_guard_sees_a_sentence_ending_on_its_own_anchor(self, tmp_path):
+        """A merged list leaves one anchor behind, and one anchor is a valid sequence.
+
+        The sequence rule above cannot report that shape, so the sentence-ending
+        rule exists for it: a lone anchor closing a sentence refers to an item
+        that is no longer in the file.
+        """
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            '"""Read a number.\n\nThe guards were made unreachable' + " (1)" + '.\n"""\n',
+        )
+        listed = self._write(
+            tmp_path,
+            "listed.py",
+            '"""Read a number.\n\nSteps (1) and (2) both apply to the guards.\n"""\n',
+        )
+        assert [start for start, _ in self.sentence_tail_anchor_units(broken)] == [1]
+        assert not self.sentence_tail_anchor_units(listed)
 
     def test_guard_sees_a_word_lost_after_an_opening_parenthesis(self, tmp_path):
         """The alias comment lost its first word inside a parenthesis; no rule saw it."""
