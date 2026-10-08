@@ -614,9 +614,65 @@ class TestDistributionContents:
         for harness in ("tests/conftest.py", "tests/__init__.py"):
             assert harness in declared, sorted(declared)
 
-    def test_declared_license_matches_the_bundled_classes(self):
-        assert "MIT AND LGPL-2.1-only" in self.PYPROJECT
-        assert "LGPL" in self.PYPROJECT  # the classifier, not only the SPDX string
+    def test_declared_license_is_the_same_expression_everywhere(self):
+        """One SPDX expression, asserted at every place that declares a licence.
+
+        The archived release declared its licence three different ways: the
+        package metadata and the citation file said ``MIT AND LGPL-2.1-only``
+        while ``.zenodo.json`` said bare ``MIT`` and ``beast2py.__license__`` said
+        bare ``MIT``. The bare declarations understated the vendored LGPL
+        component, and the archive record is the most authoritative place a reader
+        looks. An earlier version of this check asserted only that the letters
+        "LGPL" appeared somewhere in ``pyproject.toml``, which the SPDX string
+        already satisfies -- an assertion that cannot fail is not an assertion.
+
+        PEP 639 is why there is no ``License ::`` trove classifier: the SPDX
+        expression replaces it, and the packaging job in ``ci.yml`` asserts the
+        classifiers stay absent. Naming the licence twice, in two formats, is
+        exactly how a three-way disagreement becomes possible.
+        """
+        combined = "MIT AND LGPL-2.1-only"
+        sources = {
+            "pyproject.toml": self.PYPROJECT,
+            "CITATION.cff": (REPO / "CITATION.cff").read_text(encoding="utf-8"),
+            ".zenodo.json": (REPO / ".zenodo.json").read_text(encoding="utf-8"),
+            "README.md": (REPO / "README.md").read_text(encoding="utf-8"),
+            "README_zh.md": (REPO / "README_zh.md").read_text(encoding="utf-8"),
+            "beast2py/__init__.py": (PKG / "__init__.py").read_text(encoding="utf-8"),
+            "LICENSE": (REPO / "LICENSE").read_text(encoding="utf-8"),
+            "beast2py/tools/NOTICE": (PKG / "tools" / "NOTICE").read_text(encoding="utf-8"),
+        }
+        for label, text in sources.items():
+            assert combined in text, f"{label} does not declare {combined}"
+
+        # the bare declaration is the defect this closes: no place may state only
+        # MIT, and "MIT" may not appear as a licence value without the LGPL half.
+        assert '"license": {"id": "MIT"}' not in sources[".zenodo.json"]
+        assert '__license__ = "MIT"' not in sources["beast2py/__init__.py"]
+        # read the parsed value, not the raw text: pyproject.toml explains in a comment why
+        # the License :: trove classifiers were removed, and a substring test would trip on
+        # that explanation instead of on an actual classifier
+        import tomllib
+
+        classifiers = tomllib.loads(self.PYPROJECT).get("project", {}).get("classifiers", [])
+        assert not any(c.startswith("License ::") for c in classifiers), (
+            f"a License :: classifier must not sit beside the PEP 639 SPDX expression: {classifiers}"
+        )
+
+    def test_the_bundled_classes_keep_their_own_licence_text(self):
+        """LGPL-2.1 is only honoured if the text and the notice travel with it."""
+        lgpl = PKG / "tools" / "LICENSE.BEAST2-LGPL-2.1.txt"
+        assert lgpl.is_file(), "the vendored BEAST2 classes lost their licence text"
+        head = lgpl.read_text(encoding="utf-8", errors="replace")
+        assert "GNU LESSER GENERAL PUBLIC LICENSE" in head
+        assert "Version 2.1" in head
+        notice = (PKG / "tools" / "NOTICE").read_text(encoding="utf-8")
+        assert "beast/pkgmgmt" in notice
+        assert "LGPL" in notice and "2.1" in notice
+        # and both have to be declared, or they are in the tree but not in the
+        # archive a reader downloads
+        assert "beast2py/tools/NOTICE" in self.MANIFEST
+        assert "LICENSE.BEAST2-LGPL-2.1.txt" in self.MANIFEST
 
 
 class TestRepositoryHygiene:

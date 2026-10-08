@@ -211,7 +211,7 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 
 - `beast2py/` — Source code of the Beast2Py Python package (CLI, API, configuration parsing, XML generation, diagnostics, reproducibility, and validation modules)
 - `examples/` — 19 example configurations, example alignments (FASTA), and example output artifacts
-- `tests/` — Test suite (360 collected tests: 339 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
+- `tests/` — Test suite (370 collected tests: 349 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
 - `beast2py/tools/` — Headless BEAST2 validation helper bundled *inside* the package (`Beast2Validator.java` source plus the precompiled `classes/` and `launcher.jar`), shipped as `package-data` by `pyproject.toml`; the repository root keeps only a thin `beast2_validate.sh` wrapper
 - `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English)
 - `beast2_validate.sh` — Launcher script for headless BEAST2 validation (needs `BEAST.base.jar` and JDK 17 or newer; it auto-detects `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`, or set `BEAST2_JAR`)
@@ -257,7 +257,7 @@ not prove 2.7.8 was the version in use. What has actually been verified is the B
 2.7.8 band; other 2.7.x releases are untested. The `integration` job prints the version it
 resolved, so the exact combination is visible in the run log rather than assumed.
 
-The test suite comprises 360 collected tests (339 unit/semantic/release-integrity + 21 BEAST2
+The test suite comprises 370 collected tests (349 unit/semantic/release-integrity + 21 BEAST2
 integration). The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and
 check each with the real BEAST2 parser and model initialisation. When the

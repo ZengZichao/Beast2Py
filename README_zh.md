@@ -207,7 +207,7 @@ print(models["substitution_models"])
 
 - `beast2py/` — Beast2Py Python 包源代码（CLI、API、配置解析、XML 生成、诊断、可重复性、验证等模块）
 - `examples/` — 19 个示例配置文件、示例比对数据（FASTA）和示例输出制品
-- `tests/` — 测试套件（共收集 360 个测试：339 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
+- `tests/` — 测试套件（共收集 370 个测试：349 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
 - `beast2py/tools/` — 随包发布的无头 BEAST2 验证助手（`Beast2Validator.java` 源码，含预编译的 `classes/` 与 `launcher.jar`），由 `pyproject.toml` 以 `package-data` 随 wheel 打包发布；仓库根目录仅保留同名的薄包装 `beast2_validate.sh`
 - `docs/` — 使用手册、架构指南、教程、校准指南和 XML 格式指南（中英文）
 - `beast2_validate.sh` — 无头 BEAST2 验证启动脚本（需要 `BEAST.base.jar` 与 JDK 17+；自动探测 `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`，也可设 `BEAST2_JAR`）
@@ -243,7 +243,7 @@ print(models["substitution_models"])
 未实测。`integration` 作业会打印它实际解析到的版本，所以确切的版本组合在运行日志里可见，
 而不是靠假设。
 
-测试套件共收集 360 个测试（339 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
+测试套件共收集 370 个测试（349 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
 示例配置、`quick` 路径以及仓库内的 `output_basic.xml` 生成 XML，并用真实的 BEAST2 解析器
 与模型初始化检查。当环境缺少 BEAST2 jar 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。
 
