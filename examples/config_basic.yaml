@@ -107,8 +107,11 @@ parameter_priors:
       parameters: {M: 0.0, S: 1.0}
 
 # --- MCMC ---
-# store_every defaults to 10000 samples so a 10^7-state chain can be resumed
-# with `beast -resume`; -1 disables checkpointing (the validator warns).
+# store_every is set explicitly below. If the key is omitted it defaults to
+# max(1, chain_length // 10000) -- 1000 for the 10^7-state chain used here -- on
+# every entry point (generate, quick, the Python API), so a 10^7-state chain can
+# be resumed with `beast -resume` at evenly spaced checkpoints; -1 disables
+# checkpointing (the validator warns).
 mcmc:
   type: "standard"
   chain_length: 10000000

@@ -3,12 +3,28 @@
 import os
 import shutil
 import tempfile
+import xml.etree.ElementTree as ET
 import pytest
 from pathlib import Path
 
 from beast2py.main import build_parser, main
 
 from .conftest import EXAMPLES_DIR, TEST_FASTA, TEST_CONFIG_YAML
+
+
+def _store_every_values(path):
+    """Return every ``storeEvery`` attribute in an emitted XML, as ints.
+
+    Reads them all rather than the first: the MCMC run element and the state
+    element must agree, and a default that only reached one of the two is the
+    kind of split this test exists to catch.
+    """
+    values = []
+    for elem in ET.parse(path).iter():
+        raw = elem.get("storeEvery")
+        if raw is not None:
+            values.append(int(raw))
+    return values
 
 
 class TestCLI:
@@ -217,6 +233,90 @@ class TestCLI:
         )
         assert ret == 0
         assert os.path.exists(output_path)
+
+    def test_quick_and_generate_write_the_same_store_every(self):
+        """CODE-007: one documented ``store_every`` default for every path.
+
+        ``quick`` used to build ``MCMCConfig`` from a dataclass default of
+        10000, while ``generate`` derived it from the chain length as
+        ``chain_length // 10000``. Both XMLs passed every gate, but the two
+        chains checkpointed at different rates, so the entry point silently
+        changed the sampling/resume behaviour of an otherwise identical run.
+        """
+        from beast2py.api import Beast2Py
+        from beast2py.models import MCMCConfig, default_store_every
+
+        chain_length = 1_000_000
+        # The documented rule, spelled out so a change here is a deliberate one.
+        expected = max(1, chain_length // 10_000)
+        assert expected == default_store_every(chain_length) == 100
+
+        fasta = self.tmpdir / "primates.fasta"
+        fasta.write_text(TEST_FASTA)
+
+        quick_xml = self.tmpdir / "quick.xml"
+        assert (
+            main(
+                [
+                    "quick",
+                    "-a",
+                    str(fasta),
+                    "-o",
+                    str(quick_xml),
+                    "--tree-prior",
+                    "yule",
+                    "--chain-length",
+                    str(chain_length),
+                ]
+            )
+            == 0
+        )
+
+        config_path = self.tmpdir / "gen_config.yaml"
+        config_path.write_text(
+            TEST_CONFIG_YAML.replace("chain_length: 100000", f"chain_length: {chain_length}")
+        )
+        generated_xml = self.tmpdir / "generated.xml"
+        assert main(["generate", "-c", str(config_path), "-o", str(generated_xml)]) == 0
+
+        api_xml = self.tmpdir / "api_quick.xml"
+        Beast2Py().quick_generate(
+            alignment=str(fasta),
+            output=str(api_xml),
+            tree_prior="yule",
+            chain_length=chain_length,
+        )
+
+        for label, path in (
+            ("quick", quick_xml),
+            ("generate", generated_xml),
+            ("api", api_xml),
+        ):
+            values = _store_every_values(path)
+            # Every storeEvery in the document, not just the first: a partial
+            # writer that dropped the scaling rule would otherwise slip through.
+            assert values, f"{label} emitted no storeEvery attribute"
+            assert set(values) == {expected}, (label, values, expected)
+
+        # The dataclass default is now the same rule, not a fixed 10000.
+        assert MCMCConfig(chain_length=chain_length).store_every == expected
+
+    def test_store_every_floor_and_explicit_value_still_win(self):
+        """The documented default is a floor of 1 and never overrides a user value."""
+        from beast2py.models import default_store_every
+
+        assert default_store_every(9_999) == 1  # short chain, no storeEvery="0"
+        assert default_store_every(100_000_000) == 10_000
+
+        fasta = self.tmpdir / "primates.fasta"
+        fasta.write_text(TEST_FASTA)
+        config_path = self.tmpdir / "explicit.yaml"
+        config_path.write_text(
+            TEST_CONFIG_YAML.replace("  pre_burnin: 0\n", "  pre_burnin: 0\n  store_every: 7\n")
+        )
+        out = self.tmpdir / "explicit.xml"
+        assert main(["generate", "-c", str(config_path), "-o", str(out)]) == 0
+        assert set(_store_every_values(out)) == {7}
 
     def test_generate_nonexistent_config(self):
         """Test that nonexistent config file returns error."""

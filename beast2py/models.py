@@ -314,6 +314,38 @@ class Partition:
     tree: str = "shared"
 
 
+# Divisor behind the single documented default for ``MCMCConfig.store_every``.
+# BEAST2 counts ``storeEvery`` in *logged* samples (MCMC.java tests
+# ``(sampleNr + 1) % storeEvery == 0``), and the shipped loggers thin the trace
+# by 1000, so dividing the chain length by this keeps an interrupted run
+# resumable at roughly ten evenly spaced ``.xml.state`` checkpoints whatever the
+# chain length, instead of a fixed 10000 that checkpoints a short chain once, at
+# the very end. See :func:`default_store_every`.
+STORE_EVERY_CHAIN_DIVISOR = 10_000
+
+
+def default_store_every(chain_length: int) -> int:
+    """Return the one documented default ``store_every`` for ``chain_length``.
+
+    Every entry point is expected to route through this function -- the YAML
+    parser, ``beast2py quick``, :meth:`beast2py.api.Beast2Py.quick_run` and the
+    ``MCMCConfig`` dataclass default -- because three different defaults used to
+    be in play (``10000`` in the dataclass, ``chain_length // 10000`` in the
+    parser, ``"10000 by default"`` in an error message), and the same chain
+    length therefore got a different ``storeEvery`` depending on how the XML was
+    produced.
+
+    Args:
+        chain_length: Number of MCMC generations.
+
+    Returns:
+        ``max(1, chain_length // STORE_EVERY_CHAIN_DIVISOR)``. The floor of 1
+        is what stops a chain shorter than the divisor from producing
+        ``storeEvery="0"``, which BEAST2 rejects and the validator flags.
+    """
+    return max(1, int(chain_length) // STORE_EVERY_CHAIN_DIVISOR)
+
+
 @dataclass
 class MCMCConfig:
     """MCMC run configuration.
@@ -323,9 +355,10 @@ class MCMCConfig:
         pre_burnin: Pre-burnin length.
         store_every: State storage interval **in logged samples** (MCMC.java
             tests ``(sampleNr + 1) % storeEvery == 0``), not in generations; 0
-            or -1 disables checkpointing. The default scales with the chain
-            length so a long run gets ~10 resume points instead of one at the
-            very end.
+            or -1 disables checkpointing. ``None`` -- the default -- means "use
+            the one documented rule", :func:`default_store_every`, which
+            resolves to ``max(1, chain_length // 10000)`` in
+            ``__post_init__`` so that every construction path agrees.
         sample_from_prior: Whether to sample from prior only.
         mcmc_type: Standard or nested sampling.
         particle_count: NS particle count.
@@ -336,12 +369,24 @@ class MCMCConfig:
 
     chain_length: int = 10000000
     pre_burnin: int = 0
-    store_every: int = 10000
+    store_every: Optional[int] = None
     sample_from_prior: bool = False
     mcmc_type: MCMCType = MCMCType.STANDARD
     particle_count: int = 1
     sub_chain_length: int = 10000
     seed: int = 1
+
+    def __post_init__(self) -> None:
+        """Resolve ``store_every=None`` to the documented default.
+
+        The default is a function of ``chain_length``, so it cannot be a static
+        dataclass default. Resolving it here -- rather than in each caller --
+        is what keeps the ``generate`` parser, ``beast2py quick``, the Python
+        API and hand-built configs writing the same ``storeEvery`` for the same
+        chain length (CODE-007).
+        """
+        if self.store_every is None:
+            self.store_every = default_store_every(self.chain_length)
 
 
 @dataclass

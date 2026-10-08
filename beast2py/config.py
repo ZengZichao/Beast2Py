@@ -39,8 +39,10 @@ from .models import (
     Provenance,
     RealParameter,
     SiteModelConfig,
+    STORE_EVERY_CHAIN_DIVISOR,
     TipDatesConfig,
     TreePriorType,
+    default_store_every,
 )
 from .registry import ModelRegistry
 from .utils import as_number, as_strict_bool
@@ -1897,11 +1899,14 @@ class ConfigParser:
         if "store_every" in mcmc_raw:
             store_every = self._int_or_default(mcmc_raw, "store_every", "mcmc", 0)
         else:
+            # Single documented default, shared with `quick`, the Python API
+            # and the MCMCConfig dataclass via models.default_store_every().
             # MCMC.java counts this in *logged samples*, not generations
             # (`(sampleNr + 1) % storeEvery == 0`), so a single fixed number
-            # would checkpoint a 10^7-generation chain once, at the very end.
-            # Scale it with the chain so any run gets ~10 resume points.
-            store_every = max(1, chain_length // 10000)
+            # would checkpoint a 10^5-state chain almost never and a 10^7-state
+            # chain only at the very end; scaling with the chain length keeps
+            # any run resumable at evenly spaced checkpoints.
+            store_every = default_store_every(chain_length)
         particle_count = self._int_or_default(mcmc_raw, "particle_count", "mcmc", 1)
         sub_chain_length = self._int_or_default(mcmc_raw, "sub_chain_length", "mcmc", 10000)
         if chain_length <= 0:
@@ -1923,7 +1928,9 @@ class ConfigParser:
         if store_every < -1:
             raise ConfigError(
                 f"mcmc.store_every = {store_every} is not a valid interval; use a positive "
-                f"number of samples (10000 by default) or -1 to disable checkpointing."
+                f"number of samples, or -1 to disable checkpointing. Omit the key to get the "
+                f"documented default for this chain length, max(1, chain_length // "
+                f"{STORE_EVERY_CHAIN_DIVISOR}) = {default_store_every(chain_length)}."
             )
         if store_every == -1:
             # Legal but reported: the validator warns that the chain cannot be
