@@ -233,6 +233,8 @@ beast2py pipeline --config config.yaml --type both --output-dir pipeline
 ```
 
 `--output-dir` 默认为当前目录；`--type` 默认为 `snakemake`。
+`--threads N` 设定写入流程的 BEAST2 线程数（`beast -threads N`），覆盖 YAML 里的
+`mcmc.threads`（该键缺省为 4）；笔记本或受限的 HPC 分区可用 `--threads 1`。
 
 ## 8. 验证
 

@@ -28,6 +28,7 @@ from .models import (
     CalibrationPoint,
     ClockModelConfig,
     ClockModelType,
+    DEFAULT_BEAST2_THREADS,
     DistributionConfig,
     HyperpriorConfig,
     InitializationConfig,
@@ -43,6 +44,7 @@ from .models import (
     TipDatesConfig,
     TreePriorType,
     default_store_every,
+    validate_threads,
 )
 from .registry import ModelRegistry
 from .utils import as_number, as_strict_bool
@@ -149,6 +151,7 @@ KNOWN_KEYS: Dict[str, Set[str]] = {
         "particle_count",
         "sub_chain_length",
         "seed",
+        "threads",
     },
     "loggers": {"trace_log", "tree_log", "screen_log"},
     "logger": {"file_name", "log_every"},
@@ -1944,6 +1947,18 @@ class ConfigParser:
         seed = self._int_or_default({"seed": seed_raw}, "seed", "mcmc", 1)
         if seed < 1:
             raise ConfigError(f"mcmc.seed must be >= 1, got {seed}")
+        # Thread count for the *generated* pipelines (`beast -threads N`). It is
+        # a scheduling knob, not part of the analysis, so it reaches the
+        # Snakefile/Nextflow emitters but is excluded from the fingerprint;
+        # models.MCMCConfig.threads documents the split.
+        threads_raw = mcmc_raw.get("threads", DEFAULT_BEAST2_THREADS)
+        threads = self._int_or_default(
+            {"threads": threads_raw}, "threads", "mcmc", DEFAULT_BEAST2_THREADS
+        )
+        try:
+            threads = validate_threads(threads, where="mcmc.threads")
+        except ValueError as exc:
+            raise ConfigError(str(exc))
         return MCMCConfig(
             chain_length=chain_length,
             pre_burnin=pre_burnin,
@@ -1953,6 +1968,7 @@ class ConfigParser:
             particle_count=particle_count,
             sub_chain_length=sub_chain_length,
             seed=seed,
+            threads=threads,
         )
 
     def _parse_real_parameter(self, raw: Any, where: str = "parameter") -> RealParameter:

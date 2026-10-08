@@ -195,6 +195,74 @@ class TestCLI:
         assert ret == 0
         assert (Path(output_dir) / "Snakefile").exists()
 
+    def test_pipeline_threads_reaches_the_emitted_files(self):
+        """CODE-008: `--threads` is a knob, not the old welded-in `-threads 4`.
+
+        Both engines are checked, plus the rejection path, because the point of
+        the knob is a 2-core laptop or a resource-restricted HPC partition.
+        """
+        config_path = self.tmpdir / "config.yaml"
+        config_path.write_text(TEST_CONFIG_YAML)
+
+        default_dir = self.tmpdir / "pipe_default"
+        assert (
+            main(
+                [
+                    "pipeline",
+                    "-c",
+                    str(config_path),
+                    "--type",
+                    "both",
+                    "--output-dir",
+                    str(default_dir),
+                ]
+            )
+            == 0
+        )
+        for name in ("Snakefile", "main.nf"):
+            text = (default_dir / name).read_text()
+            assert "-threads 4" in text, name
+            assert "-threads 1" not in text, name
+
+        one_dir = self.tmpdir / "pipe_one_thread"
+        assert (
+            main(
+                [
+                    "pipeline",
+                    "-c",
+                    str(config_path),
+                    "--type",
+                    "both",
+                    "--output-dir",
+                    str(one_dir),
+                    "--threads",
+                    "1",
+                ]
+            )
+            == 0
+        )
+        for name in ("Snakefile", "main.nf"):
+            text = (one_dir / name).read_text()
+            assert "-threads 1" in text, name
+            assert "-threads 4" not in text, name
+
+        bad_dir = self.tmpdir / "pipe_bad"
+        assert (
+            main(
+                [
+                    "pipeline",
+                    "-c",
+                    str(config_path),
+                    "--output-dir",
+                    str(bad_dir),
+                    "--threads",
+                    "0",
+                ]
+            )
+            == 1
+        )
+        assert not (bad_dir / "Snakefile").exists(), "a rejected thread count wrote a file"
+
     def test_quick_command(self):
         """Test the quick subcommand."""
         fasta_path = self.tmpdir / "primates.fasta"

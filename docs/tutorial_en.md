@@ -261,6 +261,9 @@ beast2py pipeline --config config.yaml --type both --output-dir pipeline
 ```
 
 `--output-dir` defaults to the current directory; `--type` defaults to `snakemake`.
+`--threads N` sets the BEAST2 thread count written into the workflow as
+`beast -threads N`, overriding `mcmc.threads` from the YAML (which is itself 4
+unless you change it); use `--threads 1` on a laptop or a constrained partition.
 
 ## 8. Validation
 

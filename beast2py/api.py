@@ -643,6 +643,7 @@ class Beast2Py:
         pipeline_type: str = "snakemake",
         output_dir: str = ".",
         config_file: Optional[str] = None,
+        threads: Optional[int] = None,
     ) -> Union[str, Tuple[str, str]]:
         """Generate Snakemake or Nextflow pipeline files.
 
@@ -652,13 +653,18 @@ class Beast2Py:
             output_dir: Output directory for pipeline files.
             config_file: Path to the YAML config file (for pipeline references).
                 Required if config is provided as a dict or BEASTConfig.
+            threads: BEAST2 thread count written into the workflow as
+                ``beast -threads N``, matching the CLI's ``pipeline --threads``
+                (default ``None``, which keeps ``mcmc.threads``; that is 4 unless
+                the YAML says otherwise). Must be a positive integer.
 
         Returns:
             Path to the generated pipeline file, or a tuple of
             (snakemake_path, nextflow_path) if pipeline_type="both".
 
         Raises:
-            ValueError: If pipeline_type is invalid.
+            ValueError: If pipeline_type is invalid, or if threads is not a
+                positive integer.
 
         Example::
 
@@ -678,28 +684,36 @@ class Beast2Py:
 
         os.makedirs(output_dir, exist_ok=True)
 
+        # Resolve before writing anything, so a rejected thread count cannot
+        # leave a half generated pipeline behind.
+        n_threads = PipelineGenerator.resolve_threads(threads, beast_config)
+
         if pipeline_type == "snakemake":
             return PipelineGenerator.generate_snakemake(
                 beast_config,
                 output_dir=output_dir,
                 config_file=config_file or "config.yaml",
+                threads=n_threads,
             )
         elif pipeline_type == "nextflow":
             return PipelineGenerator.generate_nextflow(
                 beast_config,
                 output_dir=output_dir,
                 config_file=config_file or "config.yaml",
+                threads=n_threads,
             )
         elif pipeline_type == "both":
             sm_path = PipelineGenerator.generate_snakemake(
                 beast_config,
                 output_dir=output_dir,
                 config_file=config_file or "config.yaml",
+                threads=n_threads,
             )
             nf_path = PipelineGenerator.generate_nextflow(
                 beast_config,
                 output_dir=output_dir,
                 config_file=config_file or "config.yaml",
+                threads=n_threads,
             )
             return (sm_path, nf_path)
         else:
@@ -1077,6 +1091,7 @@ def generate_pipeline(
     pipeline_type: str = "snakemake",
     output_dir: str = ".",
     config_file: Optional[str] = None,
+    threads: Optional[int] = None,
     base_dir: Optional[str] = None,
 ) -> Union[str, Tuple[str, str]]:
     """Generate Snakemake or Nextflow pipeline files.
@@ -1086,6 +1101,8 @@ def generate_pipeline(
         pipeline_type: "snakemake", "nextflow", or "both".
         output_dir: Output directory for pipeline files.
         config_file: Path to the YAML config file (for pipeline references).
+        threads: BEAST2 thread count for the emitted workflow, overriding
+            ``mcmc.threads``; ``None`` keeps the configured value (4 by default).
         base_dir: Base directory for resolving relative paths.
 
     Returns:
@@ -1097,6 +1114,7 @@ def generate_pipeline(
         pipeline_type=pipeline_type,
         output_dir=output_dir,
         config_file=config_file,
+        threads=threads,
     )
 
 

@@ -593,7 +593,8 @@ beast2py methods \
 beast2py pipeline \
     --config config.yaml \
     --type snakemake|nextflow|both \
-    [--output-dir .]
+    [--output-dir .] \
+    [--threads 4]
 ```
 
 | 参数 | 必需 | 默认值 | 描述 |
@@ -601,8 +602,9 @@ beast2py pipeline \
 | `--config` | 是 | — | YAML 配置文件路径 |
 | `--type` | 否 | `snakemake` | 管道类型：`snakemake`、`nextflow` 或 `both` |
 | `--output-dir` | 否 | `.` | 输出目录 |
+| `--threads` | 否 | `mcmc.threads`（4） | 写入流程的 BEAST2 线程数（`beast -threads N`），必须是正整数 |
 
-管道包含以下规则或进程：XML 生成（调用 `beast2py generate`）、BEAST2 执行（调用 `beast -overwrite`）、校准诊断（调用 `beast2py diagnose`）、方法学描述生成（调用 `beast2py methods`）。
+管道包含以下规则或进程：XML 生成（调用 `beast2py generate`）、BEAST2 执行（调用 `beast -overwrite`）、校准诊断（调用 `beast2py diagnose`）、方法学描述生成（调用 `beast2py methods`）。BEAST2 执行一步的线程数取自 `mcmc.threads`（默认 4），或由 `--threads` 覆盖；笔记本与受限的 HPC 分区可设为 1。
 
 ### 5.7 `fingerprint` — 生成分析指纹
 
@@ -1019,6 +1021,9 @@ mcmc:
   store_every: 10000                    # 检查点间隔，按"已记录样本数"计（缺省随链长伸缩 max(1, chain_length//10000)；-1 关闭）
   sample_from_prior: false              # 是否仅从先验采样（默认 false）
   seed: 1                               # 供 `beast -seed` 使用；**不写入 XML**（BEAST2 的 MCMC 无 seed 输入）
+  threads: 4                            # 生成的 Snakemake/Nextflow 流程中的 `beast -threads N`；
+                                        # 正整数，默认 4，可用 `pipeline --threads` 覆盖；
+                                        # 不进入指纹（只调度，不改变分析）
   # Nested Sampling 参数（type=nested_sampling 时）：
   particle_count: 1                     # 粒子数（默认 1）
   sub_chain_length: 10000               # 子链长度（默认 10000）
@@ -1833,7 +1838,10 @@ mcmc:
   store_every: 1000           # 检查点间隔，按*已记录样本数*计（见下）
   sample_from_prior: false    # 仅从先验采样（用于敏感性分析）
   seed: 1                     # 供 `beast -seed` 使用的随机种子（**不写入 XML**，见下）
+  threads: 4                  # 生成的流程文件中 `beast -threads N` 的线程数（见下）
 ```
+
+**`mcmc.threads` 只安排运行，不改变分析。** 它是 `beast2py pipeline` 生成的 Snakemake/Nextflow 流程里写入的线程数（`beast -threads N`）；这一数值曾被硬编码为 4 且无法修改。`beast2py pipeline --threads N`（API 中为 `generate_pipeline(..., threads=N)`）会为本次生成的流程覆盖配置里的取值。`N` 必须是正整数，否则报 `mcmc.threads must be >= 1, got N` 并拒绝生成；笔记本或受限的 HPC 分区可设为 1。由于它改变的是运行的调度方式而非后验，它被刻意排除在分析指纹之外：同一份 YAML 用不同线程数仍属同一个分析。
 
 **`store_every` 计量的是已记录的样本数，不是代数。** BEAST2 的 `MCMC` 判断 `(sampleNr + 1) % storeEvery == 0`（`MCMC.java:490`）。因此在默认的 `logEvery` 下，`store_every` 是两个 `.xml.state` 检查点之间*保存的样本*数，也就是中断后可续算的位置个数。默认值**随链长伸缩**，即 `max(1, chain_length // 10000)`：链长 1,000 万时为 `1000`，100 万时为 `100`。这样任何一次运行都能得到大约十个检查点，而不是只有最末的一个。显式写 `-1` 仍然合法，但会关闭检查点，此时验证器给出 `storeEvery='-1' ... cannot be resumed` 警告。
 
@@ -2003,9 +2011,9 @@ Beast2Py 是**失败即关闭**的：生成器无法兑现某个配置时，`Con
 ```text
 mcmc: unknown key(s) chainlength_typo. Allowed keys for this section: chain_length,
 particle_count, pre_burnin, sample_from_prior, seed, store_every, sub_chain_length,
-type. Beast2Py refuses unknown keys rather than silently applying a default, because
-a typo in a model or MCMC setting changes the analysis without changing the XML's
-validity.
+threads, type. Beast2Py refuses unknown keys rather than silently applying a default,
+because a typo in a model or MCMC setting changes the analysis without changing the
+XML's validity.
 ```
 
 **布尔值。** 解析器只接受真正的 YAML 布尔值，或 `true/false/yes/no/on/off/1/0` 之一，并拒绝任何含混的值（带引号的 `"false"` 仍然接受，含义为*假*）：

@@ -6,6 +6,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from beast2py.config import ConfigParser
 from beast2py.reproducibility import (
     FingerprintGenerator,
@@ -14,6 +16,13 @@ from beast2py.reproducibility import (
 )
 
 from .conftest import TEST_FASTA, TEST_CONFIG_YAML
+
+
+def _with_threads(yaml_text, threads):
+    """Return `yaml_text` with an explicit ``mcmc.threads`` line added."""
+    return yaml_text.replace(
+        "  chain_length: 100000\n", f"  chain_length: 100000\n  threads: {threads}\n"
+    )
 
 
 class TestFingerprintGenerator:
@@ -304,3 +313,93 @@ class TestPipelineGenerator:
         _, content = self._generated("nf")
         assert "process methods" in content
         assert re.search(r"workflow\s*\{[^}]*methods\(\)", content, re.S)
+
+    # --- CODE-008: the BEAST2 thread count is a knob, not a literal ---------
+
+    def _workflow(self, kind, yaml_text=TEST_CONFIG_YAML, threads=None):
+        """Emit one workflow from `yaml_text` and return its text."""
+        config_path = self.tmpdir / "config.yaml"
+        config_path.write_text(yaml_text)
+        config = ConfigParser().parse(config_path)
+        gen = (
+            PipelineGenerator.generate_snakemake
+            if kind == "sm"
+            else PipelineGenerator.generate_nextflow
+        )
+        path = gen(
+            config,
+            output_dir=self.tmpdir / ("pipeline_%s_%s" % (kind, threads)),
+            config_file="config.yaml",
+            threads=threads,
+        )
+        return Path(path).read_text()
+
+    def test_thread_count_defaults_to_four_without_a_hardcoded_literal(self):
+        """An untouched config still emits the 4 the templates used to fix."""
+        for kind in ("sm", "nf"):
+            content = self._workflow(kind)
+            assert "-threads 4" in content, kind
+            assert content.count("-threads ") == 1, kind
+
+    def test_mcmc_threads_reaches_both_emitted_workflows(self):
+        """`mcmc.threads: 1` in the YAML must reach the Snakefile *and* the Nextflow file.
+
+        A 2-core laptop or a resource-restricted HPC partition used to have no
+        way to say so: the value was welded into the template.
+        """
+        for kind in ("sm", "nf"):
+            content = self._workflow(kind, yaml_text=_with_threads(TEST_CONFIG_YAML, 1))
+            assert "-threads 1" in content, kind
+            assert "-threads 4" not in content, kind
+
+    def test_explicit_threads_override_beats_the_configured_value(self):
+        """The --threads / threads= override reaches the file."""
+        for kind in ("sm", "nf"):
+            content = self._workflow(kind, yaml_text=_with_threads(TEST_CONFIG_YAML, 3), threads=7)
+            assert "-threads 7" in content, kind
+            assert "-threads 3" not in content, kind
+            assert "-threads 4" not in content, kind
+
+    def test_thread_count_must_be_a_positive_integer(self):
+        """0, negatives, fractions, bools and non-numbers never reach a workflow."""
+        from beast2py.config import ConfigError
+        from beast2py.models import validate_threads
+
+        for bad in (0, -1, -3, 2.5, "four", None, True):
+            with pytest.raises(ValueError):
+                validate_threads(bad)
+        for kind in ("sm", "nf"):
+            with pytest.raises(ValueError):
+                self._workflow(kind, threads=0)
+
+        config_path = self.tmpdir / "zero_threads.yaml"
+        config_path.write_text(_with_threads(TEST_CONFIG_YAML, 0))
+        with pytest.raises(ConfigError):
+            ConfigParser().parse(config_path)
+
+    def test_thread_count_does_not_change_the_analysis_fingerprint(self):
+        """Scheduling is not science: `threads` must not re-label an analysis.
+
+        The fingerprint's own contract is that nothing which cannot change the
+        analysis may change the identifier. Checked together with a knob that
+        *must* move it, so the exclusion cannot quietly grow into "mcmc is
+        ignored altogether".
+        """
+        base = ConfigParser().parse(self._write_config(TEST_CONFIG_YAML))
+        threaded = ConfigParser().parse(self._write_config(_with_threads(TEST_CONFIG_YAML, 1)))
+        assert base.mcmc.threads != threaded.mcmc.threads
+        assert FingerprintGenerator.config_hash(base) == FingerprintGenerator.config_hash(threaded)
+
+        longer = ConfigParser().parse(
+            self._write_config(
+                TEST_CONFIG_YAML.replace("chain_length: 100000", "chain_length: 200000")
+            )
+        )
+        assert FingerprintGenerator.config_hash(base) != FingerprintGenerator.config_hash(longer)
+
+    def _write_config(self, yaml_text):
+        """Write `yaml_text` into a fresh file and return its path."""
+        self._config_seq = getattr(self, "_config_seq", 0) + 1
+        path = self.tmpdir / ("cfg_%d.yaml" % self._config_seq)
+        path.write_text(yaml_text)
+        return path

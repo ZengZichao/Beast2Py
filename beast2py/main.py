@@ -843,12 +843,22 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
 
     pipeline_type = args.type.lower()
 
+    # `--threads` overrides mcmc.threads in the emitted workflow. Resolve it
+    # once, before any file is written, so a bad value cannot leave a half
+    # generated pipeline directory behind.
+    try:
+        n_threads = PipelineGenerator.resolve_threads(getattr(args, "threads", None), config)
+    except ValueError as e:
+        _error(str(e))
+        return 1
+
     if pipeline_type == "snakemake":
         _info("Generating Snakemake pipeline...")
         snakefile = PipelineGenerator.generate_snakemake(
             config,
             output_dir=output_dir,
             config_file=config_path,
+            threads=n_threads,
         )
         _success(f"Snakefile written to: {snakefile}")
 
@@ -858,6 +868,7 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
             config,
             output_dir=output_dir,
             config_file=config_path,
+            threads=n_threads,
         )
         _success(f"Nextflow file written to: {nf_file}")
 
@@ -867,6 +878,7 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
             config,
             output_dir=output_dir,
             config_file=config_path,
+            threads=n_threads,
         )
         _success(f"Snakefile written to: {snakefile}")
 
@@ -875,6 +887,7 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
             config,
             output_dir=output_dir,
             config_file=config_path,
+            threads=n_threads,
         )
         _success(f"Nextflow file written to: {nf_file}")
 
@@ -1246,6 +1259,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         dest="output_dir",
         help="Output directory (default: current directory)",
+    )
+    p_pipe.add_argument(
+        "--threads",
+        type=int,
+        default=None,
+        help=(
+            "BEAST2 thread count written into the generated workflow as "
+            "`beast -threads N`. Overrides mcmc.threads from the YAML; with "
+            "neither set the default is 4. Must be a positive integer."
+        ),
     )
     p_pipe.set_defaults(func=cmd_pipeline)
 
