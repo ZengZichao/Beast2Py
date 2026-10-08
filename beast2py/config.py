@@ -225,6 +225,12 @@ class ConfigParser:
     }
     VALID_DISTRIBUTIONS = _RegistryNames("_distributions")
     VALID_DATA_TYPES = {"nucleotide", "aminoacid"}
+    # Provenance *values* decide behaviour, not just documentation: an
+    # unrecognised ``calibration_type`` used to fall through to the soft branch,
+    # turning a hard-bound error into a warning a notebook or a discarded stderr
+    # can swallow whole.  Both are therefore whitelisted like the key names.
+    VALID_CALIBRATION_TYPES = {"soft", "hard"}
+    VALID_PROVENANCE_SOURCES = {"fossil", "biogeographic", "secondary", "other"}
 
     # Parameters a distribution cannot be sampled without.  BEAST2 fills in its
     # own defaults for anything it does not receive, so a missing required key
@@ -1653,10 +1659,27 @@ class ConfigParser:
             if not isinstance(prov_raw, dict):
                 raise ConfigError(f"Calibration '{name}': provenance must be a mapping")
             self._check_keys(prov_raw, "provenance", f"Calibration '{name}': provenance")
+            # Values are folded and whitelisted exactly like the key names. An
+            # unrecognised ``calibration_type`` used to reach the soft branch, so
+            # the hard-bound check -- the one that *stops* a file being written --
+            # was reachable only by accident of spelling.
+            prov_where = f"Calibration '{name}': provenance"
+            source_raw = prov_raw.get("source", "")
+            source = (
+                self._canonical_name(
+                    source_raw, self.VALID_PROVENANCE_SOURCES, "source", prov_where
+                )
+                if str(source_raw or "") != ""
+                else ""
+            )
+            type_raw = prov_raw.get("calibration_type", "soft")
+            calibration_type = self._canonical_name(
+                type_raw, self.VALID_CALIBRATION_TYPES, "calibration_type", prov_where
+            )
             provenance = Provenance(
-                source=prov_raw.get("source", ""),
+                source=source,
                 reference=prov_raw.get("reference", ""),
-                calibration_type=prov_raw.get("calibration_type", "soft"),
+                calibration_type=calibration_type,
                 original_age_min=self._as_num(
                     prov_raw, "original_age_min", f"Calibration '{name}': provenance"
                 ),

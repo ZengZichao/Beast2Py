@@ -210,9 +210,12 @@ class Provenance:
     """Calibration provenance metadata (core innovation).
 
     Attributes:
-        source: Source type (fossil, biogeographic, secondary, other).
+        source: Source type, one of ``fossil``, ``biogeographic``, ``secondary``
+            or ``other``; the parser whitelists it, as it whitelists the key names.
         reference: DOI or URL reference.
-        calibration_type: Soft or hard boundary.
+        calibration_type: ``soft`` or ``hard``, likewise whitelisted at parse time.
+            Only ``hard`` turns a contradicted fossil range into an error, so an
+            unrecognised spelling used to downgrade the check to a warning.
         original_age_min: Original minimum age.
         original_age_max: Original maximum age.
         notes: Free-text notes.

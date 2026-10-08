@@ -1,6 +1,7 @@
 """Tests for the config module."""
 
 import tempfile
+import warnings
 from pathlib import Path
 import pytest
 
@@ -242,3 +243,135 @@ class TestNameSpellingsAreCaseInsensitive:
             self._parse(mutate)
         assert "valid:" in str(exc.value)
         assert "chi_square" in str(exc.value)
+
+
+class TestProvenanceValueWhitelist:
+    """Provenance *values* are branched on, so a misspelling must not choose a branch.
+
+    The key names of a ``provenance`` block are whitelisted, but the values were
+    free text: ``calibration_type`` is compared against the string ``"hard"``, so
+    ``hardbound``, ``Hard-bound`` or ``h`` fell into the soft branch -- turning the
+    one check that stops a file from being written into a warning that a notebook,
+    an ignored warning filter or a discarded stderr swallows completely.
+    """
+
+    def setup_method(self, method):
+        """Create a temp directory holding the test alignment."""
+        self.tmpdir = Path(tempfile.mkdtemp())
+        (self.tmpdir / "test.fasta").write_text(TEST_FASTA)
+
+    def _parse_with_provenance(self, provenance):
+        """Parse TEST_CONFIG_YAML with *provenance* attached to the one calibration."""
+        import yaml
+
+        cfg = yaml.safe_load(TEST_CONFIG_YAML)
+        cfg["alignments"][0]["file"] = str(self.tmpdir / "test.fasta")
+        cfg["calibrations"][0]["distribution"] = {
+            "type": "normal",
+            "parameters": {"mean": 6.0, "sigma": 0.5},
+        }
+        cfg["calibrations"][0]["provenance"] = provenance
+        path = self.tmpdir / "c.yaml"
+        path.write_text(yaml.safe_dump(cfg))
+        return ConfigParser().parse(path)
+
+    @pytest.mark.parametrize("spelling", ["soft", "hard", "Hard", "HARD", " hard "])
+    def test_calibration_type_accepts_the_documented_values(self, spelling):
+        """Case and padding fold onto the two documented values."""
+        config = self._parse_with_provenance(
+            {"source": "fossil", "calibration_type": spelling, "reference": "DOI:10.1038/x"}
+        )
+        assert config.calibrations[0].provenance.calibration_type == spelling.strip().lower()
+
+    @pytest.mark.parametrize(
+        "spelling", ["hardbound", "hard-bound", "h", "hardish", "definite", ""]
+    )
+    def test_calibration_type_refuses_anything_else(self, spelling):
+        """The value is refused, and the message lists what is allowed."""
+        with pytest.raises(ConfigError) as exc:
+            self._parse_with_provenance(
+                {"source": "fossil", "calibration_type": spelling, "reference": "DOI:10.1038/x"}
+            )
+        message = str(exc.value)
+        assert "calibration_type" in message
+        assert "hard" in message and "soft" in message
+
+    @pytest.mark.parametrize("spelling", ["fossil", "biogeographic", "secondary", "other"])
+    def test_source_accepts_the_documented_values(self, spelling):
+        """The four values Supplementary Table S6 documents all parse."""
+        config = self._parse_with_provenance(
+            {"source": spelling, "calibration_type": "soft", "reference": "DOI:10.1038/x"}
+        )
+        assert config.calibrations[0].provenance.source == spelling
+
+    @pytest.mark.parametrize("spelling", ["Fossils", "molecular", "secondary-cal", "unclear"])
+    def test_source_refuses_anything_else(self, spelling):
+        """A misspelt or invented source is named, not quietly kept."""
+        with pytest.raises(ConfigError) as exc:
+            self._parse_with_provenance(
+                {"source": spelling, "calibration_type": "soft", "reference": "DOI:10.1038/x"}
+            )
+        message = str(exc.value)
+        assert "source" in message
+        assert "biogeographic" in message
+
+    def test_an_omitted_source_stays_legal(self):
+        """``source`` is optional; only a *given* value is whitelisted."""
+        config = self._parse_with_provenance(
+            {"calibration_type": "soft", "reference": "DOI:10.1038/x"}
+        )
+        assert config.calibrations[0].provenance.source == ""
+
+    def test_a_hard_type_that_contradicts_the_prior_still_errors(self):
+        """The whitelist is not a widening: a real hard bound is still enforced."""
+        with pytest.raises(ConfigError, match="younger than the fossil"):
+            self._parse_with_provenance(
+                {
+                    "source": "fossil",
+                    "calibration_type": "hard",
+                    "reference": "DOI:10.1038/x",
+                    "original_age_min": 7.0,
+                    "original_age_max": 9.0,
+                }
+            )
+
+    def test_a_misspelt_hard_type_is_refused_before_the_branch(self):
+        """The fail-open path this closes, pinned end to end.
+
+        Before the whitelist this configuration only warned: the prior's 95%
+        interval lies entirely below the recorded fossil range, the author wrote
+        down that the bound is hard, and the tool read the misspelling as soft.
+        Refusal happens while the value is parsed, so the soft branch is no longer
+        reachable by a typo, and the message still names the fossil contradiction
+        it was there to prevent.
+        """
+        with pytest.raises(ConfigError) as exc:
+            self._parse_with_provenance(
+                {
+                    "source": "fossil",
+                    "calibration_type": "hardbound",
+                    "reference": "DOI:10.1038/x",
+                    "original_age_min": 7.0,
+                    "original_age_max": 9.0,
+                }
+            )
+        message = str(exc.value)
+        assert "invalid calibration_type 'hardbound'" in message
+        assert "(valid: hard, soft)" in message
+
+    def test_a_genuine_soft_bound_still_only_warns(self):
+        """Soft remains soft: the convention is kept, not redefined."""
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            self._parse_with_provenance(
+                {
+                    "source": "fossil",
+                    "calibration_type": "soft",
+                    "reference": "DOI:10.1038/x",
+                    "original_age_min": 7.0,
+                    "original_age_max": 9.0,
+                }
+            )
+        assert any("younger than the fossil" in str(w.message) for w in caught), [
+            str(w.message) for w in caught
+        ]
