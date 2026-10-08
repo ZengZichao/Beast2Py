@@ -348,7 +348,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
 # Public alias: the Python API (beast2py.api) routes its write path through this
 # same gate helper, so the CLI and the library cannot disagree about what
-# "validated" means ( covered only the CLI before).
+# "validated" means (the helper used to cover only the CLI).
 validate_and_write = _validate_and_write
 
 

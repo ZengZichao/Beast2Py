@@ -66,7 +66,7 @@ class TestFingerprintGenerator:
 
         # The identifier is a pure function of the analysis: no calendar date,
         # so two runs of the same configuration are equal in full, not merely
-        # in their hash part ( /.
+        # in their hash part.
         assert fp1 == fp2
         assert len(fp1.split("-")) == 3, f"unexpected date component: {fp1}"
 

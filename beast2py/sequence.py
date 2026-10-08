@@ -112,7 +112,7 @@ def detect_data_type(sequences) -> str:
 
     The `quick` subcommand had no way to say which kind of data it was given
     and always read the file as nucleotide, so an amino-acid alignment with an
-    amino-acid model could not be expressed through it at all (2).
+    amino-acid model could not be expressed through it at all.
 
     Args:
         sequences: Iterable of objects exposing ``sequence``.
@@ -183,7 +183,7 @@ class SequenceReader:
         if data_type == "auto":
             # Peek at the residues so a caller that does not want to declare the
             # kind of data can still route an amino-acid alignment to an
-            # amino-acid model (2).
+            # amino-acid model.
             peek = (
                 SequenceReader._read_fasta(str(path))
                 if format == "fasta"
@@ -246,7 +246,7 @@ class SequenceReader:
         name containing spaces cannot be emitted into Newick without quoting.
         The name is therefore kept short, but a collision *caused by that
         truncation* must name the real headers rather than accusing the author
-        of duplicating names that were never duplicated (3).
+        of duplicating names that were never duplicated.
 
         Args:
             sequences: Parsed sequences.
@@ -304,8 +304,7 @@ class SequenceReader:
         # and a taxon name containing spaces cannot be written into Newick
         # without quoting. The name is therefore kept as-is, but the original
         # header is remembered so that a collision caused by *truncation* can
-        # name the real headers instead of blaming the author's data
-        # (3).
+        # name the real headers instead of blaming the author's data.
         source_headers: List[str] = []
         current_taxon = None
         current_header = None

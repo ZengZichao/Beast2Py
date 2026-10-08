@@ -164,50 +164,331 @@ class TestCanonicalSerialisation:
 class TestCommentIntegrity:
     """Earlier edit passes stripped characters from comments and docstrings.
 
-    The failures were mechanical and therefore are mechanically detectable, so
-    they are pinned here rather than left to review.
+    The failures were mechanical, so they are mechanically detectable -- but only
+    by a guard that looks where they actually happened. The first version of this
+    class missed precisely the shapes it existed to catch: it read only hash
+    comments and never a docstring, it required four or more leading spaces for a
+    prose line (so a module docstring line at column 0 was invisible), and it
+    counted parentheses only inside comment blocks (so an unbalanced docstring was
+    invisible). Those blind spots are closed here, and each new rule is pinned by a
+    test_guard method that writes a broken sample and asserts the matching predicate
+    fires. A guard that cannot fail is worse than no guard: it reads like a record
+    that the defect class was checked.
     """
 
-    # A period glued to nothing but preceded by a space is the signature of an
-    # edit that deleted the word after it.  The alternatives are what a repaired
-    # sentence can legitimately end with, and deliberately exclude "from . import".
-    ANCHOR = re.compile(r"(\w|[^\x00-\x7f]) +\.(?:$| [A-Z`#]| [-\u2014])")
-    EMPTY = re.compile(r"#\s*\.\s*$")
+    # The package sources *and* the test tree: the same edit passes touched both,
+    # and a guard that watches only the shipped package leaves the harness
+    # unmonitored.
+    TARGETS = sorted(p for root in (PKG, REPO / "tests") for p in root.rglob("*.py"))
 
-    def _prose_lines(self, path):
-        for no, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
-            stripped = line.strip()
-            if stripped.startswith("#") or re.match(r"^\s{4,}\S", line):
+    # A period preceded by a space is the signature of an edit that deleted the
+    # word after it. The alternatives are what a repaired sentence legitimately
+    # ends with: end of line, the opening of the next sentence, a docstring
+    # terminator, or a dash. "from . import" stays unmatched because "import"
+    # begins with a lower-case letter.
+    ANCHOR = re.compile(r"(\w|[^\x00-\x7f]) +\.(?:$|\"| [A-Z`\"'#]| [-\u2014])")
+    # A line that is nothing but a period, alone or behind a hash sign.
+    EMPTY = re.compile(r"^\s*(?:#\s*)?\.\s*$")
+    # A line that is nothing but a numbered anchor: the residue of a list whose
+    # items were merged into prose and whose numbering was left behind.
+    STRAY_ANCHOR = re.compile(r"^\s*#?\s*\((?:\d+|[a-z])\)\s*\.?\s*$")
+    # An opening parenthesis followed by a space is what a word swallowed right
+    # after it looks like. The escape keeps this file from tripping its own rule.
+    OPEN_PAREN = re.compile(r"\x28 \S")
+    # A numbered anchor is only meaningful as part of a list that starts at one
+    # and does not skip.
+    NUMBERED = re.compile(r"\((\d+)\)")
+    # Function words that cannot close a sentence: their presence at the end of a
+    # docstring or comment block means an edit cut the text short, which is the
+    # dominant defect class in this repository.
+    DANGLING = re.compile(
+        r"\b(?:the|a|an|of|and|or|is|was|for|with|from|which|to|in|by|as)\s*$",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _lines(path):
+        return path.read_text(encoding="utf-8").split("\n")
+
+    @classmethod
+    def _prose_lines(cls, path):
+        """Yield every non-blank line with its number, with no indentation floor.
+
+        The floor the first version used excluded exactly the lines that were
+        damaged: a module docstring and a top-of-file comment both sit at column 0.
+        """
+        for no, line in enumerate(cls._lines(path), 1):
+            if line.strip():
                 yield no, line
 
-    @pytest.mark.parametrize("path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name)
-    def test_no_space_before_sentence_period(self, path):
-        bad = [n for n, line in self._prose_lines(path) if self.ANCHOR.search(line)]
-        assert not bad, f"{path.name}: stray space before '.' at line(s) {bad}"
+    @staticmethod
+    def _docstrings(path):
+        """Yield (first_line, text) for every module, class and function docstring."""
+        import ast
 
-    @pytest.mark.parametrize("path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name)
-    def test_no_orphan_period_comment(self, path):
-        bad = [n for n, line in self._prose_lines(path) if self.EMPTY.match(line.strip())]
-        assert not bad, f"{path.name}: comment that is only a '.' at line(s) {bad}"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(
+                node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+            ):
+                continue
+            body = getattr(node, "body", [])
+            if not body:
+                continue
+            first = body[0]
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+            ):
+                yield first.value.lineno, first.value.value
 
-    @pytest.mark.parametrize("path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name)
-    def test_comment_blocks_have_balanced_parentheses(self, path):
-        lines = path.read_text(encoding="utf-8").split("\n")
-        block, start, problems = [], 0, []
-        for no, line in enumerate(lines, 1):
+    @classmethod
+    def _prose_units(cls, path):
+        """Yield (line, joined_text) per docstring and per contiguous comment block.
+
+        Sentences are judged on the joined unit, never on one wrapped line: a
+        comment that wraps mid-sentence is normal, one that ends mid-sentence is
+        the damage.
+        """
+        for start, text in cls._docstrings(path):
+            joined = " ".join(line.strip() for line in text.split("\n") if line.strip())
+            if joined:
+                yield start, joined
+        block, start = [], 0
+        for no, line in enumerate(cls._lines(path), 1):
             if line.strip().startswith("#"):
                 if not block:
                     start = no
-                block.append(line.strip().lstrip("# "))
+                block.append(line.strip().lstrip("#").strip())
                 continue
             if block:
-                text = " ".join(block)
-                # interval notation such as "(0, 1]" legitimately unbalances.
-                cleaned = re.sub(r"\(\s*[\d.,\s]+?[\]\)]", "", text)
-                if cleaned.count("(") != cleaned.count(")"):
-                    problems.append((start, cleaned.count("("), cleaned.count(")")))
+                yield start, " ".join(block)
                 block = []
-        assert not problems, f"{path.name}: unbalanced parentheses at {problems}"
+        if block:
+            yield start, " ".join(block)
+
+    @classmethod
+    def paren_counts(cls, text):
+        """Return the open and close counts of `text`, ignoring interval notation.
+
+        "(0, 1]" and "[1, 2)" legitimately unbalance, and this repository writes
+        about parameter bounds, so bracketed numeric intervals are removed first.
+        """
+        cleaned = re.sub(r"[\[(]\s*[\d.,\s-]+?[\])]", "", text)
+        return cleaned.count("("), cleaned.count(")")
+
+    @classmethod
+    def stray_numbered_anchors(cls, text):
+        """Return numbered anchors in `text` that are not a sequence starting at one.
+
+        An orphan anchor refers to an item of a list that is no longer in the file,
+        which is what a batch text edit leaves behind.
+        """
+        found = sorted({int(m.group(1)) for m in cls.NUMBERED.finditer(text)})
+        if found and found != list(range(1, len(found) + 1)):
+            return found
+        return []
+
+    @classmethod
+    def anchor_lines(cls, path):
+        return [no for no, line in cls._prose_lines(path) if cls.ANCHOR.search(line)]
+
+    @classmethod
+    def empty_lines(cls, path):
+        return [no for no, line in cls._prose_lines(path) if cls.EMPTY.match(line.strip())]
+
+    @classmethod
+    def stray_anchor_lines(cls, path):
+        return [no for no, line in cls._prose_lines(path) if cls.STRAY_ANCHOR.match(line.strip())]
+
+    @classmethod
+    def open_paren_lines(cls, path):
+        return [no for no, line in cls._prose_lines(path) if cls.OPEN_PAREN.search(line)]
+
+    @classmethod
+    def unbalanced_units(cls, path):
+        return [
+            start
+            for start, text in cls._prose_units(path)
+            if cls.paren_counts(text)[0] != cls.paren_counts(text)[1]
+        ]
+
+    @classmethod
+    def truncated_units(cls, path):
+        return [
+            (start, text[-60:])
+            for start, text in cls._prose_units(path)
+            if cls.DANGLING.search(text)
+        ]
+
+    @classmethod
+    def stray_anchor_units(cls, path):
+        return [
+            (start, cls.stray_numbered_anchors(text))
+            for start, text in cls._prose_units(path)
+            if cls.stray_numbered_anchors(text)
+        ]
+
+    # ---------------- the scans themselves ----------------
+
+    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
+    def test_no_space_before_sentence_period(self, path):
+        bad = self.anchor_lines(path)
+        assert not bad, f"{path}: stray space before '.' at line(s) {bad}"
+
+    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
+    def test_no_orphan_period_line(self, path):
+        bad = self.empty_lines(path)
+        assert not bad, f"{path}: line that is only a '.' at line(s) {bad}"
+
+    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
+    def test_no_orphan_numbered_anchor_line(self, path):
+        bad = self.stray_anchor_lines(path)
+        assert not bad, f"{path}: line that is only a numbered anchor at line(s) {bad}"
+
+    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
+    def test_no_space_after_an_opening_parenthesis(self, path):
+        bad = self.open_paren_lines(path)
+        assert not bad, f"{path}: a word lost right after an opening parenthesis at line(s) {bad}"
+
+    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
+    def test_docstrings_and_comment_blocks_have_balanced_parentheses(self, path):
+        problems = self.unbalanced_units(path)
+        assert (
+            not problems
+        ), f"{path}: unbalanced parentheses in docstring/comment at line(s) {problems}"
+
+    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
+    def test_docstrings_and_comment_blocks_are_not_truncated(self, path):
+        bad = self.truncated_units(path)
+        assert not bad, f"{path}: sentence cut off mid-phrase at line(s) {bad}"
+
+    @pytest.mark.parametrize("path", TARGETS, ids=lambda p: str(p.relative_to(REPO)))
+    def test_numbered_anchors_point_at_a_list(self, path):
+        bad = self.stray_anchor_units(path)
+        assert not bad, f"{path}: numbered anchor without a matching list at line(s) {bad}"
+
+    # ---------------- proof that each rule bites ----------------
+    #
+    # Samples are assembled from fragments, because this file is one of the files
+    # the scan covers and a literal damaged sentence would trip its own guard.
+
+    @staticmethod
+    def _write(tmp_path, name, text):
+        path = tmp_path / name
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_guard_sees_a_truncated_line_at_column_zero(self, tmp_path):
+        """The old indentation floor hid module docstring lines: the class defect."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            '"""Summary.\n\nSilent fallback was the largest source of wrong XML in the\n"""\n'
+            "x = 1\n",
+        )
+        fixed = self._write(
+            tmp_path,
+            "fixed.py",
+            '"""Summary.\n\nSilent fallback was the largest source of wrong XML in this tool.\n"""\n'
+            "x = 1\n",
+        )
+        assert [start for start, _ in self.truncated_units(broken)] == [1]
+        assert not self.truncated_units(fixed)
+
+    def test_guard_sees_an_unbalanced_parenthesis_in_a_docstring(self, tmp_path):
+        """The old block scan covered comments only: the second class defect."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            'def f():\n    """Digests differ for two datasets'
+            + " ("
+            + ' /.\n\n    Returns:\n        Nothing.\n    """\n'
+            "    return None\n",
+        )
+        fixed = self._write(
+            tmp_path,
+            "fixed.py",
+            'def f():\n    """Digests differ for two datasets.\n\n    Returns:\n        Nothing.\n    """\n'
+            "    return None\n",
+        )
+        assert self.unbalanced_units(broken) == [2]
+        assert not self.unbalanced_units(fixed)
+
+    def test_guard_sees_orphan_punctuation(self, tmp_path):
+        """A line that is only a period, or only a numbered anchor, used to match nothing."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            "x = 1\n" + ".\n" + "# (3).\n",
+        )
+        assert self.empty_lines(broken) == [2]
+        assert self.stray_anchor_lines(broken) == [3]
+
+    def test_guard_sees_a_stray_numbered_anchor_inside_prose(self, tmp_path):
+        """An anchor with no list to point at is reported, a real list is not."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            "# declaration order must not decide whether the config is\n# valid (0).\nx = 1\n",
+        )
+        listed = self._write(
+            tmp_path,
+            "listed.py",
+            "# Steps (1) and (2) both hold.\nx = 1\n",
+        )
+        assert self.stray_anchor_units(broken) == [(1, [0])]
+        assert not self.stray_anchor_units(listed)
+
+    def test_guard_sees_a_word_lost_after_an_opening_parenthesis(self, tmp_path):
+        """The alias comment lost its first word inside a parenthesis; no rule saw it."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            "# Public alias: the CLI and the library agree on what validated means"
+            + " ("
+            + " covered only the CLI before).\nx = 1\n",
+        )
+        fixed = self._write(
+            tmp_path,
+            "fixed.py",
+            "# Public alias: the CLI and the library agree on what validated means"
+            + " (the helper covered only the CLI before).\nx = 1\n",
+        )
+        assert self.open_paren_lines(broken) == [1]
+        assert not self.open_paren_lines(fixed)
+
+    def test_guard_sees_a_period_glued_to_a_space(self, tmp_path):
+        """The one rule the old class had, re-proven so it cannot rot back."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            "def f():\n    " + '"""Every named choice follows the same rule' + " ." + '"""\n'
+            "    return None\n",
+        )
+        assert self.anchor_lines(broken) == [2]
+
+    def test_guard_scans_a_docstring_not_only_comments(self, tmp_path):
+        """The first version never parsed docstrings at all."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            "class C:\n    "
+            + '"""A Gamma beta must mean the same thing everywhere'
+            + " ."
+            + '"""\n'
+            "    pass\n",
+        )
+        assert self.anchor_lines(broken) == [2]
+        assert len(list(self._docstrings(broken))) == 1
+
+    def test_the_target_list_is_not_silently_empty(self):
+        """A guard parametrised over an empty list passes and proves nothing."""
+        names = [str(p.relative_to(REPO)) for p in self.TARGETS]
+        assert len(names) >= 30, names
+        assert any(n.startswith("beast2py/") for n in names)
+        assert any(n.startswith("tests/") for n in names)
 
 
 class TestDistributionContents:

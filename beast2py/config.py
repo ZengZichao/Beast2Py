@@ -6,8 +6,9 @@ and constructs BEASTConfig objects.
 Validation is deliberately *fail-closed*: a key that is not understood, a
 value that is not a boolean, a ragged alignment or a malformed calibration
 raises :class:`ConfigError` instead of silently falling back to a default.
-Silent fallback was the single largest source of wrong-but-valid XML in the
-
+Silent fallback is the single largest source of wrong-but-valid XML: the file
+still parses, the model still initialises, and the analysis is nevertheless
+answering a question nobody asked it.
 """
 
 from __future__ import annotations
@@ -170,8 +171,8 @@ class _RegistryNames:
     A plain ``frozenset(registry._distributions)`` would snapshot the table when
     this module is first imported, so a later ``register_*`` call still would not
     be visible to the config validator -- which is the bug being fixed. Membership
-    and iteration resolve against the registry on every use instead
-    .
+    and iteration resolve against the registry on every use instead of caching a
+    copy of the name table.
 
     Args:
         table: Attribute name on ``ModelRegistry`` holding the dict to mirror.
@@ -306,7 +307,7 @@ class ConfigParser:
         options instead of a bare ValueError when the value is invalid.
 
         Matching is case-insensitive so that every named choice in a config
-        file follows the same rule ."""
+        file follows the same rule."""
         try:
             return enum_cls(value)
         except ValueError:
@@ -484,7 +485,7 @@ class ConfigParser:
         alignments: Dict[str, Any] = {}
         # Ids that were auto-registered as the unfiltered parent of a filtered
         # alignment.  A later *explicit* declaration of one of these is the
-        # author naming that source, not a duplicate (0).
+        # author naming that source, not a duplicate.
         implicit_alignment_ids: Set[str] = set()
         for index, aln_raw in enumerate(alignments_raw):
             where = f"alignments[{index}]"
@@ -600,7 +601,7 @@ class ConfigParser:
                 raise ConfigError(f"Duplicate alignment id: {aln_id}")
             # An implicit parent may be re-declared explicitly further down the
             # list; declaration order must not decide whether the config is
-            # valid (0).
+            # valid.
             implicit_alignment_ids.discard(aln_id)
             alignments[aln_id] = alignment
 

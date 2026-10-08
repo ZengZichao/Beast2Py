@@ -140,7 +140,7 @@ class Alignment:
 
         Taxon names and sequence characters both feed the digest, so two
         datasets of the same shape but different sites produce different
-        fingerprints ( /.
+        fingerprints.
 
         Returns:
             First 16 hex characters of the digest.
@@ -300,8 +300,8 @@ class Partition:
         clock_model: Clock model configuration.
         tree: Tree sharing setting. Only ``"shared"`` is supported today:
             Beast2Py assembles one linked topology for all partitions, and the
-            parser rejects any other value instead of silently ignoring it
-            . Per-partition unlinked trees are on the roadmap.
+            parser rejects any other value instead of silently ignoring it.
+            Per-partition unlinked trees are on the roadmap.
     """
 
     id: str

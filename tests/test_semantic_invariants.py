@@ -821,7 +821,7 @@ class TestKeyAndCalibrationChecks:
             ConfigParser().parse(str(path))
 
     def test_soft_bound_may_lie_below_the_fossil_minimum(self, tmp_path):
-        """A soft bound is reported, not refused; a hard one is refused ."""
+        """A soft bound is reported, not refused; a hard one is refused."""
         path = write_inputs(
             tmp_path,
             head() + '\n    site_model:\n      substitution_model:\n        type: "hky"\n'
@@ -1091,7 +1091,7 @@ class TestUnavailableIsNotSilent:
 
 
 class TestGammaParameterisation:
-    """A Gamma `beta` must mean the same thing everywhere .
+    """A Gamma `beta` must mean the same thing everywhere.
 
     BEAST2's Gamma defaults to mode=ShapeScale, so beta is a *scale* and the
     mean is alpha * beta.  `_frozen_distribution` was corrected for that while
@@ -1121,7 +1121,7 @@ class TestGammaParameterisation:
             frozen = _frozen_distribution("gamma", par, offset=0.0)
             assert st["mean"] == pytest.approx(float(frozen.mean()), rel=1e-9), par
             assert st["median"] == pytest.approx(float(frozen.median()), rel=1e-6), par
-            # the reported interval must sit where the sampled density is
+            # the reported interval must sit where the sampled density is thickest
             draws = np.asarray(frozen.rvs(size=20000, random_state=7))
             assert (draws < st["hpd_upper"]).mean() > 0.85, (par, st)
 
@@ -1350,7 +1350,7 @@ class TestSilentRewrites:
         assert base.n_sites == 36
 
     def test_library_path_is_gated_too(self, tmp_path):
-        """The Python API must not be able to bypass the CLI gates ."""
+        """The Python API must not be able to bypass the CLI gates."""
         from beast2py.api import Beast2Py
 
         body = head() + HKY_PARTITION + TAIL
@@ -1391,7 +1391,7 @@ class TestSilentRewrites:
 
         Shipping only the shell script is not enough: it resolves its Java
         helper relative to itself, so an installed Beast2Py used to fail with a
-        confusing "could not find or load main class" error .
+        confusing "could not find or load main class" error.
         """
         import beast2py
 
@@ -1456,7 +1456,7 @@ class TestSilentRewrites:
 
     @pytest.mark.skipif(os.name != "posix", reason="bash-only probe ordering")
     def test_old_java_on_path_does_not_shadow_a_newer_jdk(self, tmp_path):
-        """A 1.8 shim on PATH must not beat a JDK 17 found elsewhere .
+        """A 1.8 shim on PATH must not beat a JDK 17 found elsewhere.
 
         macOS machines commonly carry an ancient Oracle `java` on PATH while a
         usable openjdk@17 sits unlinked in Homebrew.  The script used to take

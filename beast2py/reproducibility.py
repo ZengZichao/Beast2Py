@@ -33,12 +33,14 @@ class FingerprintGenerator:
     date, no time zone and not the output file name, so the same YAML plus the
     same data yields the same identifier whenever and wherever it is run, while
     a changed model component, calibration, MCMC setting *or sequence* changes
-    it ( and the's.
+    it -- as does the content of the alignments themselves.
     """
 
     # 12 hex characters = 48 bits of digest. By the birthday bound, a 50%
-    # chance of one collision needs ~2^24 (≈1.7e7) distinct analyses, so the
-    # collision risk is irrelevant at the scale of published phylogenies.
+    # chance of one collision needs sqrt(2 * 2**48 * ln 2) = 1.98e7 distinct
+    # analyses, so the collision risk is irrelevant at the scale of published
+    # phylogenies. `collision_bound_50pct()` is the arithmetic behind that
+    # number; the sqrt(2**48) = 1.7e7 shortcut is only a ~39% chance.
     HASH_HEX_CHARS = 12
 
     @classmethod

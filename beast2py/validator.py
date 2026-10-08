@@ -285,7 +285,7 @@ class XMLValidator:
                     )
                     break
 
-        # Alignment sanity inside the produced XML ( backstop)
+        # Alignment sanity inside the produced XML (a backstop)
         for data_elem in root.findall("data"):
             seqs = data_elem.findall("sequence")
             if not seqs:
