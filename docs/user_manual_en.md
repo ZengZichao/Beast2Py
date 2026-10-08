@@ -592,6 +592,7 @@ beast2py validate \
 | `--xml` | Yes | — | Path to the XML file to validate |
 | `--beast2` | No | False | Also run the BEAST2 parse and initialisation check (needs BEAST2 and JDK 17) |
 | `--beast2-path` | No | `beast` | Path to the BEAST2 executable or to `beast2_validate.sh` |
+| `--allow-unvalidated` | No | False | With `--beast2`, report a structural-only pass as success even when BEAST2 cannot be reached. Without it that case exits **2** |
 
 **Level 1 (always).** This level checks XML well-formedness together with the following.
 
@@ -608,8 +609,19 @@ dimension. When `storeEvery` disables checkpointing, this level warns instead of
 **Level 2 (`--beast2`).** The headless BEAST2 `XMLParser` parses the file *and* calls
 `initAndValidate()` on every object. The two levels report with distinct wording
 (`Level 1/2 passed: structural checks …` vs
-`Level 2/2 passed: BEAST2 parsed and initialised the model.`). If either level fails, the
-exit code is 1.
+`Level 2/2 passed: BEAST2 parsed and initialised the model.`).
+
+**Exit codes, and why `validate` differs from `generate`.** A level that ran and rejected the
+file gives exit code 1. When `--beast2` was asked for and BEAST2 could not be reached at all —
+no installation, no JDK 17, or an installation whose bundled validator helper is missing — the
+command prints `Level 2/2 not run`, names the reason in its own words, and exits **2**: a check
+that never happened is reported as a refusal, never as a pass or as a BEAST2 verdict, and no
+JVM output reaches the user for a tool that failed to start. `--allow-unvalidated` is the
+explicit downgrade to a `[WARN]` and exit 0, matching the flag `generate` offers for the same
+choice. Validation *without* `--beast2` still exits 0 on a structural pass: `generate` writes a
+file and therefore gates every check it was asked to run, whereas `validate` writes nothing and
+only reports the question it was actually asked. That asymmetry is intentional. A CI job that
+must prove BEAST2 read the file has to pass `--beast2` and must not pass `--allow-unvalidated`.
 
 ```bash
 beast2py validate --xml examples/output_basic.xml
@@ -2061,6 +2073,12 @@ trusting `PATH` alone, because an older `java` on `PATH` should not shadow a usa
 A missing BEAST2 installation is therefore reported as *unavailable*, never as a pass. Because
 you asked for the check explicitly, generation stops with exit code 2 unless you pass
 `--allow-unvalidated`.
+
+`validate --beast2` applies the same rule to the standalone check: an unreachable BEAST2 is
+exit code 2 with `Level 2/2 not run`, not a silent pass and not exit code 1, which stays
+reserved for a model BEAST2 actually rejected. See
+[Section 5.4](#54-validate--validate-xml) for the exit-code contract and for why `validate`
+without `--beast2` legitimately exits 0.
 
 ### 16.3 Validation status
 

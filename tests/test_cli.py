@@ -1,13 +1,14 @@
 """Tests for the CLI main module."""
 
 import os
+import shutil
 import tempfile
 import pytest
 from pathlib import Path
 
 from beast2py.main import build_parser, main
 
-from .conftest import TEST_FASTA, TEST_CONFIG_YAML
+from .conftest import EXAMPLES_DIR, TEST_FASTA, TEST_CONFIG_YAML
 
 
 class TestCLI:
@@ -356,3 +357,101 @@ class TestUserYamlErrorReporting:
         )
         assert ret == 0, text
         assert out.exists()
+
+
+class TestValidateExitCodeWhenTheParseGateCannotRun:
+    """``validate --beast2`` must not go green on a check that never happened.
+
+    The archived release printed a JVM "could not find or load main class"
+    message and exited 1 for a broken installation, which is exactly the code it
+    uses for "BEAST2 rejected this model" -- so a missing checker and a rejected
+    analysis were indistinguishable, and before that the same case warned and
+    exited 0. The gate now refuses with its own code, 2, and an English
+    tool-level sentence.
+
+    ``validate`` with no ``--beast2`` still exits 0 on a structural pass, and that
+    is deliberate: generate gates a write, validate reports what it checked.
+    """
+
+    def setup_method(self, method):
+        """Write a structurally valid XML file for the command to read."""
+        self.tmpdir = Path(tempfile.mkdtemp())
+        self.xml = self.tmpdir / "sample.xml"
+        shutil.copy(EXAMPLES_DIR / "output_basic.xml", self.xml)
+
+    def _run_without_validator(self, monkeypatch, argv):
+        """Run *argv* with the bundled launcher pointed at one lacking its helper."""
+        import beast2py.validator as validator_module
+
+        hollow = self.tmpdir / "beast2_validate.sh"
+        hollow.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        monkeypatch.setattr(
+            validator_module.XMLValidator,
+            "_bundled_validator_script",
+            staticmethod(lambda: hollow),
+        )
+        return main(argv)
+
+    def test_requested_beast2_gate_exits_2(self, monkeypatch, capsys):
+        """Asking for BEAST2 and not getting it is a refusal, not a pass or a 1."""
+        ret = self._run_without_validator(
+            monkeypatch, ["validate", "--xml", str(self.xml), "--beast2"]
+        )
+        assert ret == 2
+        err = capsys.readouterr().err
+        assert "Level 2/2 not run" in err
+        assert "NOT been verified by BEAST2" in err
+
+    def test_the_failure_carries_no_jvm_crash_text(self, monkeypatch, capsys):
+        """The report is the tool's own sentence, not a Java stack trace."""
+        self._run_without_validator(monkeypatch, ["validate", "--xml", str(self.xml), "--beast2"])
+        captured = capsys.readouterr()
+        text = captured.out + captured.err
+        for fragment in ("ClassNotFound", "main class", "\u9519\u8bef", "\u539f\u56e0"):
+            assert fragment not in text, fragment
+
+    def test_the_exemption_is_explicit_and_named_like_generate(self, monkeypatch, capsys):
+        """--allow-unvalidated is the opt-in downgrade, matching the generate flag."""
+        ret = self._run_without_validator(
+            monkeypatch,
+            ["validate", "--xml", str(self.xml), "--beast2", "--allow-unvalidated"],
+        )
+        assert ret == 0
+        assert "Level 2/2 not run" in capsys.readouterr().err
+
+    def test_structural_only_validation_still_exits_zero(self, capsys):
+        """The documented asymmetry: no --beast2 means no gate was asked for."""
+        assert main(["validate", "--xml", str(self.xml)]) == 0
+        out = capsys.readouterr().out
+        assert "Level 1/2 passed" in out
+        assert "Level 2/2" not in out
+
+    def test_structural_only_validation_still_exits_one_on_a_bad_file(self, capsys):
+        """Refusing to claim a BEAST2 verdict is not the same as passing anything."""
+        broken = self.tmpdir / "broken.xml"
+        broken.write_text('<?xml version="1.0"?><foo/>', encoding="utf-8")
+        assert main(["validate", "--xml", str(broken)]) == 1
+
+    def test_a_real_rejection_is_still_reported_as_one(self, monkeypatch, capsys):
+        """Non-vacuity: 2 means "could not run"; a rejected model must stay 1."""
+        import beast2py.validator as validator_module
+
+        monkeypatch.setattr(
+            validator_module.XMLValidator,
+            "beast2_validation_status",
+            staticmethod(lambda *a, **k: (False, "INVALID: sample.xml  bad model", "failed")),
+        )
+        assert main(["validate", "--xml", str(self.xml), "--beast2"]) == 1
+        assert "BEAST2 rejected the model" in capsys.readouterr().err
+
+    def test_a_real_pass_is_still_reported_as_zero(self, monkeypatch, capsys):
+        """And the happy path is untouched: a parsed model exits 0."""
+        import beast2py.validator as validator_module
+
+        monkeypatch.setattr(
+            validator_module.XMLValidator,
+            "beast2_validation_status",
+            staticmethod(lambda *a, **k: (True, "VALID: sample.xml", "passed")),
+        )
+        assert main(["validate", "--xml", str(self.xml), "--beast2"]) == 0
+        assert "Level 2/2 passed" in capsys.readouterr().out

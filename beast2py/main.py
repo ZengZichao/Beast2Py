@@ -680,10 +680,38 @@ def _parse_calibration_yaml(yaml_path: str, known_taxa=None) -> List[Calibration
 def cmd_validate(args: argparse.Namespace) -> int:
     """Validate a BEAST2 XML file, reporting each level separately.
 
-    Three levels are distinguished on purpose: Beast2Py's structural checks,
-    and (optionally) BEAST2 parsing plus model initialisation. "BEAST2 could
-    read this file" is not the same statement as "this model is what the user
+    Two levels are distinguished on purpose: Beast2Py's structural checks, and
+    (optionally) BEAST2 parsing plus model initialisation. "BEAST2 could read
+    this file" is not the same statement as "this model is what the user
     specified", and the old wording blurred them.
+
+    The exit codes are:
+
+    - ``0`` the checks that ran all passed,
+    - ``1`` a check ran and failed,
+    - ``2`` ``--beast2`` was asked for and the BEAST2 parse gate could not be
+      run at all, so BEAST2 never looked at this file.
+
+    That third case is the point of this command's contract. A requested check
+    that did not happen is reported as a refusal, never as a pass: a CI job
+    running ``validate --beast2`` on a machine without BEAST2 goes red rather
+    than quietly green. ``--allow-unvalidated`` downgrades it back to a warning
+    for callers that genuinely want structural-only reporting, which is the same
+    exemption ``generate`` offers.
+
+    The asymmetry with ``generate`` is deliberate and documented. ``generate``
+    writes a file, so it gates: every check it was asked to run must pass before
+    anything lands on disk. ``validate`` writes nothing, so it reports: without
+    ``--beast2`` it is asking only the structural question, and passing that
+    question is a complete and honest answer, so it exits ``0``. What it must not
+    do is claim a BEAST2 verdict it never obtained, which is why ``--beast2`` on
+    an unreachable BEAST2 installation exits ``2`` instead.
+
+    Args:
+        args: Parsed command-line arguments.
+
+    Returns:
+        Process exit code; see above.
     """
     xml_path = args.xml
     _info(f"Validating XML: {xml_path}")
@@ -711,12 +739,25 @@ def cmd_validate(args: argparse.Namespace) -> int:
         beast2_path = args.beast2_path or "beast"
         success, output, status = XMLValidator.beast2_validation_status(xml_path, beast2_path)
         if status == "unavailable":
-            _warn(
-                "Level 2/2 skipped: BEAST2 is not installed or its validation script was "
-                "not found, so this XML has only been checked structurally. Do not treat "
-                "the structural pass as BEAST2 verification."
+            message = (
+                "Level 2/2 not run: the BEAST2 parse gate could not be started, because "
+                "no BEAST2 installation or validator launcher was found. This XML has "
+                "been checked structurally only, and has NOT been verified by BEAST2; "
+                "install BEAST2 v2.7.x (or pass --beast2-path, or set BEAST2_JAR), or "
+                "run again with --allow-unvalidated to accept a structural-only report."
             )
-            print(output.strip())
+            detail = (output or "").strip()
+            if not getattr(args, "allow_unvalidated", False):
+                _error(message)
+                if detail:
+                    # Only the launcher's own English setup diagnostic reaches the
+                    # user here: the reason the gate could not start is the whole
+                    # report, and a raw JVM stack trace would bury it.
+                    _error(f"  reason: {detail.splitlines()[-1]}")
+                return 2
+            _warn(message)
+            if detail:
+                print(detail)
         elif success:
             _success("Level 2/2 passed: BEAST2 parsed and initialised the model.")
         else:
@@ -1136,20 +1177,37 @@ def build_parser() -> argparse.ArgumentParser:
     p_val = subparsers.add_parser(
         "validate",
         help="Validate a BEAST2 XML file",
-        description="Validate a BEAST2 XML file for structural correctness and ID consistency.",
+        description=(
+            "Validate a BEAST2 XML file for structural correctness and ID "
+            "consistency. Without --beast2 only those structural checks run, and "
+            "passing them exits 0: this subcommand reports what it checked rather "
+            "than gating a write the way generate does. With --beast2 the file is "
+            "also parsed and initialised by BEAST2 v2.7.x, and if BEAST2 cannot be "
+            "reached the command exits 2 rather than reporting a verdict it never "
+            "obtained -- use --allow-unvalidated to accept a structural-only report "
+            "in that case."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_val.add_argument("--xml", required=True, help="XML file to validate")
     p_val.add_argument(
         "--beast2",
         action="store_true",
-        help="Also validate with BEAST2 -validate",
+        help="Also validate with BEAST2 (parse + model initialisation)",
     )
     p_val.add_argument(
         "--beast2-path",
         default="beast",
         dest="beast2_path",
         help="Path to BEAST2 executable (default: beast)",
+    )
+    p_val.add_argument(
+        "--allow-unvalidated",
+        action="store_true",
+        dest="allow_unvalidated",
+        help="With --beast2, report a structural-only pass as success even when "
+        "BEAST2 cannot be reached. By default that case exits 2, so a CI job "
+        "cannot turn 'BEAST2 missing' into a green run.",
     )
     p_val.set_defaults(func=cmd_validate)
 

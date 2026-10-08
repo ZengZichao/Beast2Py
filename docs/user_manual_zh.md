@@ -546,6 +546,7 @@ beast2py validate \
 | `--xml` | 是 | — | 待验证的 XML 文件路径 |
 | `--beast2` | 否 | False | 同时运行 BEAST2 解析 + 初始化检查（需 BEAST2 与 JDK 17） |
 | `--beast2-path` | 否 | `beast` | BEAST2 可执行文件或 `beast2_validate.sh` 路径 |
+| `--allow-unvalidated` | 否 | False | 与 `--beast2` 同用：BEAST2 不可达时仍把仅结构检查通过报告为成功；不加则该情形退出码为 **2** |
 
 **第 1 级（始终运行）。** 检查 XML 格式正确性与下列各项：
 
@@ -557,7 +558,9 @@ beast2py validate \
 
 语义检查包括：每个被估计参数都带有 `Prior`，状态节点上下界未反向，初值落在自身界内且与声明维度匹配。`storeEvery` 关闭续算时，该级给出警告。
 
-**第 2 级（`--beast2`）。** 无头 BEAST2 `XMLParser` 解析文件，**并对每个对象调用 `initAndValidate()`**。两级用不同措辞分别报告通过信息（`Level 1/2 passed: structural checks …` 与 `Level 2/2 passed: BEAST2 parsed and initialised the model.`）。任一级失败时，退出码为 1。
+**第 2 级（`--beast2`）。** 无头 BEAST2 `XMLParser` 解析文件，**并对每个对象调用 `initAndValidate()`**。两级用不同措辞分别报告通过信息（`Level 1/2 passed: structural checks …` 与 `Level 2/2 passed: BEAST2 parsed and initialised the model.`）。
+
+**退出码，以及 `validate` 为何与 `generate` 不同。** 某一级真正运行并拒绝了该文件，退出码为 1。若显式要求了 `--beast2` 而 BEAST2 根本无法触达——没有安装、没有 JDK 17、或安装中缺少随包的验证助手——命令打印 `Level 2/2 not run`，用自己的话说明原因，并以退出码 **2** 放弃：从未发生的检查被报告为拒绝，既不报告为通过，也不报告为 BEAST2 的判定，而且一个启动失败的工具不会把任何 JVM 输出交给用户。`--allow-unvalidated` 是显式降级为 `[WARN]` 与退出码 0，与 `generate` 提供的同名选项一致。不带 `--beast2` 的验证在结构通过时仍然退出 0：`generate` 要写文件，因此必须把它被要求运行的每一道闸门都变成门槛；`validate` 不写文件，只如实报告它被问到的那个问题。这一不对称是有意为之。需要证明 BEAST2 读过该文件的 CI 作业必须加 `--beast2`，且不得加 `--allow-unvalidated`。
 
 ```bash
 beast2py validate --xml examples/output_basic.xml
@@ -1807,6 +1810,8 @@ result = b2p.validate_xml("output.xml", beast2_validate=True, beast2_path="/path
 这条路径与 `generate` 的闸门 3 完全相同，需要安装 BEAST2 与一个 **JDK 17 或更新版本**，`--beast2-path` 可指向特定安装或脚本。随包脚本在[第 2.6 节](#26-安装-beast2可选用于-beast2-验证闸门)所列的候选中搜索该 JDK，而不是只信 `PATH`：`PATH` 上一个更旧的 `java` 不该遮蔽可用的 `openjdk@17`。所有候选都不合格时，脚本给出清晰的信息并以退出码 2 放弃。
 
 `beast2_validation_status` 区分三种结果：`passed`、`failed` 与 `unavailable`。缺少 BEAST2 安装报告为*不可用*，绝不会报告为通过。由于这项检查是显式要求的，生成会以退出码 2 停止，除非加 `--allow-unvalidated`。
+
+`validate --beast2` 对独立验证套用同一条规则：BEAST2 不可达时退出码为 2 并打印 `Level 2/2 not run`，而不是悄悄通过，也不是退出码 1——后者只留给 BEAST2 真正拒绝的模型。退出码约定，以及不带 `--beast2` 的 `validate` 为何可以合理地退出 0，见[第 5.4 节](#54-validate--验证-xml)。
 
 ### 16.3 验证状态
 
