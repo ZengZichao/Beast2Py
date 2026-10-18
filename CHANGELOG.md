@@ -55,6 +55,12 @@ published 2026-10-18. Tag and release
 
 ### Fixed
 
+- `tests/test_release_integrity.py` imported `tomllib`, which is stdlib only from
+  Python 3.11, so the licence-classifiers guard errored on the 3.10 legs of the CI
+  matrix the first time this branch ran there. The 3.11+ path still reads the parsed
+  `pyproject.toml`; on 3.10 the guard falls back to a line-anchored scan that a real
+  classifier entry -- a quoted string alone on its line -- trips and the explanatory
+  comment does not.
 - `validate --beast2` refuses with exit code 2 and a `Level 2/2 not run` report
   when BEAST2 is requested but cannot be reached, which is the same fail-closed
   behaviour `generate --beast2-validate` already had; `--allow-unvalidated` is

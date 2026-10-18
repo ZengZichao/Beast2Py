@@ -16,6 +16,7 @@ import json
 import math
 import pathlib
 import re
+import sys
 
 import pytest
 
@@ -651,13 +652,23 @@ class TestDistributionContents:
         assert '__license__ = "MIT"' not in sources["beast2py/__init__.py"]
         # read the parsed value, not the raw text: pyproject.toml explains in a comment why
         # the License :: trove classifiers were removed, and a substring test would trip on
-        # that explanation instead of on an actual classifier
-        import tomllib
+        # that explanation instead of on an actual classifier. tomllib is stdlib only from
+        # Python 3.11, so on 3.10 the guard falls back to a line-anchored scan: a real
+        # classifier entry is a quoted string alone on its line, which the prose comment
+        # never is.
+        if sys.version_info >= (3, 11):
+            import tomllib
 
-        classifiers = tomllib.loads(self.PYPROJECT).get("project", {}).get("classifiers", [])
-        assert not any(
-            c.startswith("License ::") for c in classifiers
-        ), f"a License :: classifier must not sit beside the PEP 639 SPDX expression: {classifiers}"
+            classifiers = tomllib.loads(self.PYPROJECT).get("project", {}).get("classifiers", [])
+            offenders = [c for c in classifiers if c.startswith("License ::")]
+            assert not offenders, (
+                "a License :: classifier must not sit beside the PEP 639 SPDX "
+                f"expression: {classifiers}"
+            )
+        else:
+            assert not re.search(
+                r'^\s*"License ::', self.PYPROJECT, re.M
+            ), "a License :: classifier must not sit beside the PEP 639 SPDX expression"
 
     def test_the_bundled_classes_keep_their_own_licence_text(self):
         """LGPL-2.1 is only honoured if the text and the notice travel with it."""
