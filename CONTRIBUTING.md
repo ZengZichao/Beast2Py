@@ -249,13 +249,13 @@ version-specific DOI only when a version must be pinned.
 
 ### Publishing to PyPI
 
-Not enabled. The `pypi` job in `release.yml` is gated on a repository **variable** named
-`PYPI_PUBLISH` being set to the string `true`, and it is skipped with a visible notice
-otherwise. To enable it:
-
-1. On pypi.org, register this repository as a **trusted publisher** for the project:
-   owner `ZengZichao`, repository `Beast2Py`, workflow `release.yml`, environment `pypi`.
-2. Add a repository variable `PYPI_PUBLISH` with the value `true`.
+Enabled as of 2026-10-18. The repository is registered on pypi.org as a **trusted
+publisher** for the project [`beast2py`](https://pypi.org/project/beast2py/)
+(owner `ZengZichao`, repository `Beast2Py`, workflow `release.yml`, environment
+`pypi`), and the repository variable `PYPI_PUBLISH` is set to `true`. Every `v*`
+tag now builds, attaches to the GitHub release and uploads to PyPI in one run;
+0.1.1 was the first PyPI release. To revoke, delete the variable and remove the
+publisher entry on pypi.org.
 
 Authentication is Trusted Publishing (OIDC): the job requests a short-lived `id-token`
 and PyPI validates it against the trusted-publisher entry above. **No API token is

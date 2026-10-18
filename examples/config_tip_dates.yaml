@@ -23,7 +23,7 @@
 # 因此 date-backward 全为 0 才是如实写法——BEAST2 由此得到“所有末端在同一时刻”，
 # 绝对时间轴完全由校准点决定。
 # 真正的异时采样数据（古 DNA、亚化石）可以走同一条路径：把若干末端日期改为非 0
-# 后，本版本（0.1.1）生成的 TipDatesRandomWalker 由 BEAST2 v2.7.8 解析并初始化
+# 后，本版本（0.1.2）生成的 TipDatesRandomWalker 由 BEAST2 v2.7.8 解析并初始化
 # 通过（2026-10-08 实测：两个非 0 日期的变体，gate 3 pass）。
 # 早先版本曾在 <taxonset> 里同时给出 alignment= 与 <taxon> 子节点，BEAST2 会以
 #   "Only one of taxon and alignment should be specified, not both
@@ -39,7 +39,7 @@ metadata:
   author: "Beast2Py"
   date: "2026-08-01"
   beast2_version: "2.7.8"
-  tool_version: "0.1.1"
+  tool_version: "0.1.2"
 
 alignments:
   - id: "alignment"

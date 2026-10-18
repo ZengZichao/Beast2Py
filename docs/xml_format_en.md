@@ -193,7 +193,7 @@ node ages stay identifiable. The random local clock adds two state nodes of its 
 The tool embeds an analysis fingerprint as an XML comment:
 
 ```xml
-<!-- Analysis Fingerprint: B2P-fe47b0659209-0.1.1 | Data: 30be5613d3ff6862 -->
+<!-- Analysis Fingerprint: B2P-69dba66a3570-0.1.2 | Data: 30be5613d3ff6862 -->
 ```
 
 Format: `B2P-{config_hash_12chars}-{tool_version} | Data: {data_hash_16chars}`

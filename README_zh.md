@@ -5,6 +5,7 @@
 [English](README.md) | 中文
 
 [![CI](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/beast2py)](https://pypi.org/project/beast2py/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23088756.svg)](https://doi.org/10.5281/zenodo.23088756)
 [![许可证: MIT AND LGPL-2.1-only](https://img.shields.io/badge/许可证-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
@@ -57,6 +58,12 @@ Beast2Py 是一个 Python 框架，用于**规范化指定、验证和诊断 BEA
 - BEAST2 2.7.x。生成的 XML 面向 BEAST 2.7 的 `beast.base.*` 命名空间。持续集成使用 **2.7.7** 运行时，并将 `BEAST.base` 包升级到 **2.7.8**；其他 2.7.x 预期可用但未实测。BEAST 2.7.x 的 class 文件要求 **JDK 17 或更新版本**
 - JDK 17 或更新版本，仅在使用可选的 BEAST2 验证闸门（`--beast2-validate` / `validate --beast2`）时需要；其余功能为纯 Python
 
+### 从 PyPI 安装
+
+```bash
+pip install beast2py
+```
+
 ### 从源码安装
 
 ```bash
@@ -80,7 +87,7 @@ defusedxml >= 0.7
 
 ### 命令行使用
 
-以下每条命令都在仓库根目录实测通过。`pip install -e .` 之后可直接用 `beast2py …`；
+以下每条命令都在仓库根目录实测通过。安装之后——从 PyPI 执行 `pip install beast2py`，或在克隆中执行 `pip install -e .`——即可直接用 `beast2py …`；
 未安装时把 `beast2py` 换成 `python3 -m beast2py.main` 即可（行为一致）。
 
 ```bash
@@ -255,7 +262,7 @@ print(models["substitution_models"])
 
 Beast2Py 生成以下可重复性制品：
 
-- **分析指纹** — 确定性标识符 `B2P-{sha256(config)[:12]}-{version}`（例如 `B2P-fe47b0659209-0.1.1`）。其中**不含日期分量**，因此同一配置加同一比对数据，在任何时区、任何时刻重跑都得到相同的字节与相同的标识符。只改输出文件名不会改变指纹；序列内容、树设置、冠群/茎群标志、超先验、参数先验、末端日期、算子权重，任何一项变化都会改变指纹
+- **分析指纹** — 确定性标识符 `B2P-{sha256(config)[:12]}-{version}`（例如 `B2P-69dba66a3570-0.1.2`）。其中**不含日期分量**，因此同一配置加同一比对数据，在任何时区、任何时刻重跑都得到相同的字节与相同的标识符。只改输出文件名不会改变指纹；序列内容、树设置、冠群/茎群标志、超先验、参数先验、末端日期、算子权重，任何一项变化都会改变指纹
 - **数据摘要** — XML 注释里除标识符外还带一个独立的摘要：16 位十六进制，覆盖比对的**内容**。生成时刻的墙钟时间只出现在 `.fingerprint.json` 侧车文件里，绝不写进 XML
 - **LaTeX 方法学描述** — 可直接用于论文的方法学段落
 - **Snakemake/Nextflow 管道** — 端到端可重复工作流文件
@@ -263,7 +270,6 @@ Beast2Py 生成以下可重复性制品：
 
 ## 路线图
 
-- 发布到 PyPI（`beast2py` 包名已核实可用）
 - 支持 CladeAge 校准类型（基于 Birth-Death 模拟的校准密度，映射到 `cladeage.math.distributions.FossilPrior` XML）
 - prior-only 日志的 ESS/HPD 自动解析与阈值告警（参考 Tracer 式 ACT/ESS 算法）
 - BEAST2 运行编排（pybeast 式独立运行目录、种子管理、resume 快照）
@@ -304,7 +310,7 @@ Beast2Py 的差异点在于把以下能力整合为一条配置阶段流水线�
 
 如果你在研究中使用 Beast2Py，请引用本软件：
 
-> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.1. Zenodo. https://doi.org/10.5281/zenodo.23088757
+> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.2. Zenodo. https://doi.org/10.5281/zenodo.23088756
 
 机器可读的引用元数据见 [CITATION.cff](CITATION.cff)。
 

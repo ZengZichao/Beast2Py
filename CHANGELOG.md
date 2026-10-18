@@ -5,16 +5,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Beast2Py is pre-1.0. It is not published on PyPI. Each release is archived on
-Zenodo -- see `CITATION.cff` and `.zenodo.json` for the concept DOI
-10.5281/zenodo.23088756 and the version DOI 10.5281/zenodo.23088757 carried by
-0.1.1 -- and it is developed in the open at
-https://github.com/ZengZichao/Beast2Py; install it from a clone of that
-repository or from the archived file. Version numbers follow SemVer, and a change
-to generated BEAST2 XML or to a validation gate is treated as a change to
-observed behaviour even if no API changes.
+Beast2Py is pre-1.0. Releases are published to PyPI as
+[`beast2py`](https://pypi.org/project/beast2py/) -- install a release with
+`pip install beast2py` -- and each release is archived on Zenodo -- see
+`CITATION.cff` and `.zenodo.json` for the concept DOI
+10.5281/zenodo.23088756, which always resolves to the latest archived version,
+with the per-version DOIs recorded in `CITATION.cff`. It is developed in the
+open at https://github.com/ZengZichao/Beast2Py. Version numbers follow SemVer,
+and a change to generated BEAST2 XML or to a validation gate is treated as a
+change to observed behaviour even if no API changes.
 
-## [Unreleased]
+## [0.1.2] - 2026-10-18
+
+Documentation-and-reporting release: no change to generated BEAST2 XML
+semantics or validation rules. The CLI now prints the four-check scheme the
+documentation describes, and `validate --beast2` fails closed the way
+`generate --beast2-validate` already did. 0.1.1 became the first PyPI release,
+published 2026-10-18. Tag and release
+[v0.1.2](https://github.com/ZengZichao/Beast2Py/releases/tag/v0.1.2), published
+2026-10-18.
 
 ### Changed
 
@@ -60,6 +69,14 @@ observed behaviour even if no API changes.
 
 ### Added
 
+- PyPI publication is live: 0.1.1 is available as
+  [`beast2py`](https://pypi.org/project/beast2py/), uploaded by the
+  repository's Release workflow through PyPI Trusted Publishing. The READMEs
+  carry a PyPI badge and name `pip install beast2py` as the primary install
+  path; the roadmap entry and the CHANGELOG header that said "not published on
+  PyPI" are gone, CONTRIBUTING.md documents the now-enabled pipeline, and
+  SECURITY.md notes that the published 0.1.x versions pin users, so an
+  advisory must name the earliest affected version.
 - Tests for the printed gate numbering: Gate 0 is asserted to precede the three
   generation gates in order, and both parse-time failure modes -- a provenance
   refusal and an illegal-character refusal -- are asserted to be reported as a

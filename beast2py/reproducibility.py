@@ -147,7 +147,7 @@ class FingerprintGenerator:
             config: BEAST configuration.
 
         Returns:
-            Fingerprint string, e.g. ``B2P-a3f7b2c9d1e8-0.1.1``.
+            Fingerprint string, e.g. ``B2P-69dba66a3570-0.1.2``.
         """
         tool_version = config.metadata.get("tool_version") or __version__
         return f"B2P-{FingerprintGenerator.config_hash(config)}-{tool_version}"

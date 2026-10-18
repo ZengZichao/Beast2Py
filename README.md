@@ -5,6 +5,7 @@
 English | [中文文档](README_zh.md)
 
 [![CI](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/beast2py)](https://pypi.org/project/beast2py/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23088756.svg)](https://doi.org/10.5281/zenodo.23088756)
 [![License: MIT AND LGPL-2.1-only](https://img.shields.io/badge/License-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
@@ -57,6 +58,12 @@ Beast2Py is a Python framework for **standardizing, validating, and diagnosing n
 - BEAST2 2.7.x. The generated XML targets the BEAST 2.7 `beast.base.*` namespace. Continuous integration validates against a **2.7.7** runtime whose `BEAST.base` package is then upgraded to **2.7.8**; other 2.7.x releases are expected to work but have not been tested. BEAST 2.7.x class files require **JDK 17 or newer**
 - JDK 17 or newer, only for the optional BEAST2 validation gate (`--beast2-validate` / `validate --beast2`); everything else is pure Python
 
+### Install from PyPI
+
+```bash
+pip install beast2py
+```
+
 ### Install from source
 
 ```bash
@@ -81,7 +88,8 @@ defusedxml >= 0.7
 ### CLI Usage
 
 Every command below has been run from a clone of the repository root. After
-`pip install -e .` they are available as `beast2py …`; without installing, replace
+installing — `pip install beast2py` from PyPI, or `pip install -e .` from a
+clone — they are available as `beast2py …`; without installing, replace
 `beast2py` with `python3 -m beast2py.main` (identical behaviour).
 
 ```bash
@@ -285,7 +293,7 @@ BEAST2 jars or JDK 17 are missing, those tests simply skip instead of failing. T
 
 Beast2Py generates the following reproducibility artifacts:
 
-- **Analysis fingerprint** — deterministic identifier `B2P-{sha256(config)[:12]}-{version}` (e.g. `B2P-fe47b0659209-0.1.1`). It contains **no date component**, so the same configuration plus the same alignment data yields the same bytes and the same identifier in any time zone and at any rerun time. Renaming the output file does not change the fingerprint; changing the sequence content, the tree setting, a crown/stem flag, a hyperprior, a parameter prior, a tip date or an operator weight does
+- **Analysis fingerprint** — deterministic identifier `B2P-{sha256(config)[:12]}-{version}` (e.g. `B2P-69dba66a3570-0.1.2`). It contains **no date component**, so the same configuration plus the same alignment data yields the same bytes and the same identifier in any time zone and at any rerun time. Renaming the output file does not change the fingerprint; changing the sequence content, the tree setting, a crown/stem flag, a hyperprior, a parameter prior, a tip date or an operator weight does
 - **Data digest** — besides the identifier, the XML comment carries a separate digest: 16 hex characters over the alignment *content*. The wall-clock generation time appears only in the `.fingerprint.json` sidecar file, never in the XML
 - **LaTeX methods description** — Publication-ready methods paragraph
 - **Snakemake/Nextflow pipeline** — End-to-end reproducible workflow files
@@ -293,7 +301,6 @@ Beast2Py generates the following reproducibility artifacts:
 
 ## Roadmap
 
-- Publish to PyPI (the `beast2py` package name has been verified as available)
 - Support CladeAge-style calibrations (birth-death simulation-based calibration densities mapped to `cladeage.math.distributions.FossilPrior` XML)
 - Automatic ESS/HPD parsing of prior-only logs with threshold alerts (Tracer-style ACT/ESS algorithms)
 - BEAST2 run orchestration (pybeast-style isolated run directories, seed management, resume snapshots)
@@ -335,7 +342,7 @@ The package is MIT; the bundled BEAST2 package-management classes are LGPL-2.1 (
 
 If you use Beast2Py in your research, please cite the software:
 
-> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.1. Zenodo. https://doi.org/10.5281/zenodo.23088757
+> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.2. Zenodo. https://doi.org/10.5281/zenodo.23088756
 
 Machine-readable citation metadata is available in [CITATION.cff](CITATION.cff).
 

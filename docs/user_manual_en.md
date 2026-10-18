@@ -1,6 +1,6 @@
 # Beast2Py User Manual
 
-- **Version:** 0.1.1
+- **Version:** 0.1.2
 - **Authors:** Zichao Zeng (曾子超) · [ORCID: 0000-0001-6553-970X](https://orcid.org/0000-0001-6553-970X)
 - **Date:** 2026
 
@@ -137,14 +137,14 @@ pip install -e ".[xml]"
 ```bash
 # Check the version
 beast2py --version
-# Output: Beast2Py v0.1.1
+# Output: Beast2Py v0.1.2
 
 # List supported models
 beast2py list-models
 
 # Verify the Python API
 python3 -c "import beast2py; print(beast2py.__version__)"
-# Output: 0.1.1
+# Output: 0.1.2
 ```
 
 Without installing the package, every command is reachable from a clone of the
@@ -714,7 +714,7 @@ beast2py fingerprint \
 | `--verbose` | `-v` | No | False | Show detailed fingerprint information |
 
 **Fingerprint format:** `B2P-{first 12 hex digits of the config digest}-{tool version}`,
-e.g. `B2P-fe47b0659209-0.1.1`. The identifier carries **no date and no time zone**, so
+e.g. `B2P-69dba66a3570-0.1.2`. The identifier carries **no date and no time zone**, so
 rerunning the same configuration on the same data always reproduces it. Twelve hex
 digits are 48 bits of digest: by the birthday bound, a 50% chance of even one collision needs
 sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ distinct analyses — about 2 × 10⁷, not the 2**24 = 1.7 × 10⁷ that a
@@ -724,13 +724,13 @@ square-root shortcut would suggest. It is a change-detection token, not a global
 
 ```json
 {
-  "fingerprint": "B2P-fe47b0659209-0.1.1",
+  "fingerprint": "B2P-69dba66a3570-0.1.2",
   "config_hash": "fe47b06592091a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
   "full_hash": "fe47b06592091a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
   "data_hash": "30be5613d3ff6862",
   "hash_bits": 48,
   "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% chance of one collision needs sqrt(2 * 2**48 * ln 2), about 1.98e+07 distinct analyses, so it is a change-detection token rather than a globally unique key.",
-  "tool_version": "0.1.1",
+  "tool_version": "0.1.2",
   "beast2_version": "2.7.8",
   "generation_time": "2026-09-29T18:01:17.890711",
   "analysis_name": "primates_basic_calibration",
@@ -738,7 +738,7 @@ square-root shortcut would suggest. It is a change-detection token, not a global
 }
 ```
 
-`generation_time` above is the moment this sample was captured; the identifier itself has no time component, so the same configuration on the same alignment always yields `B2P-fe47b0659209-0.1.1`.
+`generation_time` above is the moment this sample was captured; the identifier itself has no time component, so the same configuration on the same alignment always yields `B2P-69dba66a3570-0.1.2`.
 
 `data_hash` condenses the digest of each alignment's content down to the first 16 hex
 characters, and travels in the XML as `| Data: {hash16}` inside the fingerprint comment.
@@ -1052,7 +1052,7 @@ metadata:
   author: "Your Name"                   # Author (optional)
   date: "2026-08-01"                    # Free-text date (optional)
   beast2_version: "2.7.8"              # BEAST2 version (default 2.7.8)
-  tool_version: "0.1.1"                # Beast2Py version (default 0.1.1)
+  tool_version: "0.1.2"                # Beast2Py version (default 0.1.2)
   embed_fingerprint: true              # Accepted here and in `output`; `output` wins
 
 # === Sequence data ===
@@ -1992,7 +1992,7 @@ Under the dimensionless default criterion, a fixed `2.0` does not mean the same 
 
 ### 15.1 Analysis fingerprint
 
-The analysis fingerprint is a deterministic identifier generated from the SHA-256 hash of the *scientific* configuration, in the date-free format `B2P-{hash12}-{version}`, e.g. `B2P-fe47b0659209-0.1.1`. It carries **no date and no time zone**, so the same configuration over the same alignment data reproduces byte-for-byte on every rerun.
+The analysis fingerprint is a deterministic identifier generated from the SHA-256 hash of the *scientific* configuration, in the date-free format `B2P-{hash12}-{version}`, e.g. `B2P-69dba66a3570-0.1.2`. It carries **no date and no time zone**, so the same configuration over the same alignment data reproduces byte-for-byte on every rerun.
 
 These changes alter the fingerprint, because `models.py::to_dict` includes them in the hash: the sequence content, the tree setting (`Partition.tree`), a crown/stem (`use_originate`) or `tipsonly` flag, a hyperprior, a `parameter_priors` entry, a tip date, or an operator weight. Renaming the output file alone does not.
 
