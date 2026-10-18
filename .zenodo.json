@@ -3,7 +3,8 @@
   "version": "0.1.2",
   "upload_type": "software",
   "access_right": "open",
-  "license": {"id": "MIT AND LGPL-2.1-only"},
+  "license": {"id": "MIT"},
+  "notes": "Beast2Py is distributed as MIT AND LGPL-2.1-only: the Python package itself is MIT, and the bundled BEAST2 package-management helper classes are LGPL-2.1-only (see NOTICE and LICENSE.BEAST2-LGPL-2.1.txt in beast2py/tools).",
   "creators": [
     {
       "name": "Zeng, Zichao",

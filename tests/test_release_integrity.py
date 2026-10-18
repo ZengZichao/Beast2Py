@@ -631,6 +631,14 @@ class TestDistributionContents:
         expression replaces it, and the packaging job in ``ci.yml`` asserts the
         classifiers stay absent. Naming the licence twice, in two formats, is
         exactly how a three-way disagreement becomes possible.
+
+        Zenodo is the one place where the declaration must take a different
+        form, not a weaker one: its licence vocabulary lists single licences
+        only, so the compound SPDX id failed its schema and v0.1.2's
+        GitHub-integration archiving died with "Extra metadata load failed".
+        The archive metadata therefore declares the package's own MIT licence
+        in ``license.id`` and must carry the full compound in its text fields,
+        where a reader of the record sees it. This test pins that arrangement.
         """
         combined = "MIT AND LGPL-2.1-only"
         sources = {
@@ -647,8 +655,16 @@ class TestDistributionContents:
             assert combined in text, f"{label} does not declare {combined}"
 
         # the bare declaration is the defect this closes: no place may state only
-        # MIT, and "MIT" may not appear as a licence value without the LGPL half.
-        assert '"license": {"id": "MIT"}' not in sources[".zenodo.json"]
+        # MIT as the whole licence. The Zenodo archive is the sanctioned deviation
+        # in form, documented in the docstring above: `license.id` must stay a
+        # single vocabulary licence the archiver accepts, and the compound must
+        # sit in the record's text fields.
+        assert (
+            '"license": {"id": "MIT"}' in sources[".zenodo.json"]
+        ), "zenodo.json must keep the single-vocabulary licence id the Zenodo archiver accepts"
+        assert (
+            sources[".zenodo.json"].count(combined) >= 2
+        ), "zenodo.json must carry the full compound licence in both notes and description"
         assert '__license__ = "MIT"' not in sources["beast2py/__init__.py"]
         # read the parsed value, not the raw text: pyproject.toml explains in a comment why
         # the License :: trove classifiers were removed, and a substring test would trip on

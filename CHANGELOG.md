@@ -15,6 +15,21 @@ open at https://github.com/ZengZichao/Beast2Py. Version numbers follow SemVer,
 and a change to generated BEAST2 XML or to a validation gate is treated as a
 change to observed behaviour even if no API changes.
 
+## [Unreleased]
+
+### Fixed
+
+- Zenodo failed to archive v0.1.2 ("Extra metadata load failed"): the audit
+  batch had moved `.zenodo.json`'s licence to the compound SPDX expression
+  `MIT AND LGPL-2.1-only`, but Zenodo's licence vocabulary lists single
+  licences only -- the expression is fine in text fields, not as the licence
+  id. The archive metadata declares the package's own MIT licence in
+  `license.id` again (the value v0.1.1 archived successfully with) and carries
+  the full compound in `notes` as well as `description`; the release-integrity
+  guard pins that arrangement and documents the constraint instead of
+  rejecting the bare id. PyPI and the GitHub release are unaffected; the
+  v0.1.2 Zenodo record is created outside the release webhook.
+
 ## [0.1.2] - 2026-10-18
 
 Documentation-and-reporting release: no change to generated BEAST2 XML
