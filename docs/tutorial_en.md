@@ -93,9 +93,11 @@ Two defaults are worth noting.
 beast2py generate --config config.yaml --output output.xml
 ```
 
-`generate` runs three validation gates before it writes anything: Beast2Py's structural and
+`generate` runs four numbered checks before it writes anything: the parse-time Gate 0 (the
+calibration provenance rules and the alignment character validation, raised while the YAML and
+FASTA are read), then the three generation gates -- Beast2Py's structural and
 semantic checks, calibration conflict detection, and, with `--beast2-validate`, the BEAST2
-parser calling `initAndValidate()` on every object. It writes the file only after every gate
+parser calling `initAndValidate()` on every object. It writes the file only after every check
 that ran has passed, and any failure exits non-zero. Without `--force`, `generate` does not
 overwrite an existing `output.xml`. Add `--diagnose`, `--fingerprint` and `--methods` to
 produce the report and the reproducibility artifacts in the same call.
@@ -144,7 +146,7 @@ existing output unless you pass `--force`, so reusing the name would stop this r
 refusal rather than mix two analyses under one file.
 
 `quick` also accepts `--gamma-categories N` (default 0, meaning no Gamma), `--pre-burnin N`,
-`--name NAME`, `--force` and `-v/--verbose`. It runs the same three gates, and the same
+`--name NAME`, `--force` and `-v/--verbose`. It runs the same four checks, and the same
 `store_every` default applies.
 
 The calibrations YAML file:

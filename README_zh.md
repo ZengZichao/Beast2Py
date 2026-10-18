@@ -101,7 +101,7 @@ beast2py quick \
     --name quick_analysis \
     --output output_quick.xml
 
-# 验证生成的 XML（结构检查；加 --beast2 走 BEAST2 闸门）
+# 验证生成的 XML（Level 1/2，即闸门 1 结构检查；加 --beast2 走 Level 2/2，即闸门 3 的 BEAST2 检查）
 beast2py validate --xml examples/output_basic.xml
 
 # 生成 LaTeX 方法学描述
@@ -207,7 +207,7 @@ print(models["substitution_models"])
 
 - `beast2py/` — Beast2Py Python 包源代码（CLI、API、配置解析、XML 生成、诊断、可重复性、验证等模块）
 - `examples/` — 19 个示例配置文件、示例比对数据（FASTA）和示例输出制品
-- `tests/` — 测试套件（共收集 370 个测试：349 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
+- `tests/` — 测试套件（共收集 395 个测试：374 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
 - `beast2py/tools/` — 随包发布的无头 BEAST2 验证助手（`Beast2Validator.java` 源码，含预编译的 `classes/` 与 `launcher.jar`），由 `pyproject.toml` 以 `package-data` 随 wheel 打包发布；仓库根目录仅保留同名的薄包装 `beast2_validate.sh`
 - `docs/` — 使用手册、架构指南、教程、校准指南和 XML 格式指南（中英文）
 - `beast2_validate.sh` — 无头 BEAST2 验证启动脚本（需要 `BEAST.base.jar` 与 JDK 17+；自动探测 `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`，也可设 `BEAST2_JAR`）
@@ -221,31 +221,35 @@ print(models["substitution_models"])
 
 ## 验证
 
-`generate` 与 `quick` 依次运行三道闸门。只要运行过的闸门报告失败，命令就返回非零，并且
+`generate` 与 `quick` 依次运行四道编号检查：先是对输入做闸门 0 校验，再是判定已组装 XML 的三道生成闸门。只要运行过的检查报告失败，命令就返回非零，并且
 **不写出输出文件**。输出文件已存在时需要 `--force`，否则拒绝；同级 `.fingerprint.json` /
-`.methods.tex` 将变为陈旧文件时，命令会给出警告。三道闸门是：
+`.methods.tex` 将变为陈旧文件时，命令会给出警告。四道检查是：
 
-1. **结构检查** — XML 格式正确性与必需元素、id/idref 一致性、重复 ID、初值落在边界内、序列数据
+0. **输入的解析期校验（闸门 0）** — 读 YAML 与 FASTA 时抛出的校准溯源规则与比对字符校验。它发生在 XML 字符串存在之前，所以打印的闸门分母仍是 `/3`，标签也写成 `Gate 0 (parse-time, before the 3 generation gates)`。这一关失败会以退出码 1 返回一条 `Configuration error`，并且根本不进入生成闸门。
+1. **结构检查（闸门 1）** — XML 格式正确性与必需元素、id/idref 一致性、重复 ID、初值落在边界内、序列数据
    完整性；同时确认每个被估计参数都带 `Prior`、每个被估计状态节点都配有算子、没有算子挂在固定参数上
-2. **校准冲突检测** — 嵌套支（含根校准）之间的时间一致性、分布重叠、单系性冲突
-3. **BEAST2 检查（可选，`--beast2-validate`）** — 无头 BEAST2 `XMLParser` 在解析之后会对每个
+2. **校准冲突检测（闸门 2）** — 嵌套支（含根校准）之间的时间一致性、分布重叠、单系性冲突
+3. **BEAST2 检查（闸门 3，可选，`--beast2-validate`）** — 无头 BEAST2 `XMLParser` 在解析之后会对每个
    对象调用 `initAndValidate()`，因此检查的是模型能否**完成初始化**，不只是能否解析
 
-**验证不能证明什么**：三道闸门都不能判断模型是否回答了你的生物学问题。BEAST2 能顺利初始化的
+**验证不能证明什么**：四道检查都不能判断模型是否回答了你的生物学问题。BEAST2 能顺利初始化的
 模型，仍然可能是错误的模型。
 
 闸门 3 只在装有 BEAST2 与 JDK 17 的环境里才会运行。若你显式要求 `--beast2-validate`，而环境中
 找不到 BEAST2，生成会以退出码 2 停止且不写任何文件——只读退出码的 CI 因此不会把“BEAST2 缺失”
 当成通过。`--allow-unvalidated` 可以恢复“照样写出”的行为，此时不应把该 XML 称为“已通过 BEAST2
-验证”。持续集成用 BEAST2 **2.7.7** 运行时执行闸门 3，随后把 `BEAST.base` 包升级到 **2.7.8**。
+验证”。独立的 `validate --beast2` 现在按同一种方式拒绝：退出码 2 并打印
+`Level 2/2 not run (Gate 3, …)`，同样接受同名的 `--allow-unvalidated` 豁免，因此同一个缺失的运行时不可能在一个命令里是绿的、在另一个命令里是红的。`validate` 保留自己的两级措辞并打印映射关系：Level 1/2 对应闸门 1（结构检查），Level 2/2 对应闸门 3（BEAST2 解析 + 模型初始化）。
+
+闸门 3 也不校验附加包之间的依赖。`XMLParser` 只解析文件里点名的类，从不查阅已安装附加包的 `version.xml`，所以引用 `nestedsampling.gss.NS` 的 XML，在缺少 NS 1.2.0 声明的 MODEL_SELECTION 依赖时照样能解析并初始化——上述结果就是在这样的环境里核实出来的（`~/.beast/2.7/` 下为 BEAST 2.7.8、BDSKY 1.5.1 与 NS 1.2.0，**未安装 MODEL_SELECTION**）。因此闸门 3 变绿并不说明附加包集合是完整的；运行嵌套抽样分析前请先安装 MODEL_SELECTION。持续集成用 BEAST2 **2.7.7** 运行时执行闸门 3，随后把 `BEAST.base` 包升级到 **2.7.8**。
 该升级是尽力而为的：若取包失败，工作流只记一条 warning 并继续在 2.7.7 上运行，因此一次全绿
 并不能证明当时用的就是 2.7.8。真正核实过的范围是 BEAST 2.7.7 / 2.7.8 这一区间；其他 2.7.x
 未实测。`integration` 作业会打印它实际解析到的版本，所以确切的版本组合在运行日志里可见，
 而不是靠假设。
 
-测试套件共收集 370 个测试（349 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
+测试套件共收集 395 个测试（374 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
 示例配置、`quick` 路径以及仓库内的 `output_basic.xml` 生成 XML，并用真实的 BEAST2 解析器
-与模型初始化检查。当环境缺少 BEAST2 jar 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。
+与模型初始化检查。当环境缺少 BEAST2 jar 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败（也包括它同样按 best-effort 抓取的 MODEL_SELECTION 依赖）仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。
 
 ## 可重复性
 

@@ -102,7 +102,7 @@ beast2py quick \
     --name quick_analysis \
     --output output_quick.xml
 
-# Validate generated XML (structural checks; add --beast2 for the BEAST2 gate)
+# Validate generated XML (Gate 1, structural checks; add --beast2 for Gate 3, the BEAST2 check)
 beast2py validate --xml examples/output_basic.xml
 
 # Generate LaTeX methods description
@@ -211,7 +211,7 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 
 - `beast2py/` — Source code of the Beast2Py Python package (CLI, API, configuration parsing, XML generation, diagnostics, reproducibility, and validation modules)
 - `examples/` — 19 example configurations, example alignments (FASTA), and example output artifacts
-- `tests/` — Test suite (370 collected tests: 349 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
+- `tests/` — Test suite (395 collected tests: 374 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
 - `beast2py/tools/` — Headless BEAST2 validation helper bundled *inside* the package (`Beast2Validator.java` source plus the precompiled `classes/` and `launcher.jar`), shipped as `package-data` by `pyproject.toml`; the repository root keeps only a thin `beast2_validate.sh` wrapper
 - `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English)
 - `beast2_validate.sh` — Launcher script for headless BEAST2 validation (needs `BEAST.base.jar` and JDK 17 or newer; it auto-detects `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`, or set `BEAST2_JAR`)
@@ -225,22 +225,28 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 
 ## Validation
 
-`generate` and `quick` run three gates in sequence. If any gate that ran reports a
+`generate` and `quick` run four numbered checks in sequence: Gate 0 on the input, then the
+three generation gates that judge the assembled XML. If any check that ran reports a
 failure, the command exits non-zero and **writes no output file**. An existing output file
 needs `--force`, otherwise it is refused, and the CLI warns when a sibling
-`.fingerprint.json` / `.methods.tex` would be left stale. The three gates are:
+`.fingerprint.json` / `.methods.tex` would be left stale. The checks are:
 
-1. **Structural checks** — XML well-formedness and required elements, id/idref consistency,
+0. **Parse-time validation of the input (Gate 0)** — the calibration provenance rules and the
+   alignment character validation raised while the YAML and FASTA are read. It runs before an
+   XML string exists, which is why the printed gate denominators stay "/3" and why the label
+   reads `Gate 0 (parse-time, before the 3 generation gates)`. A failure here exits 1 with a
+   `Configuration error` line and never reaches the generation gates.
+1. **Structural checks (Gate 1)** — XML well-formedness and required elements, id/idref consistency,
    duplicate IDs, initial values inside their bounds, sequence sanity; plus confirmation
    that every estimated parameter carries a `Prior`, that every estimated state node carries
    an operator, and that no operator touches a fixed parameter
-2. **Calibration conflict detection** — temporal consistency between nested
+2. **Calibration conflict detection (Gate 2)** — temporal consistency between nested
    clades (root calibrations included), distribution overlap, monophyly conflicts
-3. **BEAST2 check (optional, `--beast2-validate`)** — the headless BEAST2 `XMLParser` calls
+3. **BEAST2 check (Gate 3, optional, `--beast2-validate`)** — the headless BEAST2 `XMLParser` calls
    `initAndValidate()` on every object after parsing, so what is checked is whether the
    model can **complete initialisation**, not merely whether it parses
 
-**What validation does not prove:** none of the three gates can tell you whether
+**What validation does not prove:** none of the four checks can tell you whether
 the model answers your biological question. A model that BEAST2 happily
 initialises may still be the wrong model.
 
@@ -248,7 +254,19 @@ Gate 3 only runs where BEAST2 and JDK 17 are installed. If you ask for
 `--beast2-validate` and BEAST2 cannot be found, generation stops with exit code 2 and
 writes nothing, so a CI job that reads only the exit code never treats "BEAST2 missing" as
 a pass. `--allow-unvalidated` restores the write-anyway behaviour, in which case the XML
-must not be described as BEAST2-verified.
+must not be described as BEAST2-verified. The standalone `validate --beast2` now refuses the
+same way — exit code 2, with `Level 2/2 not run (Gate 3, …)` — and accepts the same
+`--allow-unvalidated` opt-in, so one missing runtime is never green in one command and red in
+the other. `validate` keeps its own two-level vocabulary and prints the mapping: Level 1/2 is
+Gate 1 (structural) and Level 2/2 is Gate 3 (BEAST2 parse + model initialisation).
+
+Gate 3 also does not police add-on package dependencies. `XMLParser` resolves the classes a
+file names and never consults an installed add-on's `version.xml`, so an XML that references
+`nestedsampling.gss.NS` parses and initialises even when the MODEL_SELECTION package that NS
+1.2.0 declares as a dependency is not installed — which is exactly the environment these
+results were verified on (BEAST 2.7.8, BDSKY 1.5.1 and NS 1.2.0 under `~/.beast/2.7/`, no
+MODEL_SELECTION). A green Gate 3 therefore does not show the add-on set is complete; install
+MODEL_SELECTION before running a nested-sampling analysis.
 
 Continuous integration validates gate 3 against a BEAST2 **2.7.7** runtime whose
 `BEAST.base` package is then upgraded to **2.7.8**. That upgrade is best-effort: if the
@@ -257,11 +275,11 @@ not prove 2.7.8 was the version in use. What has actually been verified is the B
 2.7.8 band; other 2.7.x releases are untested. The `integration` job prints the version it
 resolved, so the exact combination is visible in the run log rather than assumed.
 
-The test suite comprises 370 collected tests (349 unit/semantic/release-integrity + 21 BEAST2
+The test suite comprises 395 collected tests (374 unit/semantic/release-integrity + 21 BEAST2
 integration). The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and
 check each with the real BEAST2 parser and model initialisation. When the
-BEAST2 jars or JDK 17 are missing, those tests simply skip instead of failing. Two of those cases additionally require the BDSKY and nested-sampling add-ons, and the CI workflow treats a failed `beast -get` of either as a warning rather than an error, so those two cases can skip on a green run. A passing CI badge therefore does not by itself show that `config_bd_skyline.yaml` and `config_nested_sampling.yaml` cleared gate 3; run `pytest tests -rs` to see which integration cases actually executed and which skipped.
+BEAST2 jars or JDK 17 are missing, those tests simply skip instead of failing. Two of those cases additionally require the BDSKY and nested-sampling add-ons, and the CI workflow treats a failed `beast -get` of either — or of the MODEL_SELECTION dependency it also fetches best-effort — as a warning rather than an error, so those two cases can skip on a green run. A passing CI badge therefore does not by itself show that `config_bd_skyline.yaml` and `config_nested_sampling.yaml` cleared Gate 3; run `pytest tests -rs` to see which integration cases actually executed and which skipped.
 
 ## Reproducibility
 

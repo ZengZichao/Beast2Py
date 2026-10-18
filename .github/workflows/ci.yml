@@ -210,7 +210,7 @@ jobs:
             || echo "::warning::could not upgrade BEAST.base to v2.7.8; continuing on the v2.7.7 runtime"
           "$HOME/.beast/2.7/BEAST.base/2.7.7/bin/beast" -version || true
 
-      - name: Install BEAST2 add-ons used by two examples (non-fatal)
+      - name: Install BEAST2 add-ons used by the examples (non-fatal)
         # config_bd_skyline.yaml and config_nested_sampling.yaml reference
         # bdsky.evolution.speciation.BirthDeathSkylineModel and
         # nestedsampling.gss.NS. Without the jars those two integration cases
@@ -220,6 +220,12 @@ jobs:
           BEAST="$HOME/.beast/2.7/BEAST.base/2.7.7/bin/beast"
           "$BEAST" -get BDSKY v1.5.1 || echo "::warning::BDSKY add-on not installed; bd_skyline example will be skipped"
           "$BEAST" -get NS || echo "::warning::nested-sampling add-on not installed; nested_sampling example will be skipped"
+          # NS 1.2.0's version.xml declares <depends on='MODEL_SELECTION' atleast='1.6.0'/>, so
+          # fetch the dependency NS advertises and resolve the same add-on set it asks for.
+          # Best-effort like the two fetches above: BEAST2's XMLParser does not enforce package
+          # dependencies at parse time, so the nested_sampling case neither skips nor fails
+          # when MODEL_SELECTION is absent -- it is the parse gate, not the dependency graph.
+          "$BEAST" -get MODEL_SELECTION || echo "::warning::MODEL_SELECTION add-on not installed; NS's declared dependency stays unmet, which the parse gate does not check"
           ls ~/.beast/2.7 || true
 
       - name: Install dependencies

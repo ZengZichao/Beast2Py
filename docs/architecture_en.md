@@ -8,7 +8,7 @@ Beast2Py follows a layered architecture designed for extensibility and maintaina
 
 | Module | File | Responsibility |
 |------|------|------|
-| CLI Entry | `main.py` | Command-line argument parsing, the three validation gates, workflow orchestration |
+| CLI Entry | `main.py` | Command-line argument parsing, the four numbered checks (Gate 0 plus the three generation gates), workflow orchestration |
 | Python API | `api.py` | `Beast2Py` facade — the same pipeline as the CLI, callable from Python |
 | Configuration | `config.py` | YAML config parsing, strict key/boolean/domain validation, default filling |
 | Data Models | `models.py` | All dataclass definitions |
@@ -57,8 +57,10 @@ Beast2Py follows a layered architecture designed for extensibility and maintaina
      estimated state node has an operator and that no operator touches a fixed one
         │
         ▼
-6. Validation Gates (main.py::_validate_and_write) — nothing is written unless every
-   gate that ran passes; any failure exits non-zero
+6. Validation Gates (main.py) — nothing is written unless every
+   gate that ran passes; any failure exits non-zero. Gate 0 already ran at step 2, before an
+   XML string existed, which is why the three generation gates print denominators of "/3"
+   ├── Gate 0 parse-time provenance + character validation (config.py) — the step 2 checks
    ├── Gate 1 structural + semantic checks (validator.py)
    ├── Gate 2 calibration conflict detection (diagnostics.py) ← Core Innovation
    │     temporal consistency, distribution overlap, monophyly conflicts
@@ -92,7 +94,7 @@ The `ModelRegistry` class in `registry.py` implements the Registry Pattern, mapp
 
 2. **YAML Configuration**: Declarative YAML configuration files for reproducibility and version control
 
-3. **Fail-Closed Validation**: The parser checks every configuration section against a key whitelist and refuses ambiguous booleans, out-of-domain priors and inputs the generator cannot honour, rather than silently filling in a default. The three validation gates run *before* any file is written, and any failure exits non-zero. `--force` unlocks only the one thing that is safe to unlock: replacing an existing output file
+3. **Fail-Closed Validation**: The parser checks every configuration section against a key whitelist and refuses ambiguous booleans, out-of-domain priors and inputs the generator cannot honour, rather than silently filling in a default. Those parse-time checks are Gate 0; the three generation gates that judge the assembled XML run *after* it and *before* any file is written, and any failure exits non-zero. `--force` unlocks only the one thing that is safe to unlock: replacing an existing output file
 
 4. **Estimated vs. Fixed Parameters**: The generator emits a parameter marked `estimate: false` as an inline `<parameter estimate="false">` child of the element that uses it, so that parameter never enters `<state>`, never receives an operator, and produces no trace column (`model.py::_state_node`). The writer then enforces both directions of that invariant: an estimated state node without an operator, or an operator attached to a fixed parameter, is an error
 

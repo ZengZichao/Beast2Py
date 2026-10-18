@@ -59,7 +59,7 @@ pipeline file generation.
 Two properties of the pipeline matter for every section below:
 
 - **The parser is fail-closed.** Every key is checked against a schema, every boolean must be an unambiguous boolean, every alignment is checked for equal lengths, unique names and a legal alphabet, and every distribution and tree-prior parameter is range-checked. Anything the generator cannot honour is an error, not a silent default ([Section 22.1](#221-strict-validation-rejected-inputs-and-their-error-messages)).
-- **Writing an XML is gated.** `generate` and `quick` run structural checks, calibration conflict detection and (optionally) the real BEAST2 parser+initialiser, and exit non-zero without writing the file if any gate that ran fails ([Section 16](#16-validation)).
+- **Writing an XML is gated.** `generate` and `quick` run the parse-time provenance and character checks (Gate 0), then structural checks, calibration conflict detection and (optionally) the real BEAST2 parser+initialiser (Gates 1 to 3), and exit non-zero without writing the file if any check that ran fails ([Section 16](#16-validation)).
 
 ### Design Philosophy
 
@@ -276,7 +276,7 @@ A typical Beast2Py workflow consists of the following steps.
 
 ```bash
 # Step 1: Create a YAML configuration file (see Section 7 for the full reference)
-# Step 2: Generate the XML (three gates run first; nothing is written if one fails)
+# Step 2: Generate the XML (Gate 0 and the three generation gates run first; nothing is written if one fails)
 beast2py generate --config config.yaml --output output.xml -v
 
 # Step 3: Run diagnostics (optional)
@@ -298,22 +298,33 @@ Working example, runnable against a clone of this repository (verified output):
 ```text
 $ beast2py generate -c examples/config_basic.yaml -o /tmp/output.xml -v
 [INFO] Reading configuration: examples/config_basic.yaml
+[OK] Gate 0 (parse-time, before the 3 generation gates) passed: calibration provenance and alignment characters.
   [verbose] Analysis: primates_basic_calibration
   [verbose] Partitions: 1
   [verbose] Calibrations: 1
   [verbose] Tree prior: yule
 [INFO] Generating BEAST2 XML...
 [OK] Gate 1/3 passed: Beast2Py structural checks (ids, idrefs, priors, operators).
+  [verbose] Gate 1: 0 errors, 0 warnings
 [OK] Gate 2/3 passed: no contradictory calibration conflicts.
 [OK] XML written to: /tmp/output.xml
 [OK] Done!
 ```
 
-With `--beast2-validate` a third line appears:
+The four numbered checks are Gate 0, the parse-time provenance and character
+validation of the *input*, then the three generation gates that judge the assembled XML: Gate
+1 (structural), Gate 2 (calibration conflicts) and Gate 3 (BEAST2 parse and initialisation).
+Gate 0 is not part of the `/3` denominator because it runs before any XML exists; its own label
+says so, which is why the progress lines still count to three.
+
+With `--beast2-validate` a further line appears:
 `[OK] Gate 3/3 passed: BEAST2 parsed and initialised the model.`. Without BEAST2 the line
 becomes `[ERROR] Gate 3/3 unavailable: no BEAST2 installation was found, …`, the exit code is
 **2**, and no file is written. `--allow-unvalidated` downgrades that to a `[WARN]` and writes
-the XML anyway, in which case it must not be described as BEAST2-verified.
+the XML anyway, in which case it must not be described as BEAST2-verified. A failure of Gate 0
+prints `[ERROR] Gate 0 (parse-time, before the 3 generation gates) failed: Configuration error:
+…`, exits **1**, and writes nothing — the generation gates never run, because there is no XML
+to judge.
 
 ### 4.3 API quick start
 
@@ -410,18 +421,25 @@ beast2py generate \
 | `--diagnose` | | No | False | Also run calibration diagnostics |
 | `--fingerprint` | | No | False | Generate an analysis fingerprint file (`.fingerprint.json`) |
 | `--methods` | | No | False | Generate a LaTeX methods description (`.methods.tex`) |
-| `--beast2-validate` | | No | False | Run the third gate: the BEAST2 parser, **calling `initAndValidate()` on every object** (needs BEAST2 and JDK 17) |
+| `--beast2-validate` | | No | False | Run Gate 3, the third generation gate: the BEAST2 parser, **calling `initAndValidate()` on every object** (needs BEAST2 and JDK 17) |
 | `--beast2-path` | | No | `beast` | Path to a BEAST2 validation script (`.sh`) or the BEAST2 executable; by default the tool locates the bundled `beast2_validate.sh` itself, trying next to the installed package, the project root, and `PATH` |
+| `--allow-unvalidated` | | No | False | With `--beast2-validate`, write the XML even when BEAST2 cannot be reached. Without it that case exits **2** and writes nothing. The same exemption, under the same name, as `validate --beast2 --allow-unvalidated` |
 | `--force` | | No | False | Overwrite `--output` if it already exists (default: refuse and exit 1) |
 | `--verbose` | `-v` | No | False | Show verbose output |
 
-**Gates and exit codes.** Gate 1 (Beast2Py structural checks), Gate 2 (calibration conflict
-detection) and, when requested, Gate 3 (BEAST2 parse and initialisation) all run *before*
-the file is written. A failing gate prints `[ERROR] Gate n/3 failed: …`, returns exit code
-1 and writes no output file; the Python API raises `ValueError` instead. If an earlier run
+**Gates and exit codes.** Four numbered checks run in this order: Gate 0 (the parse-time
+provenance and character validation of the configuration, raised while the YAML and FASTA are
+read), then Gate 1 (Beast2Py structural checks), Gate 2 (calibration conflict detection) and,
+when requested, Gate 3 (BEAST2 parse and initialisation); the three generation gates all run
+*before* the file is written, while Gate 0 runs before an XML string exists at all, which is why
+the printed denominators stay "/3". A failing generation gate prints
+`[ERROR] Gate n/3 failed: …` and returns exit code 1 with no output file; a Gate 0 failure
+prints `[ERROR] Gate 0 (parse-time, before the 3 generation gates) failed: Configuration
+error: …` and likewise returns 1 without writing, because there is nothing yet for the
+generation gates to judge. The Python API raises `ValueError` instead. If an earlier run
 left a `.fingerprint.json` or `.methods.tex` next to the same output name and this call
 omits `--fingerprint`/`--methods`, the CLI warns that those files are going stale. See
-[Section 16](#16-validation) for what the three gates do and do not guarantee.
+[Section 16](#16-validation) for what the checks do and do not guarantee.
 
 **Examples:**
 
@@ -590,9 +608,15 @@ beast2py validate \
 | Parameter | Required | Default | Description |
 |---|---|---|---|
 | `--xml` | Yes | — | Path to the XML file to validate |
-| `--beast2` | No | False | Also run the BEAST2 parse and initialisation check (needs BEAST2 and JDK 17) |
+| `--beast2` | No | False | Also run Gate 3, the BEAST2 parse and initialisation check (Level 2/2 here, `--beast2-validate` for `generate`; needs BEAST2 and JDK 17) |
 | `--beast2-path` | No | `beast` | Path to the BEAST2 executable or to `beast2_validate.sh` |
-| `--allow-unvalidated` | No | False | With `--beast2`, report a structural-only pass as success even when BEAST2 cannot be reached. Without it that case exits **2** |
+| `--allow-unvalidated` | No | False | With `--beast2`, report a structural-only pass as success even when BEAST2 cannot be reached. Without it that case exits **2**. Identical exemption, identical flag name, identical refusal as `generate --beast2-validate --allow-unvalidated` |
+
+**How the two levels map onto the gates.** `validate` reads an XML file rather than a YAML
+configuration, so it has no Gate 0 to run — the well-formedness half of that parse-time check
+lives inside Level 1 — and it cannot re-run Gate 2, calibration conflicts, because that needs
+the configuration the XML was assembled from. Each line therefore names the gate it is:
+Level 1/2 is Gate 1 (structural), Level 2/2 is Gate 3 (BEAST2 parse + model initialisation).
 
 **Level 1 (always).** This level checks XML well-formedness together with the following.
 
@@ -607,18 +631,22 @@ inverted bounds, and every initial value lies inside its own bounds and matches 
 dimension. When `storeEvery` disables checkpointing, this level warns instead of failing.
 
 **Level 2 (`--beast2`).** The headless BEAST2 `XMLParser` parses the file *and* calls
-`initAndValidate()` on every object. The two levels report with distinct wording
-(`Level 1/2 passed: structural checks …` vs
-`Level 2/2 passed: BEAST2 parsed and initialised the model.`).
+`initAndValidate()` on every object. The two levels report with distinct wording, and each line
+carries its gate mapping (`Level 1/2 passed (Gate 1, structural checks): ids, idrefs, priors,
+bounds and XML well-formedness.` vs
+`Level 2/2 passed (Gate 3): BEAST2 parsed and initialised the model.`).
 
 **Exit codes, and why `validate` differs from `generate`.** A level that ran and rejected the
 file gives exit code 1. When `--beast2` was asked for and BEAST2 could not be reached at all —
 no installation, no JDK 17, or an installation whose bundled validator helper is missing — the
-command prints `Level 2/2 not run`, names the reason in its own words, and exits **2**: a check
+command prints `Level 2/2 not run (Gate 3, BEAST2 parse + model initialisation): …`, names the
+reason in its own words, and exits **2**: a check
 that never happened is reported as a refusal, never as a pass or as a BEAST2 verdict, and no
 JVM output reaches the user for a tool that failed to start. `--allow-unvalidated` is the
 explicit downgrade to a `[WARN]` and exit 0, matching the flag `generate` offers for the same
-choice. Validation *without* `--beast2` still exits 0 on a structural pass: `generate` writes a
+choice; the refusal itself is now the same in both subcommands, and only the thing at risk
+differs, because `generate` also has a file it could write. Validation *without* `--beast2`
+still exits 0 on a structural pass: `generate` writes a
 file and therefore gates every check it was asked to run, whereas `validate` writes nothing and
 only reports the question it was actually asked. That asymmetry is intentional. A CI job that
 must prove BEAST2 read the file has to pass `--beast2` and must not pass `--allow-unvalidated`.
@@ -2023,6 +2051,16 @@ The generated Snakemake file is `Snakefile` and the Nextflow file is `main.nf`.
 
 ## 16. Validation
 
+Four numbered checks stand between a configuration and a file BEAST2 can actually run, and the
+CLI prints that numbering: **Gate 0** is the parse-time validation of the input (the calibration
+provenance rules and the alignment character check, raised by `ConfigParser.parse` while the YAML
+and FASTA are read), **Gate 1** is the structural validation below, **Gate 2** is
+calibration-conflict detection ([Section 14](#14-calibration-diagnostics)) and **Gate 3** is the
+BEAST2 native validation of 16.2. Gate 0 is not counted in the `/3` denominator the other three
+print, because it runs before an XML string exists. `validate` reports Gate 1 and Gate 3 as its
+two levels; it has no Gate 0 (it reads XML, not a configuration) and no Gate 2 (that needs the
+configuration the XML was assembled from).
+
 ### 16.1 Structural validation
 
 Structural validation (`validator.py::XMLValidator`) runs two tiers in one call.
@@ -2094,16 +2132,49 @@ you asked for the check explicitly, generation stops with exit code 2 unless you
 `--allow-unvalidated`.
 
 `validate --beast2` applies the same rule to the standalone check: an unreachable BEAST2 is
-exit code 2 with `Level 2/2 not run`, not a silent pass and not exit code 1, which stays
-reserved for a model BEAST2 actually rejected. See
+exit code 2 with `Level 2/2 not run (Gate 3, …)`, not a silent pass and not exit code 1, which
+stays reserved for a model BEAST2 actually rejected. See
 [Section 5.4](#54-validate--validate-xml) for the exit-code contract and for why `validate`
 without `--beast2` legitimately exits 0.
 
+**Add-on package dependencies are not enforced by the parse gate.** An XML that uses an add-on
+names its classes in `spec=` attributes, and `XMLParser` resolves such a name by loading the class
+it needs. It never consults the `<depends>` entries of an installed add-on's `version.xml`, so a
+file that references `nestedsampling.gss.NS` parses and initialises — Gate 3 passes, `validate
+--beast2` prints `Level 2/2 passed (Gate 3)` — on an installation that has NS but not the
+MODEL_SELECTION package NS 1.2.0 declares as a dependency. That is precisely the release
+environment recorded in [16.3](#163-validation-status): BEAST 2.7.8 with BDSKY 1.5.1 and
+NS 1.2.0 under `~/.beast/2.7/`, **no MODEL_SELECTION installed**, and all 21 BEAST2 integration
+cases clearing the gate. Read that as a statement about the parser and nothing more: a green Gate
+3 does not show the add-on set is complete, and an unmet dependency surfaces elsewhere — when the
+add-on manager or a GUI checks package metadata, or when a class from the missing package is
+actually asked for at run time. Install MODEL_SELECTION before running a nested-sampling analysis;
+the CI integration job fetches it best-effort so the resolved add-on set matches what NS
+advertises.
+
 ### 16.3 Validation status
 
-All **19** example configuration files pass all three gates: structural checks, calibration-conflict detection, and the BEAST2 `parseFile` and `initAndValidate` check. The third gate uses the native BEAST2 **v2.7.8** parser in headless mode, so no JavaFX is required. Two of the files depend on add-on packages — `config_bd_skyline.yaml` and `config_nested_sampling.yaml` — and were verified against the packages installed under `~/.beast/2.7/`, namely **BDSKY 1.5.1** and **NS 1.2.0**.
+All **19** example configuration files pass every check that was run on them: Gate 0 (the
+parse-time provenance and character validation), Gate 1 (structural), Gate 2 (calibration-conflict
+detection) and Gate 3 (the BEAST2 `parseFile` and `initAndValidate` check). Gate 3 uses the native
+BEAST2 **v2.7.8** parser in headless mode, so no JavaFX is required. Two of the files depend on
+add-on packages — `config_bd_skyline.yaml` and `config_nested_sampling.yaml` — and were verified
+against the packages installed under `~/.beast/2.7/`, namely **BDSKY 1.5.1** and **NS 1.2.0**.
+**MODEL_SELECTION was not installed in that environment**, although NS 1.2.0's `version.xml`
+declares it as a dependency; `config_nested_sampling.yaml` still cleared Gate 3, because
+`XMLParser` resolves the classes a file names and does not enforce add-on package dependencies at
+parse time (see 16.2 for what that does and does not show).
 
-The test suite comprises **370** collected tests: **349** unit, semantic and release-integrity tests and **21** BEAST2 integration tests. The integration tests generate XML from all 19 example configurations plus the `quick` path and the committed `output_basic.xml`, and check each with the real BEAST 2.7.8 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests simply skip instead of failing. Two of those cases additionally require the BDSKY and nested-sampling add-ons, and the CI workflow treats a failed `beast -get` of either as a warning rather than an error, so those two cases can skip on a green run. A passing CI badge therefore does not by itself show that `config_bd_skyline.yaml` and `config_nested_sampling.yaml` cleared gate 3; run `pytest tests -rs` to see which integration cases actually executed and which skipped. All are passing.
+The test suite comprises **395** collected tests: **374** unit, semantic and release-integrity
+tests and **21** BEAST2 integration tests. The integration tests generate XML from all 19 example
+configurations plus the `quick` path and the committed `output_basic.xml`, and check each with the
+real BEAST 2.7.8 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests
+simply skip instead of failing. Two of those cases additionally require the BDSKY and
+nested-sampling add-ons, and the CI workflow treats a failed `beast -get` of either — or of the
+MODEL_SELECTION dependency it also fetches best-effort — as a warning rather than an error, so
+those two cases can skip on a green run. A passing CI badge therefore does not by itself show that
+`config_bd_skyline.yaml` and `config_nested_sampling.yaml` cleared Gate 3; run `pytest tests -rs`
+to see which integration cases actually executed and which skipped. All are passing.
 
 ---
 

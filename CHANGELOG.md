@@ -5,15 +5,66 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Beast2Py is pre-1.0. It is not published on PyPI and has no Zenodo DOI; install
-it from a clone of this repository. Version numbers follow SemVer, and a change
+Beast2Py is pre-1.0. It is not published on PyPI. Each release is archived on
+Zenodo -- see `CITATION.cff` and `.zenodo.json` for the concept DOI
+10.5281/zenodo.23088756 and the version DOI 10.5281/zenodo.23088757 carried by
+0.1.1 -- and it is developed in the open at
+https://github.com/ZengZichao/Beast2Py; install it from a clone of that
+repository or from the archived file. Version numbers follow SemVer, and a change
 to generated BEAST2 XML or to a validation gate is treated as a change to
 observed behaviour even if no API changes.
 
 ## [Unreleased]
 
+### Changed
+
+- Gate numbering (2026-10-08, audit comment LANG-012): the CLI now prints the four
+  numbered checks the documentation describes. The parse-time validation of the
+  input -- the calibration provenance rules and the alignment character
+  validation raised by `ConfigParser.parse` -- is labelled
+  `Gate 0 (parse-time, before the 3 generation gates)`, on both the passing and
+  the failing path of `generate` and `quick`, while the three generation gates
+  keep their existing `Gate 1/3`, `Gate 2/3` and `Gate 3/3` lines: the `/3`
+  denominator counts the generation gates, and the Gate 0 label says so.
+  `validate` keeps its two-level vocabulary and now names the mapping on every
+  line (`Level 1/2 passed (Gate 1, structural checks): …`,
+  `Level 2/2 passed (Gate 3): …`, `Level 2/2 not run (Gate 3, …)`), so a
+  `validate` log and a `generate` log can be read against the same numbering.
+  Labels and wording only: no exit code, no flag name and no gate decision
+  changed, and a Gate 0 failure is still a `Configuration error` that exits 1
+  and writes nothing.
+- Documentation: the manuals, READMEs and architecture guides state the
+  four-check scheme, and the release-environment note now records that
+  MODEL_SELECTION -- which NS 1.2.0's `version.xml` declares as a dependency --
+  was **not** installed there while Gate 3 still passed, because BEAST2's
+  `XMLParser` resolves the classes a file names and does not enforce add-on
+  package dependencies at parse time. That is a statement about the parser, not
+  a guarantee about a run.
+- `--allow-unvalidated` help text on both `generate` and `validate` now states
+  the symmetry explicitly: one flag name, one refusal (exit 2 when a requested
+  BEAST2 check could not run), one opt-in downgrade.
+
+### Fixed
+
+- `validate --beast2` refuses with exit code 2 and a `Level 2/2 not run` report
+  when BEAST2 is requested but cannot be reached, which is the same fail-closed
+  behaviour `generate --beast2-validate` already had; `--allow-unvalidated` is
+  the explicit structural-only opt-in that restores exit 0. Regression tests now
+  pin the refusal from both the in-process CLI and a stripped environment with
+  an empty `HOME`, a missing `JAVA_HOME` and an unusable `BEAST2_JAR`.
+- CI: the BEAST2 `integration` job now also fetches the MODEL_SELECTION add-on
+  that NS 1.2.0 declares as a dependency, best-effort like the BDSKY and NS
+  fetches, with a comment explaining that the parse gate does not enforce it.
+  The matrix (two OSes x Python 3.10/3.11/3.12) and the black/flake8 gate are
+  unchanged.
+
 ### Added
 
+- Tests for the printed gate numbering: Gate 0 is asserted to precede the three
+  generation gates in order, and both parse-time failure modes -- a provenance
+  refusal and an illegal-character refusal -- are asserted to be reported as a
+  Gate 0 condition that exits 1 without writing and without running a generation
+  gate (`tests/test_cli.py`).
 - Zenodo archiving is live: the concept DOI is
   [10.5281/zenodo.23088756](https://doi.org/10.5281/zenodo.23088756) and v0.1.1 is
   archived as [10.5281/zenodo.23088757](https://doi.org/10.5281/zenodo.23088757).

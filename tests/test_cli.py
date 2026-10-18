@@ -623,3 +623,289 @@ class TestValidateExitCodeWhenTheParseGateCannotRun:
         )
         assert main(["validate", "--xml", str(self.xml), "--beast2"]) == 0
         assert "Level 2/2 passed" in capsys.readouterr().out
+
+
+class TestThePrintedGateNumbering:
+    """The CLI prints the four-check numbering the manuals and article use.
+
+    ``generate`` numbered three checks Gate 1/3, Gate 2/3 and Gate 3/3, while a
+    fourth -- the provenance rules and the character validation that run while
+    the YAML and FASTA are read -- ran before Gate 1 and carried no number. A
+    reader comparing a terminal log with the manuscript could not tell that the
+    unlabelled Configuration error was the parse-time check. Audit comment
+    LANG-012 asked for the two schemes to agree, so the parse-time check is now
+    printed as ``Gate 0 (parse-time, before the 3 generation gates)`` and the
+    three generation gates keep their "/3" denominators: the denominator counts
+    the generation gates, which is what the Gate 0 label spells out.
+
+    Only the labels changed. A Gate 0 failure still reaches the terminal as a
+    Configuration error, still exits 1, and still writes nothing, because there
+    is no XML yet for the generation gates to judge. ``validate`` keeps its
+    two-level wording and names the gate each level maps onto.
+    """
+
+    def setup_method(self, method):
+        self.tmpdir = Path(tempfile.mkdtemp())
+
+    def _config(self, name="cfg.yaml", calibration_yaml=TEST_CONFIG_YAML):
+        """Write a configuration file and its alignment, returning the path."""
+        (self.tmpdir / "test.fasta").write_text(TEST_FASTA, encoding="utf-8")
+        path = self.tmpdir / name
+        path.write_text(calibration_yaml, encoding="utf-8")
+        return path
+
+    def _passing_beast2(self, monkeypatch):
+        """Report Gate 3 as passed without needing a JVM."""
+        import beast2py.validator as validator_module
+
+        monkeypatch.setattr(
+            validator_module.XMLValidator,
+            "beast2_validation_status",
+            staticmethod(lambda *a, **k: (True, "VALID: probe.xml", "passed")),
+        )
+
+    def _report_rejected_beast2(self, monkeypatch):
+        """Report Gate 3 as unavailable without needing a JVM."""
+        import beast2py.validator as validator_module
+
+        monkeypatch.setattr(
+            validator_module.XMLValidator,
+            "beast2_validation_status",
+            staticmethod(
+                lambda *a, **k: (False, "SETUP-ERROR: no BEAST2 installation", "unavailable")
+            ),
+        )
+
+    def test_generate_numbers_the_four_checks_in_order(self, monkeypatch, capsys):
+        """Gate 0 prints before the three generation gates, and all four are named."""
+        self._passing_beast2(monkeypatch)
+        out = self.tmpdir / "gated.xml"
+        ret = main(["generate", "-c", str(self._config()), "-o", str(out), "--beast2-validate"])
+        captured = capsys.readouterr()
+        text = captured.out + captured.err
+        assert ret == 0, text
+
+        labels = (
+            "Gate 0 (parse-time, before the 3 generation gates) passed",
+            "Gate 1/3 passed",
+            "Gate 2/3 passed",
+            "Gate 3/3 passed",
+        )
+        positions = []
+        for label in labels:
+            assert label in text, label
+            positions.append(text.index(label))
+        assert positions == sorted(positions), "the printed gates are out of order"
+
+    def test_gate_zero_failure_is_a_configuration_error_that_writes_nothing(self, capsys):
+        """A rejected input is labelled Gate 0 and stops before the generation gates."""
+        bad = self._config(name="provenance.yaml")
+        # provenance records a fossil at least 50 Ma, and a hard-bound prior must
+        # contain the age it cites: normal(10, 1) has ~0% mass anywhere near it.
+        text = TEST_CONFIG_YAML.replace(
+            '  - name: "rootCalibration"\n    taxa: null\n    monophyletic: true\n',
+            '  - name: "rootCalibration"\n    taxa: null\n    monophyletic: true\n'
+            "    provenance:\n      source: fossil\n      calibration_type: hard\n"
+            "      original_age_min: 50.0\n",
+        )
+        assert "original_age_min" in text, "the fixture calibration was renamed"
+        bad.write_text(text, encoding="utf-8")
+        out = self.tmpdir / "never.xml"
+        ret = main(["generate", "-c", str(bad), "-o", str(out)])
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert ret == 1, combined
+        assert "Gate 0 (parse-time, before the 3 generation gates) failed" in combined
+        assert "Configuration error" in combined, combined
+        assert "provenance" in combined, combined
+        assert "Gate 1/3" not in combined, "the generation gates ran on an input that failed Gate 0"
+        assert not out.exists(), "an input that failed Gate 0 was written anyway"
+
+    def test_illegal_characters_are_a_gate_zero_failure(self, capsys):
+        """The character check is a parse-time check too, so it carries the same label."""
+        broken = TEST_FASTA.replace(
+            "ACGAACGTACGTAAGTTTTGCAAGGCATCGATCGGG", "ACGAACG@ACGTAAGTTTTGCAAGGCATCGATCGGG"
+        )
+        (self.tmpdir / "test.fasta").write_text(broken, encoding="utf-8")
+        cfg = self.tmpdir / "chars.yaml"
+        cfg.write_text(TEST_CONFIG_YAML, encoding="utf-8")
+        out = self.tmpdir / "never.xml"
+        ret = main(["generate", "-c", str(cfg), "-o", str(out)])
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert ret == 1, combined
+        assert "Gate 0 (parse-time, before the 3 generation gates) failed" in combined
+        assert "illegal" in combined, combined
+        assert "Gate 1/3" not in combined
+        assert not out.exists()
+
+    def test_quick_mode_labels_an_unreadable_alignment_as_gate_zero(self, capsys):
+        """quick builds its configuration from arguments, and gates it the same way."""
+        # Two headers whose first word is identical: the reader truncates the
+        # description and they collapse onto one taxon name, which is a parse-time
+        # refusal rather than something a generation gate can judge.
+        colliding = (
+            ">hom_sapiens anc\nACGTACGTACGTACGTTTTGCAAGGCATCGATCGGG\n"
+            ">hom_sapiens rec\nACGTACGTACGTAAGTTTTGCAAGGCATCGATCGGA\n"
+            ">pan_troglodytes\nACGAACGTACGTAAGTTTTGCAAGGCATCGATCGGG\n"
+            ">gorilla_gorilla\nACGAACGTACGTAAGTTTTGCAAGGCATCGATCGGA\n"
+        )
+        fasta = self.tmpdir / "colliding.fasta"
+        fasta.write_text(colliding, encoding="utf-8")
+        out = self.tmpdir / "never.xml"
+        ret = main(["quick", "-a", str(fasta), "-o", str(out)])
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert ret == 1, combined
+        assert "Gate 0 (parse-time, before the 3 generation gates) failed" in combined
+        assert "collapse to the same taxon name" in combined, combined
+        assert "Gate 1/3" not in combined
+        assert not out.exists()
+
+    def test_quick_mode_labels_a_provenance_failure_as_gate_zero(self, capsys):
+        """The calibration file quick reads is checked by the same parse-time rules."""
+        fasta = self.tmpdir / "test.fasta"
+        fasta.write_text(TEST_FASTA, encoding="utf-8")
+        cals = self.tmpdir / "cals.yaml"
+        # ``calibration_type`` decides whether an out-of-range fossil age is an
+        # error or a warning, so an unrecognised spelling is a parse-time refusal.
+        cals.write_text(
+            "- name: rootCal\n"
+            "  taxa: null\n"
+            "  monophyletic: true\n"
+            "  distribution:\n"
+            "    type: normal\n"
+            "    parameters: {mean: 10.0, sigma: 1.0}\n"
+            "  provenance:\n"
+            "    source: fossil\n"
+            "    calibration_type: hard-bound\n",
+            encoding="utf-8",
+        )
+        out = self.tmpdir / "never.xml"
+        ret = main(["quick", "-a", str(fasta), "-o", str(out), "--calibration-yaml", str(cals)])
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert ret == 1, combined
+        assert "Gate 0 (parse-time, before the 3 generation gates) failed" in combined
+        assert "Configuration error" in combined
+        assert "calibration_type" in combined, combined
+        assert not out.exists()
+
+    def test_quick_mode_prints_gate_zero_before_the_generation_gates(self, capsys):
+        """And the passing path prints the same four-check framing, in scope."""
+        fasta = self.tmpdir / "test.fasta"
+        fasta.write_text(TEST_FASTA, encoding="utf-8")
+        out = self.tmpdir / "quick.xml"
+        ret = main(["quick", "-a", str(fasta), "-o", str(out)])
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert ret == 0, combined
+        assert "Gate 0 (parse-time, before the 3 generation gates) passed" in combined
+        assert (
+            "no --calibration-yaml was supplied" in combined
+        ), "quick must say which parse-time checks it actually ran"
+        assert "Gate 1/3 passed" in combined and "Gate 2/3 passed" in combined
+
+    def test_validate_prints_the_gate_it_maps_each_level_onto(self, monkeypatch, capsys):
+        """A validate log now lines up with the generate numbering it shares."""
+        self._passing_beast2(monkeypatch)
+        ret = main(["validate", "--xml", str(EXAMPLES_DIR / "output_basic.xml"), "--beast2"])
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert ret == 0, combined
+        assert "Level 1/2 passed (Gate 1, structural checks)" in combined
+        assert "Level 2/2 passed (Gate 3)" in combined
+        assert "Gate 2, calibration conflicts, is not re-checked" in combined
+        assert "Gate 0" not in combined, "validate has no parse-time input check to report"
+
+    def test_validate_names_gate_three_when_the_check_cannot_run(self, monkeypatch, capsys):
+        """The refusal keeps its own vocabulary and the gate mapping together."""
+        self._report_rejected_beast2(monkeypatch)
+        ret = main(["validate", "--xml", str(EXAMPLES_DIR / "output_basic.xml"), "--beast2"])
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert ret == 2, combined
+        assert "Level 2/2 not run (Gate 3" in combined
+
+
+class TestValidateRefusesWhenBeast2IsUndiscoverable:
+    """``validate --beast2`` fails closed the way ``generate --beast2-validate`` does.
+
+    The two subcommands used to disagree: generate refused with exit 2 and wrote
+    nothing, while validate warned and exited 0, so the same missing runtime was
+    a red CI job in one command and a green one in the other. Both now exit 2,
+    and both accept the same explicit ``--allow-unvalidated`` downgrade.
+
+    The environment is stripped the way the generate-side case already is: an
+    empty HOME so the ``~/.beast/2.7`` search finds nothing, and a
+    ``BEAST2_JAR``/``--beast2-path`` that point at files which do not exist.
+    """
+
+    @staticmethod
+    def _run(argv, env):
+        import subprocess
+        import sys as _sys
+
+        root = Path(__file__).resolve().parent.parent
+        return subprocess.run(
+            [_sys.executable, "-m", "beast2py.main"] + argv,
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+            env={**env, "PYTHONPATH": str(root)},
+        )
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX env manipulation")
+    def test_requested_gate_exits_two_and_says_the_gate_is_unavailable(self, tmp_path):
+        empty_home = tmp_path / "no-beast"
+        empty_home.mkdir()
+        env = dict(
+            os.environ,
+            HOME=str(empty_home),
+            JAVA_HOME=str(tmp_path / "no-jdk"),
+            BEAST2_JAR=str(tmp_path / "definitely-not-a-jar.jar"),
+        )
+        xml = str(EXAMPLES_DIR / "output_basic.xml")
+
+        proc = self._run(["validate", "--xml", xml, "--beast2"], env)
+        combined = proc.stdout + proc.stderr
+        assert proc.returncode == 2, combined
+        assert "Level 2/2 not run (Gate 3" in combined
+        assert "NOT been verified by BEAST2" in combined
+
+        # ...and the exemption is still opt-in, still loud, and still exit 0.
+        proc = self._run(["validate", "--xml", xml, "--beast2", "--allow-unvalidated"], env)
+        combined = proc.stdout + proc.stderr
+        assert proc.returncode == 0, combined
+        assert "Level 2/2 not run (Gate 3" in combined
+        assert "[WARN]" in combined
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX env manipulation")
+    def test_generate_still_refuses_and_writes_nothing(self, tmp_path):
+        """Non-vacuity: the symmetry did not weaken the gate that already refused."""
+        empty_home = tmp_path / "no-beast"
+        empty_home.mkdir()
+        env = dict(
+            os.environ,
+            HOME=str(empty_home),
+            JAVA_HOME=str(tmp_path / "no-jdk"),
+            BEAST2_JAR=str(tmp_path / "definitely-not-a-jar.jar"),
+        )
+        out = tmp_path / "out.xml"
+        argv = [
+            "generate",
+            "-c",
+            str(EXAMPLES_DIR / "config_basic.yaml"),
+            "-o",
+            str(out),
+            "--beast2-validate",
+        ]
+        proc = self._run(argv, env)
+        combined = proc.stdout + proc.stderr
+        assert proc.returncode == 2, combined
+        assert "Gate 3/3 unavailable" in combined
+        assert not out.exists(), "the gate wrote an unvalidated file it was asked to refuse"
+
+        proc = self._run(argv + ["--allow-unvalidated"], env)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert out.exists(), "--allow-unvalidated must still write the file"
