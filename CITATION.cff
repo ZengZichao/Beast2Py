@@ -11,6 +11,9 @@ identifiers:
   - type: doi
     value: 10.5281/zenodo.23088757
     description: Zenodo version-specific DOI for version 0.1.1
+  - type: doi
+    value: 10.5281/zenodo.23452749
+    description: Zenodo version-specific DOI for version 0.1.2
 authors:
   - family-names: Zeng
     given-names: Zichao
