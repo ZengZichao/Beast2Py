@@ -25,7 +25,7 @@ metadata:
   author: "Beast2Py"
   date: "2026-08-01"
   beast2_version: "2.7.8"
-  tool_version: "0.1.1"
+  tool_version: "0.1.2"
 
 alignments:
   - id: "alignment"
@@ -68,11 +68,11 @@ calibrations:
       offset: 6.5
     provenance:
       source: "fossil"
-      reference: "DOI:10.1038/nature12323"
+      reference: "placeholder — no source consulted; replace with the reference you used"
       calibration_type: "soft"
       original_age_min: 7.0
       original_age_max: 9.5
-      notes: "Sahelanthropus tchadensis, 7.24 Ma; soft minimum"
+      notes: "illustrative input, not a published age: Sahelanthropus tchadensis soft; soft minimum"
 
   # Crown Hominidae (great apes).  lognormal(M=1.0, S=0.4) offset 12 ->
   # median 14.72, 95% HPD [12.99, 17.40]: the interval starts above the
@@ -86,7 +86,7 @@ calibrations:
       offset: 12.0
     provenance:
       source: "fossil"
-      reference: "DOI:10.1126/science.1069883"
+      reference: "placeholder — no source consulted; replace with the reference you used"
       calibration_type: "soft"
       original_age_min: 12.5
       original_age_max: 17.5

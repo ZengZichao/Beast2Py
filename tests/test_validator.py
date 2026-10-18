@@ -163,3 +163,107 @@ class TestPriorCoverageRule:
         )
         result = XMLValidator.validate(self._xml(nodes))
         assert not any("has no <Prior>" in e for e in result.errors), result.errors
+
+
+class TestTheParseGateRefusesToPretendItRan:
+    """A missing validator is a setup error, never a verdict about the model.
+
+    The bundled launcher assembles its class path from ``beast2py/tools``. When
+    that directory is absent -- a source install that omitted it, a partial
+    checkout -- java used to be reached anyway and answered with a localized
+    "could not find or load main class" and exit 1, which a caller gating on
+    exit codes reads as "BEAST2 rejected this XML". Both the launcher and this
+    layer now stop before the JVM, and say so in English.
+    """
+
+    @staticmethod
+    def _launcher_without_validator(tmp_path):
+        """A real launcher file whose sibling ``tools`` directory does not exist."""
+        script = tmp_path / "beast2_validate.sh"
+        script.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+        return script
+
+    def test_the_setup_problem_is_named_before_any_jvm_starts(self, tmp_path, monkeypatch):
+        """The check must short-circuit: a started JVM is already the defect."""
+        import subprocess
+
+        def _no_process_may_start(*args, **kwargs):
+            raise AssertionError("a JVM was reached for a validator that is not installed")
+
+        monkeypatch.setattr(subprocess, "run", _no_process_may_start)
+        monkeypatch.setattr(
+            XMLValidator,
+            "_bundled_validator_script",
+            staticmethod(lambda: self._launcher_without_validator(tmp_path)),
+        )
+        monkeypatch.setattr("shutil.which", lambda name: None)
+
+        success, output = XMLValidator.validate_with_beast2("in.xml")
+        assert not success
+        assert output.startswith("SETUP-ERROR")
+
+    def test_the_diagnostic_says_which_gate_could_not_run_and_why(self, tmp_path, monkeypatch):
+        """It names the parse gate and the missing helper, not a stack trace."""
+        monkeypatch.setattr(
+            XMLValidator,
+            "_bundled_validator_script",
+            staticmethod(lambda: self._launcher_without_validator(tmp_path)),
+        )
+        _, output = XMLValidator.validate_with_beast2("in.xml")
+        assert "BEAST2 parse gate could not be run" in output
+        assert "Beast2Validator" in output
+        assert "not a pass and not a rejection" in output
+        assert "ClassNotFound" not in output
+
+    def test_the_status_is_unavailable_rather_than_failed(self, tmp_path, monkeypatch):
+        """The status that lets a caller exit 2 instead of reporting a failure."""
+        monkeypatch.setattr(
+            XMLValidator,
+            "_bundled_validator_script",
+            staticmethod(lambda: self._launcher_without_validator(tmp_path)),
+        )
+        success, _, status = XMLValidator.beast2_validation_status("in.xml")
+        assert not success
+        assert status == "unavailable"
+
+    def test_a_jvm_class_path_failure_also_reads_as_unavailable(self, monkeypatch):
+        """The locale-independent half of the old crash is caught too.
+
+        An installation carrying the *previous* launcher still reaches java, so
+        the status layer keeps the signature: the exception name survives any
+        locale, while the readable sentence around it does not.
+        """
+        crash = (
+            "\u9519\u8bef: \u627e\u4e0d\u5230\u6216\u65e0\u6cd5\u52a0\u8f7d"
+            "\u4e3b\u7c7b Beast2Validator\n"
+            "\u539f\u56e0: java.lang.ClassNotFoundException: Beast2Validator"
+        )
+        monkeypatch.setattr(
+            XMLValidator, "validate_with_beast2", staticmethod(lambda *a, **k: (False, crash))
+        )
+        _, _, status = XMLValidator.beast2_validation_status("in.xml")
+        assert status == "unavailable"
+
+    def test_a_launcher_that_does_ship_the_validator_is_left_alone(self, tmp_path, monkeypatch):
+        """Non-vacuity: the guard fires on the missing helper, not on every path."""
+        script = self._launcher_without_validator(tmp_path)
+        real = XMLValidator._bundled_validator_script()
+        assert (
+            real is not None
+        ), "the package must ship its own launcher for this test to mean anything"
+        assert XMLValidator._validator_setup_problem(real, True) is None
+        assert XMLValidator._validator_setup_problem(script, True) is not None
+        # a script the user named is taken at face value: only its exit code decides
+        assert XMLValidator._validator_setup_problem(script, False) is None
+
+    def test_validate_file_still_reports_the_structural_verdict(self):
+        """The structural level is untouched by the gate's new behaviour.
+
+        The shipped worked example is the strictest file in the repository, so it
+        is the one worth asserting level 1 still accepts on its own merits.
+        """
+        from .conftest import EXAMPLES_DIR
+
+        committed = EXAMPLES_DIR / "output_basic.xml"
+        assert committed.is_file(), "the worked example must ship with the package"
+        assert XMLValidator.validate_file(str(committed)).is_valid

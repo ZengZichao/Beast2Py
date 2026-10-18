@@ -24,7 +24,9 @@
 #   3. tools/lib/BEAST.base.jar or lib/BEAST.base.jar next to this script
 #
 # Exit codes: 0 = all files valid, 1 = at least one file invalid,
-#             2 = setup error (jar or Java not found / too old).
+#             2 = setup error (jar or Java not found / too old, or the bundled
+#                 validator helper is not installed). Exit 2 is never a verdict
+#                 about the XML, and callers must not report it as one.
 
 set -u
 
@@ -156,6 +158,23 @@ for j in "$HOME"/.beast/2.7/*/*/lib/*.jar; do
 done
 
 # --- Run the headless validator ----------------------------------------------
+# The validator itself has to be present before java is reached. Without it the
+# class path above resolves to nothing runnable, and java answers with a
+# localized "could not find or load main class" on stderr and exit 1 -- which is
+# indistinguishable, to a caller gating on exit codes, from "BEAST2 rejected this
+# model". A missing *tool* is a setup error (2), never a verdict (1), so a CI job
+# that only ever sees exit 1 as "invalid XML" cannot go green on an unrun check.
+if [ ! -f "$SCRIPT_DIR/tools/classes/Beast2Validator.class" ] &&
+    [ ! -f "$SCRIPT_DIR/tools/Beast2Validator.java" ]; then
+    echo "ERROR: the BEAST2 parse gate could not be run:" >&2
+    echo "  the bundled validator (beast2py/tools/classes/Beast2Validator.class or" >&2
+    echo "  beast2py/tools/Beast2Validator.java) was not found next to this launcher," >&2
+    echo "  at $SCRIPT_DIR/tools. The BEAST2 package-management helper classes are" >&2
+    echo "  missing from this installation, so no BEAST2 class path can be assembled." >&2
+    echo "  Reinstall Beast2Py from a complete source tree, or pass the path of a" >&2
+    echo "  beast2_validate.sh that ships the validator (--beast2-path)." >&2
+    exit 2
+fi
 if [ -f "$SCRIPT_DIR/tools/classes/Beast2Validator.class" ]; then
     exec "$JAVA" -cp "$CLASSPATH" Beast2Validator "$@"
 else

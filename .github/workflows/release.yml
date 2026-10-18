@@ -111,10 +111,14 @@ jobs:
           for expected in \
             LICENSE \
             CITATION.cff \
+            beast2_validate.sh \
+            beast2py/beast2_validate.sh \
             beast2py/tools/NOTICE \
             beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt \
             beast2py/tools/Beast2Validator.java \
-            beast2py/tools/launcher.jar; do
+            beast2py/tools/launcher.jar \
+            tests/conftest.py \
+            tests/__init__.py; do
             # setuptools prefixes every sdist member with the versioned top
             # directory (beast2py-<version>/...), so the match must not anchor
             # to a literal "package/" prefix — anchor on a path boundary and

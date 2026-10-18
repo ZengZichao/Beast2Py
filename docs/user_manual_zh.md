@@ -1,6 +1,6 @@
 # Beast2Py 使用手册
 
-- **版本：** 0.1.1
+- **版本：** 0.1.2
 - **作者：** 曾子超 (Zichao Zeng) · [ORCID: 0000-0001-6553-970X](https://orcid.org/0000-0001-6553-970X)
 - **日期：** 2026 年
 
@@ -53,7 +53,7 @@ Beast2Py 从 YAML 配置生成完整的 BEAST2 XML，支持的模型包括：
 以下两条性质贯穿本手册的所有小节。
 
 - **解析器失败即关闭。** 每个键都对照 schema 校验，每个布尔值都必须含义明确，每条比对都会检查等长、名称唯一和字符表合法，每个分布与树先验参数都会做值域检查。生成器无法兑现的输入一律报错，不会静默取默认值（见[第 22.1 节](#221-严格校验被拒绝的输入及其错误信息)）。
-- **写出 XML 有闸门把关。** `generate` 与 `quick` 依次运行结构检查、校准冲突检测，以及可选的真实 BEAST2 解析与初始化检查。任一运行过的闸门失败，命令都以非零码退出，并且不写出文件（见[第 16 节](#16-验证)）。
+- **写出 XML 有闸门把关。** `generate` 与 `quick` 先运行输入侧的解析期检查（闸门 0：校准溯源与字符校验），随后依次运行结构检查、校准冲突检测，以及可选的真实 BEAST2 解析与初始化检查（闸门 1 至 3）。任一运行过的检查失败，命令都以非零码退出，并且不写出文件（见[第 16 节](#16-验证)）。
 
 ### 设计理念
 
@@ -131,14 +131,14 @@ pip install -e ".[xml]"
 ```bash
 # 检查版本
 beast2py --version
-# 输出: Beast2Py v0.1.1
+# 输出: Beast2Py v0.1.2
 
 # 列出支持的模型
 beast2py list-models
 
 # 验证 Python API
 python3 -c "import beast2py; print(beast2py.__version__)"
-# 输出: 0.1.1
+# 输出: 0.1.2
 ```
 
 未安装时，在克隆出的仓库根目录下，所有命令都可以改用 `python3 -m beast2py.main <子命令>` 运行。两种形式走的是同一个入口（`[project.scripts] beast2py = "beast2py.main:main"`）。
@@ -255,7 +255,7 @@ Beast2Py 的典型工作流包括以下步骤。
 
 ```bash
 # 步骤 1：创建 YAML 配置文件（见第 7 节完整参考）
-# 步骤 2：生成 XML（先过三道闸门；任一失败即不写出文件）
+# 步骤 2：生成 XML（先过闸门 0 与三道生成闸门；任一失败即不写出文件）
 beast2py generate --config config.yaml --output output.xml -v
 
 # 步骤 3：运行诊断（可选）
@@ -275,18 +275,22 @@ beast -overwrite output.xml
 ```text
 $ beast2py generate -c examples/config_basic.yaml -o /tmp/output.xml -v
 [INFO] Reading configuration: examples/config_basic.yaml
+[OK] Gate 0 (parse-time, before the 3 generation gates) passed: calibration provenance and alignment characters.
   [verbose] Analysis: primates_basic_calibration
   [verbose] Partitions: 1
   [verbose] Calibrations: 1
   [verbose] Tree prior: yule
 [INFO] Generating BEAST2 XML...
 [OK] Gate 1/3 passed: Beast2Py structural checks (ids, idrefs, priors, operators).
+  [verbose] Gate 1: 0 errors, 0 warnings
 [OK] Gate 2/3 passed: no contradictory calibration conflicts.
 [OK] XML written to: /tmp/output.xml
 [OK] Done!
 ```
 
-加 `--beast2-validate` 会多出一行 `[OK] Gate 3/3 passed: BEAST2 parsed and initialised the model.`。缺 BEAST2 时输出改为 `[ERROR] Gate 3/3 unavailable: …`，退出码为 **2**，并且不写任何文件。加上 `--allow-unvalidated` 会把该结果降级为 `[WARN]` 并照样写出，此时不应把该 XML 称为已通过 BEAST2 验证。
+四道编号检查依次是：闸门 0（对**输入**做解析期校验——校准溯源规则与比对字符校验）、闸门 1（结构检查）、闸门 2（校准冲突检测）与闸门 3（BEAST2 解析并初始化）。闸门 0 不在 `/3` 这个分母里，因为它在任何 XML 字符串存在之前就已运行；它的标签本身就把这一点写了出来，所以进度行仍然只数到 3。
+
+加 `--beast2-validate` 会多出一行 `[OK] Gate 3/3 passed: BEAST2 parsed and initialised the model.`。缺 BEAST2 时输出改为 `[ERROR] Gate 3/3 unavailable: …`，退出码为 **2**，并且不写任何文件。加上 `--allow-unvalidated` 会把该结果降级为 `[WARN]` 并照样写出，此时不应把该 XML 称为已通过 BEAST2 验证。闸门 0 失败会打印 `[ERROR] Gate 0 (parse-time, before the 3 generation gates) failed: Configuration error: …`，退出码为 **1**，同样不写任何文件——三道生成闸门根本不会运行，因为此时还没有可供判定的 XML。
 
 ### 4.3 API 快速开始
 
@@ -383,12 +387,13 @@ beast2py generate \
 | `--diagnose` | | 否 | False | 同时运行校准诊断 |
 | `--fingerprint` | | 否 | False | 生成分析指纹文件（`.fingerprint.json`） |
 | `--methods` | | 否 | False | 生成 LaTeX 方法学描述（`.methods.tex`） |
-| `--beast2-validate` | | 否 | False | 运行第三道闸门：BEAST2 解析器，**并对每个对象调用 `initAndValidate()`**（需 BEAST2 与 JDK 17） |
+| `--beast2-validate` | | 否 | False | 运行第三道生成闸门（闸门 3）：BEAST2 解析器，**并对每个对象调用 `initAndValidate()`**（需 BEAST2 与 JDK 17） |
 | `--beast2-path` | | 否 | `beast` | BEAST2 校验脚本（`.sh`）或可执行文件路径；缺省时自动定位随包发布的 `beast2_validate.sh`（项目根、安装包旁或 `PATH` 上） |
+| `--allow-unvalidated` | | 否 | False | 与 `--beast2-validate` 同用：BEAST2 不可达时照样写出 XML；不加则该情形退出码为 **2** 且不写文件。与 `validate --beast2 --allow-unvalidated` 是同名、同含义、同拒绝方式的同一项豁免 |
 | `--force` | | 否 | False | `--output` 已存在时覆盖（默认：拒绝并退出码 1） |
 | `--verbose` | `-v` | 否 | False | 显示详细输出信息 |
 
-**闸门与退出码。** 闸门 1（Beast2Py 结构与语义自检）、闸门 2（校准冲突检测），以及按需开启的闸门 3（BEAST2 解析与初始化），全部在写文件**之前**运行。任一闸门失败都会打印 `[ERROR] Gate n/3 failed: …`，以退出码 1 返回，并且不写出文件；Python API 此时抛出 `ValueError`。若输出旁残留早先的 `.fingerprint.json` 或 `.methods.tex`，而本次调用省略了 `--fingerprint`/`--methods`，CLI 会警告这些文件正在变陈旧。三道闸门各自能证明什么、不能证明什么，见[第 16 节](#16-验证)。
+**闸门与退出码。** 四道编号检查按此顺序运行：闸门 0（配置的解析期校验——校准溯源规则与比对字符校验，在读 YAML 与 FASTA 时由 `ConfigParser.parse` 抛出），随后是闸门 1（Beast2Py 结构与语义自检）、闸门 2（校准冲突检测），以及按需开启的闸门 3（BEAST2 解析与初始化）。三道生成闸门全部在写文件**之前**运行，而闸门 0 在 XML 字符串存在之前就已运行，这正是打印的分母保持 `/3` 的原因。任一生成闸门失败都会打印 `[ERROR] Gate n/3 failed: …`，以退出码 1 返回，并且不写出文件；闸门 0 失败则打印 `[ERROR] Gate 0 (parse-time, before the 3 generation gates) failed: Configuration error: …`，同样以退出码 1 返回、不写文件，因为此时还没有可供生成闸门判定的东西；Python API 此时抛出 `ValueError`。若输出旁残留早先的 `.fingerprint.json` 或 `.methods.tex`，而本次调用省略了 `--fingerprint`/`--methods`，CLI 会警告这些文件正在变陈旧。各道检查能证明什么、不能证明什么，见[第 16 节](#16-验证)。
 
 **示例：**
 
@@ -544,8 +549,11 @@ beast2py validate \
 | 参数 | 必需 | 默认值 | 描述 |
 |---|---|---|---|
 | `--xml` | 是 | — | 待验证的 XML 文件路径 |
-| `--beast2` | 否 | False | 同时运行 BEAST2 解析 + 初始化检查（需 BEAST2 与 JDK 17） |
+| `--beast2` | 否 | False | 同时运行闸门 3，即 BEAST2 解析 + 初始化检查（本命令中记作 Level 2/2，`generate` 中记作 `--beast2-validate`；需 BEAST2 与 JDK 17） |
 | `--beast2-path` | 否 | `beast` | BEAST2 可执行文件或 `beast2_validate.sh` 路径 |
+| `--allow-unvalidated` | 否 | False | 与 `--beast2` 同用：BEAST2 不可达时仍把仅结构检查通过报告为成功；不加则该情形退出码为 **2**。与 `generate --beast2-validate --allow-unvalidated` 是同名、同豁免、同拒绝方式的同一选项 |
+
+**两级检查与闸门编号的对应关系。** `validate` 读的是 XML 文件而不是 YAML 配置，所以它没有闸门 0 可运行——解析期校验里属于格式合法性的那一半就在 Level 1 内；它也重跑不了闸门 2（校准冲突），因为那需要当初生成这份 XML 的配置。于是每一行都把自己对应的闸门写进标签里：Level 1/2 就是闸门 1（结构检查），Level 2/2 就是闸门 3（BEAST2 解析 + 模型初始化）。
 
 **第 1 级（始终运行）。** 检查 XML 格式正确性与下列各项：
 
@@ -557,7 +565,9 @@ beast2py validate \
 
 语义检查包括：每个被估计参数都带有 `Prior`，状态节点上下界未反向，初值落在自身界内且与声明维度匹配。`storeEvery` 关闭续算时，该级给出警告。
 
-**第 2 级（`--beast2`）。** 无头 BEAST2 `XMLParser` 解析文件，**并对每个对象调用 `initAndValidate()`**。两级用不同措辞分别报告通过信息（`Level 1/2 passed: structural checks …` 与 `Level 2/2 passed: BEAST2 parsed and initialised the model.`）。任一级失败时，退出码为 1。
+**第 2 级（`--beast2`）。** 无头 BEAST2 `XMLParser` 解析文件，**并对每个对象调用 `initAndValidate()`**。两级用不同措辞分别报告通过信息，并各自带上闸门映射（`Level 1/2 passed (Gate 1, structural checks): ids, idrefs, priors, bounds and XML well-formedness.` 与 `Level 2/2 passed (Gate 3): BEAST2 parsed and initialised the model.`）。
+
+**退出码，以及 `validate` 为何与 `generate` 不同。** 某一级真正运行并拒绝了该文件，退出码为 1。若显式要求了 `--beast2` 而 BEAST2 根本无法触达——没有安装、没有 JDK 17、或安装中缺少随包的验证助手——命令打印 `Level 2/2 not run (Gate 3, BEAST2 parse + model initialisation): …`，用自己的话说明原因，并以退出码 **2** 放弃：从未发生的检查被报告为拒绝，既不报告为通过，也不报告为 BEAST2 的判定，而且一个启动失败的工具不会把任何 JVM 输出交给用户。`--allow-unvalidated` 是显式降级为 `[WARN]` 与退出码 0，与 `generate` 提供的同名选项一致。不带 `--beast2` 的验证在结构通过时仍然退出 0：`generate` 要写文件，因此必须把它被要求运行的每一道闸门都变成门槛；`validate` 不写文件，只如实报告它被问到的那个问题。需要说明的是，两个子命令的**拒绝**现在完全一致，差别只在于各自承担的风险：`generate` 手上还有一份要落盘的文件，`validate` 什么都不写。这一不对称是有意为之。需要证明 BEAST2 读过该文件的 CI 作业必须加 `--beast2`，且不得加 `--allow-unvalidated`。
 
 ```bash
 beast2py validate --xml examples/output_basic.xml
@@ -590,7 +600,8 @@ beast2py methods \
 beast2py pipeline \
     --config config.yaml \
     --type snakemake|nextflow|both \
-    [--output-dir .]
+    [--output-dir .] \
+    [--threads 4]
 ```
 
 | 参数 | 必需 | 默认值 | 描述 |
@@ -598,8 +609,9 @@ beast2py pipeline \
 | `--config` | 是 | — | YAML 配置文件路径 |
 | `--type` | 否 | `snakemake` | 管道类型：`snakemake`、`nextflow` 或 `both` |
 | `--output-dir` | 否 | `.` | 输出目录 |
+| `--threads` | 否 | `mcmc.threads`（4） | 写入流程的 BEAST2 线程数（`beast -threads N`），必须是正整数 |
 
-管道包含以下规则或进程：XML 生成（调用 `beast2py generate`）、BEAST2 执行（调用 `beast -overwrite`）、校准诊断（调用 `beast2py diagnose`）、方法学描述生成（调用 `beast2py methods`）。
+管道包含以下规则或进程：XML 生成（调用 `beast2py generate`）、BEAST2 执行（调用 `beast -overwrite`）、校准诊断（调用 `beast2py diagnose`）、方法学描述生成（调用 `beast2py methods`）。BEAST2 执行一步的线程数取自 `mcmc.threads`（默认 4），或由 `--threads` 覆盖；笔记本与受限的 HPC 分区可设为 1。
 
 ### 5.7 `fingerprint` — 生成分析指纹
 
@@ -618,19 +630,19 @@ beast2py fingerprint \
 | `--output` | `-o` | 否 | 仅输出到终端 | 输出 JSON 文件路径 |
 | `--verbose` | `-v` | 否 | False | 显示详细指纹信息 |
 
-**指纹格式：** `B2P-{配置哈希前 12 位}-{工具版本}`，例如 `B2P-0d0a573b1298-0.1.1`。该标识符**不含日期与时区**，因此同一配置在同一比对数据上重跑，总能复现相同的字节与相同的标识符。12 个十六进制字符即 48 位摘要：按生日界估算，出现一次碰撞的概率达到 50% 需要 sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ 个不同分析——即约 2 × 10⁷，而不是开方捷径给出的 2**24 = 1.7 × 10⁷。它是变更检测令牌，不是全局唯一键。
+**指纹格式：** `B2P-{配置哈希前 12 位}-{工具版本}`，例如 `B2P-69dba66a3570-0.1.2`。该标识符**不含日期与时区**，因此同一配置在同一比对数据上重跑，总能复现相同的字节与相同的标识符。12 个十六进制字符即 48 位摘要：按生日界估算，出现一次碰撞的概率达到 50% 需要 sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ 个不同分析——即约 2 × 10⁷，而不是开方捷径给出的 2**24 = 1.7 × 10⁷。它是变更检测令牌，不是全局唯一键。
 
 **指纹 JSON 文件内容**（对 `examples/config_basic.yaml` 的实测输出）：
 
 ```json
 {
-  "fingerprint": "B2P-0d0a573b1298-0.1.1",
-  "config_hash": "0d0a573b12981a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
-  "full_hash": "0d0a573b12981a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
+  "fingerprint": "B2P-69dba66a3570-0.1.2",
+  "config_hash": "fe47b06592091a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
+  "full_hash": "fe47b06592091a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
   "data_hash": "30be5613d3ff6862",
   "hash_bits": 48,
   "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% chance of one collision needs sqrt(2 * 2**48 * ln 2), about 1.98e+07 distinct analyses, so it is a change-detection token rather than a globally unique key.",
-  "tool_version": "0.1.1",
+  "tool_version": "0.1.2",
   "beast2_version": "2.7.8",
   "generation_time": "2026-09-29T18:01:17.890711",
   "analysis_name": "primates_basic_calibration",
@@ -638,7 +650,7 @@ beast2py fingerprint \
 }
 ```
 
-上述 `generation_time` 是采集该样本的时刻；标识符本身不含时间成分，同一配置在同一比对数据上重跑总得到 `B2P-0d0a573b1298-0.1.1`。
+上述 `generation_time` 是采集该样本的时刻；标识符本身不含时间成分，同一配置在同一比对数据上重跑总得到 `B2P-69dba66a3570-0.1.2`。
 
 `data_hash` 由每条比对内容的摘要再汇总而成，取前 16 位，会作为 `| Data: {hash16}` 附在 XML 的指纹注释里。`generation_time` **只**出现在这个侧车文件中；XML 本体带的是无时间戳的注释（见第 15.1 节）。
 
@@ -884,7 +896,8 @@ models = list_models()
 
 ### 6.17 直接使用配置类型
 
-API 同时提供所有配置数据类，可用于程序化构建配置：
+API 同时提供所有配置数据类，可用于程序化构建配置。`read_sequence` 返回由 `Sequence` 对象
+构成的 `Alignment`，因此读者最终拿在手里的数据类，都能用函数文档中的名字直接从包根导入：
 
 ```python
 from beast2py import (
@@ -897,8 +910,16 @@ from beast2py import (
     MCMCConfig,
     CalibrationPoint,
     DistributionConfig,
+    HyperpriorConfig,
     RealParameter,
+    Alignment,
+    Sequence,
+    read_sequence,
 )
+
+# 读取比对文件：数据类型按残基自动推断，与默认行为一致的还有 `beast2py quick`
+alignment = read_sequence("primates.fasta")
+print(alignment.data_type, len(alignment.sequences))
 
 # 程序化构建配置
 site_model = SiteModelConfig(
@@ -909,7 +930,7 @@ site_model = SiteModelConfig(
 
 clock_model = ClockModelConfig(type=ClockModelType.UCLN)
 
-# ... 构建 Partition, Alignment 等对象
+# ... 构建 Partition 等对象
 ```
 
 ---
@@ -926,7 +947,7 @@ metadata:
   author: "你的名字"                     # 作者（可选）
   date: "2026-08-01"                    # 日期（可选）
   beast2_version: "2.7.8"              # BEAST2 版本（默认 2.7.8）
-  tool_version: "0.1.1"                # Beast2Py 版本（默认 0.1.1）
+  tool_version: "0.1.2"                # Beast2Py 版本（默认 0.1.2）
 
 # === 序列数据 ===
 alignments:
@@ -1016,6 +1037,9 @@ mcmc:
   store_every: 10000                    # 检查点间隔，按"已记录样本数"计（缺省随链长伸缩 max(1, chain_length//10000)；-1 关闭）
   sample_from_prior: false              # 是否仅从先验采样（默认 false）
   seed: 1                               # 供 `beast -seed` 使用；**不写入 XML**（BEAST2 的 MCMC 无 seed 输入）
+  threads: 4                            # 生成的 Snakemake/Nextflow 流程中的 `beast -threads N`；
+                                        # 正整数，默认 4，可用 `pipeline --threads` 覆盖；
+                                        # 不进入指纹（只调度，不改变分析）
   # Nested Sampling 参数（type=nested_sampling 时）：
   particle_count: 1                     # 粒子数（默认 1）
   sub_chain_length: 10000               # 子链长度（默认 10000）
@@ -1698,7 +1722,7 @@ diagnostics:
 
 ### 15.1 分析指纹
 
-分析指纹是基于*科学性*配置 SHA-256 哈希生成的确定性标识符，采用不含日期的格式 `B2P-{hash12}-{version}`，例如 `B2P-0d0a573b1298-0.1.1`。它**不含日期与时区**，因此同一配置在同一比对数据上每次重跑都逐字节复现。
+分析指纹是基于*科学性*配置 SHA-256 哈希生成的确定性标识符，采用不含日期的格式 `B2P-{hash12}-{version}`，例如 `B2P-69dba66a3570-0.1.2`。它**不含日期与时区**，因此同一配置在同一比对数据上每次重跑都逐字节复现。
 
 以下变化会改变指纹（`models.py::to_dict` 把这些都纳入哈希）：序列内容、树设置（`Partition.tree`）、冠群/茎群（`use_originate`）或 `tipsonly` 标志、超先验、`parameter_priors` 条目、末端日期、算子权重。只改输出文件名**不会**改变指纹。
 
@@ -1757,6 +1781,8 @@ sm_path, nf_path = b2p.generate_pipeline("config.yaml", pipeline_type="both", ou
 
 ## 16. 验证
 
+从一份配置到一个 BEAST2 真能运行的文件，中间隔着四道编号检查，CLI 打印的就是这套编号：**闸门 0** 是对输入的解析期校验（`ConfigParser.parse` 在读 YAML 与 FASTA 时抛出的校准溯源规则与比对字符校验），**闸门 1** 是下文的结构验证，**闸门 2** 是校准冲突检测（[第 14 节](#14-校准诊断)），**闸门 3** 是 16.2 的 BEAST2 原生验证。闸门 0 不计入其余三道打印的 `/3` 分母，因为它在任何 XML 字符串存在之前就已运行。`validate` 把闸门 1 与闸门 3 报告为它的两级；它没有闸门 0（读的是 XML，不是配置），也没有闸门 2（那需要当初生成这份 XML 的配置）。
+
 ### 16.1 结构验证
 
 结构验证（`validator.py::XMLValidator`）在一次调用里跑两层。
@@ -1808,11 +1834,15 @@ result = b2p.validate_xml("output.xml", beast2_validate=True, beast2_path="/path
 
 `beast2_validation_status` 区分三种结果：`passed`、`failed` 与 `unavailable`。缺少 BEAST2 安装报告为*不可用*，绝不会报告为通过。由于这项检查是显式要求的，生成会以退出码 2 停止，除非加 `--allow-unvalidated`。
 
+`validate --beast2` 对独立验证套用同一条规则：BEAST2 不可达时退出码为 2 并打印 `Level 2/2 not run (Gate 3, …)`，而不是悄悄通过，也不是退出码 1——后者只留给 BEAST2 真正拒绝的模型。退出码约定，以及不带 `--beast2` 的 `validate` 为何可以合理地退出 0，见[第 5.4 节](#54-validate--验证-xml)。
+
+**解析闸门不会校验附加包之间的依赖声明。** 用到附加包的 XML 只在 `spec=` 属性里写出类名，`XMLParser` 按名字加载它当下需要的类，从不查阅已安装附加包 `version.xml` 里的 `<depends>` 条目。因此引用 `nestedsampling.gss.NS` 的文件，在一个装了 NS 却没有 NS 1.2.0 所声明的 MODEL_SELECTION 依赖的环境里，照样能解析并初始化——闸门 3 通过，`validate --beast2` 打印 `Level 2/2 passed (Gate 3)`。[16.3](#163-验证状态) 记录的核实环境正是如此：`~/.beast/2.7/` 下只有 BEAST 2.7.8、BDSKY 1.5.1 与 NS 1.2.0，**并未安装 MODEL_SELECTION**，而 21 个 BEAST2 集成用例全部越过了这道闸门。这句话只关于解析器，别读成别的保证：闸门 3 变绿并不说明附加包集合是完整的，未满足的依赖会在别处显形——包管理器或图形界面检查包元数据时，或是运行时真的需要缺失包里某个类时。运行嵌套抽样分析之前请先安装 MODEL_SELECTION；CI 的 integration 作业按 best-effort 取该包，只为让解析出的附加包集合与 NS 自己声明的一致。
+
 ### 16.3 验证状态
 
-全部 **19** 个示例配置文件均通过三道闸门：结构检查、校准冲突检测，以及 BEAST2 `parseFile` 与 `initAndValidate` 检查。第三道闸门使用无头模式下的原生 BEAST2 **v2.7.8** 解析器，无需 JavaFX。其中两份依赖附加包的文件——`config_bd_skyline.yaml` 与 `config_nested_sampling.yaml`——已对照 `~/.beast/2.7/` 下安装的包核实，即 **BDSKY 1.5.1** 与 **NS 1.2.0**。
+全部 **19** 个示例配置文件都通过了对其运行过的每一道检查：闸门 0（解析期的溯源与字符校验）、闸门 1（结构检查）、闸门 2（校准冲突检测）与闸门 3（BEAST2 `parseFile` 与 `initAndValidate` 检查）。闸门 3 使用无头模式下的原生 BEAST2 **v2.7.8** 解析器，无需 JavaFX。其中两份依赖附加包的文件——`config_bd_skyline.yaml` 与 `config_nested_sampling.yaml`——已对照 `~/.beast/2.7/` 下安装的包核实，即 **BDSKY 1.5.1** 与 **NS 1.2.0**。**该环境并未安装 MODEL_SELECTION**，尽管 NS 1.2.0 的 `version.xml` 把它声明为依赖；`config_nested_sampling.yaml` 依然通过了闸门 3，因为 `XMLParser` 只解析文件里点名的类，不在解析期强制附加包依赖（这对意味着什么、不对意味着什么，见 16.2）。
 
-测试套件共收集 **361** 个测试：**340** 个单元/语义/发布完整性测试与 **21** 个 BEAST2 集成测试。集成测试对全部 19 个示例配置、`quick` 路径以及仓库内已提交的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.8 解析器与模型初始化逐一检查。当环境缺少 BEAST2 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。全部通过。
+测试套件共收集 **395** 个测试：**374** 个单元/语义/发布完整性测试与 **21** 个 BEAST2 集成测试。集成测试对全部 19 个示例配置、`quick` 路径以及仓库内已提交的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.8 解析器与模型初始化逐一检查。当环境缺少 BEAST2 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败（包括它同样按 best-effort 抓取的 MODEL_SELECTION 依赖）仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。全部通过。
 
 ---
 
@@ -1828,7 +1858,10 @@ mcmc:
   store_every: 1000           # 检查点间隔，按*已记录样本数*计（见下）
   sample_from_prior: false    # 仅从先验采样（用于敏感性分析）
   seed: 1                     # 供 `beast -seed` 使用的随机种子（**不写入 XML**，见下）
+  threads: 4                  # 生成的流程文件中 `beast -threads N` 的线程数（见下）
 ```
+
+**`mcmc.threads` 只安排运行，不改变分析。** 它是 `beast2py pipeline` 生成的 Snakemake/Nextflow 流程里写入的线程数（`beast -threads N`）；这一数值曾被硬编码为 4 且无法修改。`beast2py pipeline --threads N`（API 中为 `generate_pipeline(..., threads=N)`）会为本次生成的流程覆盖配置里的取值。`N` 必须是正整数，否则报 `mcmc.threads must be >= 1, got N` 并拒绝生成；笔记本或受限的 HPC 分区可设为 1。由于它改变的是运行的调度方式而非后验，它被刻意排除在分析指纹之外：同一份 YAML 用不同线程数仍属同一个分析。
 
 **`store_every` 计量的是已记录的样本数，不是代数。** BEAST2 的 `MCMC` 判断 `(sampleNr + 1) % storeEvery == 0`（`MCMC.java:490`）。因此在默认的 `logEvery` 下，`store_every` 是两个 `.xml.state` 检查点之间*保存的样本*数，也就是中断后可续算的位置个数。默认值**随链长伸缩**，即 `max(1, chain_length // 10000)`：链长 1,000 万时为 `1000`，100 万时为 `100`。这样任何一次运行都能得到大约十个检查点，而不是只有最末的一个。显式写 `-1` 仍然合法，但会关闭检查点，此时验证器给出 `storeEvery='-1' ... cannot be resumed` 警告。
 
@@ -1998,9 +2031,9 @@ Beast2Py 是**失败即关闭**的：生成器无法兑现某个配置时，`Con
 ```text
 mcmc: unknown key(s) chainlength_typo. Allowed keys for this section: chain_length,
 particle_count, pre_burnin, sample_from_prior, seed, store_every, sub_chain_length,
-type. Beast2Py refuses unknown keys rather than silently applying a default, because
-a typo in a model or MCMC setting changes the analysis without changing the XML's
-validity.
+threads, type. Beast2Py refuses unknown keys rather than silently applying a default,
+because a typo in a model or MCMC setting changes the analysis without changing the
+XML's validity.
 ```
 
 **布尔值。** 解析器只接受真正的 YAML 布尔值，或 `true/false/yes/no/on/off/1/0` 之一，并拒绝任何含混的值（带引号的 `"false"` 仍然接受，含义为*假*）：

@@ -23,7 +23,7 @@ metadata:
   author: "Beast2Py"
   date: "2026-08-01"
   beast2_version: "2.7.8"
-  tool_version: "0.1.1"
+  tool_version: "0.1.2"
 
 # --- 序列数据 ---
 # primates.fasta: 12 taxa x 898 bp mitochondrial alignment (BEAST2's
@@ -68,7 +68,7 @@ tree_prior:
 # --- 校准点 ---
 # A soft minimum, not a hard bound: Sahelanthropus tchadensis from
 # Toros-Menalla is bracketed at 6.8-7.2 Ma by cosmogenic 10Be/9Be dating
-# (Lebatard et al. 2008); the 7.24 Ma often quoted for the locality lies at
+# (Lebatard et al. 2008 bracket the fossil at 6.8-7.2 Ma); the single 7.24 Ma figure
 # the older end of that bracket.  The fossil is *controversially* placed
 # near the human--chimp split, so the prior is a lognormal offset by 6.5 Ma
 # (BEAST2's OffsetLogNormalDistribution).  Checked with the tool's own
@@ -89,11 +89,11 @@ calibrations:
     use_originate: false
     provenance:
       source: "fossil"
-      reference: "DOI:10.1038/nature12323"
+      reference: "placeholder — no source consulted; replace with the reference you used"
       calibration_type: "soft"
       original_age_min: 7.0
       original_age_max: 9.5
-      notes: "Sahelanthropus tchadensis, Toros-Menalla 7.24 Ma; soft minimum"
+      notes: "illustrative input, not a published age: Sahelanthropus tchadensis soft minimum (Lebatard et al. 2008 bracket 6.8-7.2 Ma)"
 
 # --- 参数先验（显式声明关键两个；其余由默认弱信息先验补齐） ---
 parameter_priors:
@@ -107,8 +107,11 @@ parameter_priors:
       parameters: {M: 0.0, S: 1.0}
 
 # --- MCMC ---
-# store_every defaults to 10000 samples so a 10^7-state chain can be resumed
-# with `beast -resume`; -1 disables checkpointing (the validator warns).
+# store_every is set explicitly below. If the key is omitted it defaults to
+# max(1, chain_length // 10000) -- 1000 for the 10^7-state chain used here -- on
+# every entry point (generate, quick, the Python API), so a 10^7-state chain can
+# be resumed with `beast -resume` at evenly spaced checkpoints; -1 disables
+# checkpointing (the validator warns).
 mcmc:
   type: "standard"
   chain_length: 10000000

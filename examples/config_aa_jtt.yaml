@@ -23,7 +23,7 @@ metadata:
   author: "Beast2Py"
   date: "2026-08-01"
   beast2_version: "2.7.8"
-  tool_version: "0.1.1"
+  tool_version: "0.1.2"
 
 alignments:
   - id: "alignment"
@@ -59,7 +59,7 @@ calibrations:
       offset: 66.0
     provenance:
       source: "fossil"
-      reference: "DOI:10.1038/nature06614"
+      reference: "placeholder — no source consulted; replace with the reference you used"
       calibration_type: "soft"
       original_age_min: 66.0
       original_age_max: 95.0
@@ -75,7 +75,7 @@ calibrations:
       offset: 11.0
     provenance:
       source: "fossil"
-      reference: "DOI:10.1038/nature06614"
+      reference: "placeholder — no source consulted; replace with the reference you used"
       calibration_type: "soft"
       original_age_min: 11.0
       original_age_max: 18.0

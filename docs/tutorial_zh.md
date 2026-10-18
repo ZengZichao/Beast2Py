@@ -88,7 +88,7 @@ output:
 beast2py generate --config config.yaml --output output.xml
 ```
 
-`generate` 在写出文件之前依次运行三道验证闸门：Beast2Py 的结构与语义检查、校准冲突检测，以及（加上 `--beast2-validate` 时）BEAST2 解析器对每个对象调用的 `initAndValidate()`。所有运行过的闸门都通过后才写文件，任一失败都以非零码退出。不给 `--force` 时，`generate` 不会覆盖已存在的 `output.xml`。加上 `--diagnose`、`--fingerprint`、`--methods` 可以在同一次调用中产出报告与可重复性制品。
+`generate` 在写出文件之前依次运行四道编号检查：闸门 0（解析期校验——校准溯源规则与比对字符校验，在读 YAML 与 FASTA 时抛出），随后是三道生成闸门：Beast2Py 的结构与语义检查、校准冲突检测，以及（加上 `--beast2-validate` 时）BEAST2 解析器对每个对象调用的 `initAndValidate()`。所有运行过的检查都通过后才写文件，任一失败都以非零码退出。不给 `--force` 时，`generate` 不会覆盖已存在的 `output.xml`。加上 `--diagnose`、`--fingerprint`、`--methods` 可以在同一次调用中产出报告与可重复性制品。
 
 ### 步骤 4：运行校准诊断
 
@@ -128,7 +128,7 @@ beast2py quick \
 这里的输出文件命名为 `quick_output.xml`，而不是沿用第 2 节的 `output.xml`：两个命令在没有 `--force` 时都不会
 覆盖已存在的输出文件，因此复用同一个名字只会让这一步以拒绝写入收场，而不是把两次分析混进同一个文件。
 
-此外，`quick` 还接受 `--gamma-categories N`（默认 0，表示不使用 Gamma）、`--pre-burnin N`、`--name NAME`、`--force` 与 `-v/--verbose`。`quick` 同样运行那三道闸门，`store_every` 的默认值也相同。
+此外，`quick` 还接受 `--gamma-categories N`（默认 0，表示不使用 Gamma）、`--pre-burnin N`、`--name NAME`、`--force` 与 `-v/--verbose`。`quick` 同样运行那四道编号检查，`store_every` 的默认值也相同。
 
 校准 YAML 文件：
 
@@ -233,6 +233,8 @@ beast2py pipeline --config config.yaml --type both --output-dir pipeline
 ```
 
 `--output-dir` 默认为当前目录；`--type` 默认为 `snakemake`。
+`--threads N` 设定写入流程的 BEAST2 线程数（`beast -threads N`），覆盖 YAML 里的
+`mcmc.threads`（该键缺省为 4）；笔记本或受限的 HPC 分区可用 `--threads 1`。
 
 ## 8. 验证
 

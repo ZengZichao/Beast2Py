@@ -2,7 +2,7 @@
 # Beast2Py 示例配置文件 3 / Example configuration 3
 # 末端日期场景：TraitSet 采样日期 + Birth-Death + HKY + UCLN
 # Tip dates: a TraitSet of sampling dates attached to the tree.
-# 对标 BEAST2 examples/testTipDates.xml（但见下面的"已知限制"）
+# 对标 BEAST2 examples/testTipDates.xml（下面的说明解释为何示例日期全为 0）
 #
 # 说明 / Notes（三条容易被静默写错的规则）
 # ----
@@ -17,18 +17,20 @@
 #    ln(1.42) 变成 ln(1 420 000) = 14.17。原示例用 units: year 的 0-20 与
 #    Ma 尺度的 uniform[20,40] 共用一根数轴，相差六个数量级。
 #
-# 已知限制 / Known limitation (why every date below is 0)
+# 末端日期为何全为 0 / Why every date below is 0
 # ----
-# primates.fasta 的 12 条序列全部来自现生标本，因此 date-backward 全为 0 是
-# 这份数据的**正确**写法：BEAST2 由此得到"所有末端在同一时刻"，并只由校准点
-# 决定绝对时间轴。
-# 对真正的异时采样数据（古 DNA、亚化石），Beast2Py 目前还不能产出可解析的
-# TipDatesRandomWalker：写出的 <taxonset> 同时给了 alignment= 与 <taxon> 子节
-# 点，BEAST2 会以
+# 这是数据事实，不是能力限制：primates.fasta 的 12 条序列全部来自现生标本，
+# 因此 date-backward 全为 0 才是如实写法——BEAST2 由此得到“所有末端在同一时刻”，
+# 绝对时间轴完全由校准点决定。
+# 真正的异时采样数据（古 DNA、亚化石）可以走同一条路径：把若干末端日期改为非 0
+# 后，本版本（0.1.2）生成的 TipDatesRandomWalker 由 BEAST2 v2.7.8 解析并初始化
+# 通过（2026-10-08 实测：两个非 0 日期的变体，gate 3 pass）。
+# 早先版本曾在 <taxonset> 里同时给出 alignment= 与 <taxon> 子节点，BEAST2 会以
 #   "Only one of taxon and alignment should be specified, not both
 #    (id=tipdates.taxonset)"
-# 拒绝（model.py 的 build_operators -tip-dates 分支）。所以本例保持全 0；把任何
-# 一个日期改成非 0 之前，请先修好那条分支并用 beast2_validate.sh 复验。
+# 拒绝；该写法已由 model.py 的 build_operators 末端日期分支改为只发 idref 子节点。
+# 本例保持全 0 只是为了让示例与数据本身一致，并不是因为异时采样不能生成。
+#
 # ============================================================
 
 metadata:
@@ -37,7 +39,7 @@ metadata:
   author: "Beast2Py"
   date: "2026-08-01"
   beast2_version: "2.7.8"
-  tool_version: "0.1.1"
+  tool_version: "0.1.2"
 
 alignments:
   - id: "alignment"
@@ -103,11 +105,11 @@ calibrations:
       offset: 6500000.0
     provenance:
       source: "fossil"
-      reference: "DOI:10.1038/nature12323"
+      reference: "placeholder — no source consulted; replace with the reference you used"
       calibration_type: "soft"
       original_age_min: 7000000.0
       original_age_max: 9500000.0
-      notes: "Sahelanthropus tchadensis, 7.24 Ma, expressed in years"
+      notes: "illustrative input, not a published age: Sahelanthropus tchadensis soft, expressed in years"
 
 mcmc:
   type: "standard"

@@ -61,6 +61,31 @@ from .sequence import SequenceReader
 ConfigInput = Union[str, Dict[str, Any], BEASTConfig]
 """Type for configuration input: file path, dict, or BEASTConfig object."""
 
+__all__ = [
+    "Beast2Py",
+    "ConfigInput",
+    "ConfigError",
+    "generate_xml",
+    "quick_generate",
+    "diagnose",
+    "validate_xml",
+    "generate_fingerprint",
+    "generate_methods",
+    "generate_pipeline",
+    "list_models",
+    "parse_config",
+    "read_sequence",
+]
+"""The public surface of this module, deliberately listed rather than inferred.
+
+Everything here is a stable import target: ``Beast2Py`` plus the eleven
+module-level functions that mirror the CLI subcommands one for one, the
+``ConfigInput`` alias the arguments are typed against, and ``ConfigError``,
+which those functions raise for a bad configuration and which callers therefore
+need to be able to catch. ``from beast2py.api import *`` and the documentation
+both follow this list, so a name missing here is a name that is not public.
+"""
+
 
 # ============================================================================
 # Helper functions
@@ -200,6 +225,7 @@ class Beast2Py:
         pre_burnin: int = 0,
         name: Optional[str] = None,
         force: bool = False,
+        data_type: str = "auto",
     ) -> str:
         """Quick generation mode for single-partition analyses.
 
@@ -219,6 +245,12 @@ class Beast2Py:
             pre_burnin: MCMC pre-burnin length (default: 0).
             name: Analysis name (default: derived from alignment filename).
             force: Overwrite an existing output file.
+            data_type: "nucleotide", "aminoacid", or "auto" to infer it from the
+                residues present. This is the same knob as the CLI's
+                ``--data-type`` and defaults the same way, so the two entry
+                points to quick mode agree on what an undeclared alignment is.
+                Declaring a protein model over nucleotide data (or the reverse)
+                is still caught by the parser's data-type cross-check.
 
         Returns:
             The generated XML string.
@@ -242,7 +274,7 @@ class Beast2Py:
         aln = SequenceReader.read(
             alignment,
             format="auto",
-            data_type="nucleotide",
+            data_type=data_type,
             alignment_id="alignment",
         )
 
@@ -581,7 +613,7 @@ class Beast2Py:
                 fingerprint information is written to this file.
 
         Returns:
-            The fingerprint string (e.g., "B2P-a3f7b2c9d1e8-0.1.1").
+            The fingerprint string (e.g., "B2P-69dba66a3570-0.1.2").
 
         Example::
 
@@ -643,6 +675,7 @@ class Beast2Py:
         pipeline_type: str = "snakemake",
         output_dir: str = ".",
         config_file: Optional[str] = None,
+        threads: Optional[int] = None,
     ) -> Union[str, Tuple[str, str]]:
         """Generate Snakemake or Nextflow pipeline files.
 
@@ -652,13 +685,18 @@ class Beast2Py:
             output_dir: Output directory for pipeline files.
             config_file: Path to the YAML config file (for pipeline references).
                 Required if config is provided as a dict or BEASTConfig.
+            threads: BEAST2 thread count written into the workflow as
+                ``beast -threads N``, matching the CLI's ``pipeline --threads``
+                (default ``None``, which keeps ``mcmc.threads``; that is 4 unless
+                the YAML says otherwise). Must be a positive integer.
 
         Returns:
             Path to the generated pipeline file, or a tuple of
             (snakemake_path, nextflow_path) if pipeline_type="both".
 
         Raises:
-            ValueError: If pipeline_type is invalid.
+            ValueError: If pipeline_type is invalid, or if threads is not a
+                positive integer.
 
         Example::
 
@@ -678,28 +716,36 @@ class Beast2Py:
 
         os.makedirs(output_dir, exist_ok=True)
 
+        # Resolve before writing anything, so a rejected thread count cannot
+        # leave a half generated pipeline behind.
+        n_threads = PipelineGenerator.resolve_threads(threads, beast_config)
+
         if pipeline_type == "snakemake":
             return PipelineGenerator.generate_snakemake(
                 beast_config,
                 output_dir=output_dir,
                 config_file=config_file or "config.yaml",
+                threads=n_threads,
             )
         elif pipeline_type == "nextflow":
             return PipelineGenerator.generate_nextflow(
                 beast_config,
                 output_dir=output_dir,
                 config_file=config_file or "config.yaml",
+                threads=n_threads,
             )
         elif pipeline_type == "both":
             sm_path = PipelineGenerator.generate_snakemake(
                 beast_config,
                 output_dir=output_dir,
                 config_file=config_file or "config.yaml",
+                threads=n_threads,
             )
             nf_path = PipelineGenerator.generate_nextflow(
                 beast_config,
                 output_dir=output_dir,
                 config_file=config_file or "config.yaml",
+                threads=n_threads,
             )
             return (sm_path, nf_path)
         else:
@@ -765,7 +811,7 @@ class Beast2Py:
         self,
         file_path: str,
         format: str = "auto",
-        data_type: str = "nucleotide",
+        data_type: str = "auto",
         alignment_id: str = "alignment",
     ) -> Any:
         """Read a sequence alignment file.
@@ -773,7 +819,10 @@ class Beast2Py:
         Args:
             file_path: Path to the sequence file (FASTA/NEXUS).
             format: File format ("fasta", "nexus", or "auto").
-            data_type: "nucleotide" or "aminoacid".
+            data_type: "nucleotide", "aminoacid", or "auto" to infer it from
+                the residues present. "auto" is the default, which is also what
+                ``beast2py quick --data-type`` defaults to, so the two entry
+                points read an amino-acid alignment without being told.
             alignment_id: ID for the alignment.
 
         Returns:
@@ -941,6 +990,7 @@ def quick_generate(
     pre_burnin: int = 0,
     name: Optional[str] = None,
     force: bool = False,
+    data_type: str = "auto",
 ) -> str:
     """Quick generation mode for single-partition analyses.
 
@@ -956,6 +1006,8 @@ def quick_generate(
         pre_burnin: MCMC pre-burnin length (default: 0).
         name: Analysis name.
         force: Overwrite an existing output file.
+        data_type: "nucleotide", "aminoacid", or "auto" (default) to infer it
+            from the residues present, as ``beast2py quick --data-type`` does.
 
     Returns:
         The generated XML string.
@@ -977,6 +1029,7 @@ def quick_generate(
         pre_burnin=pre_burnin,
         name=name,
         force=force,
+        data_type=data_type,
     )
 
 
@@ -1077,6 +1130,7 @@ def generate_pipeline(
     pipeline_type: str = "snakemake",
     output_dir: str = ".",
     config_file: Optional[str] = None,
+    threads: Optional[int] = None,
     base_dir: Optional[str] = None,
 ) -> Union[str, Tuple[str, str]]:
     """Generate Snakemake or Nextflow pipeline files.
@@ -1086,6 +1140,8 @@ def generate_pipeline(
         pipeline_type: "snakemake", "nextflow", or "both".
         output_dir: Output directory for pipeline files.
         config_file: Path to the YAML config file (for pipeline references).
+        threads: BEAST2 thread count for the emitted workflow, overriding
+            ``mcmc.threads``; ``None`` keeps the configured value (4 by default).
         base_dir: Base directory for resolving relative paths.
 
     Returns:
@@ -1097,6 +1153,7 @@ def generate_pipeline(
         pipeline_type=pipeline_type,
         output_dir=output_dir,
         config_file=config_file,
+        threads=threads,
     )
 
 
@@ -1130,7 +1187,7 @@ def parse_config(
 def read_sequence(
     file_path: str,
     format: str = "auto",
-    data_type: str = "nucleotide",
+    data_type: str = "auto",
     alignment_id: str = "alignment",
 ) -> Any:
     """Read a sequence alignment file.
@@ -1138,7 +1195,8 @@ def read_sequence(
     Args:
         file_path: Path to the sequence file (FASTA/NEXUS).
         format: File format ("fasta", "nexus", or "auto").
-        data_type: "nucleotide" or "aminoacid".
+        data_type: "nucleotide", "aminoacid", or "auto" to infer it from the
+            residues present; "auto" matches the CLI default.
         alignment_id: ID for the alignment.
 
     Returns:

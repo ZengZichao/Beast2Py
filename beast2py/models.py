@@ -140,7 +140,7 @@ class Alignment:
 
         Taxon names and sequence characters both feed the digest, so two
         datasets of the same shape but different sites produce different
-        fingerprints ( /.
+        fingerprints.
 
         Returns:
             First 16 hex characters of the digest.
@@ -210,9 +210,12 @@ class Provenance:
     """Calibration provenance metadata (core innovation).
 
     Attributes:
-        source: Source type (fossil, biogeographic, secondary, other).
+        source: Source type, one of ``fossil``, ``biogeographic``, ``secondary``
+            or ``other``; the parser whitelists it, as it whitelists the key names.
         reference: DOI or URL reference.
-        calibration_type: Soft or hard boundary.
+        calibration_type: ``soft`` or ``hard``, likewise whitelisted at parse time.
+            Only ``hard`` turns a contradicted fossil range into an error, so an
+            unrecognised spelling used to downgrade the check to a warning.
         original_age_min: Original minimum age.
         original_age_max: Original maximum age.
         notes: Free-text notes.
@@ -300,8 +303,8 @@ class Partition:
         clock_model: Clock model configuration.
         tree: Tree sharing setting. Only ``"shared"`` is supported today:
             Beast2Py assembles one linked topology for all partitions, and the
-            parser rejects any other value instead of silently ignoring it
-            . Per-partition unlinked trees are on the roadmap.
+            parser rejects any other value instead of silently ignoring it.
+            Per-partition unlinked trees are on the roadmap.
     """
 
     id: str
@@ -309,6 +312,78 @@ class Partition:
     site_model: SiteModelConfig
     clock_model: ClockModelConfig
     tree: str = "shared"
+
+
+# Divisor behind the single documented default for ``MCMCConfig.store_every``.
+# BEAST2 counts ``storeEvery`` in *logged* samples (MCMC.java tests
+# ``(sampleNr + 1) % storeEvery == 0``), and the shipped loggers thin the trace
+# by 1000, so dividing the chain length by this keeps an interrupted run
+# resumable at roughly ten evenly spaced ``.xml.state`` checkpoints whatever the
+# chain length, instead of a fixed 10000 that checkpoints a short chain once, at
+# the very end. See :func:`default_store_every`.
+STORE_EVERY_CHAIN_DIVISOR = 10_000
+
+
+# Thread count baked into the generated pipelines when neither the config nor
+# the command line says otherwise. It matches the value the Snakefile and
+# Nextflow templates used to hard-code, so an untouched configuration still
+# emits the same workflow text it always did.
+DEFAULT_BEAST2_THREADS = 4
+
+
+def validate_threads(threads: Any, where: str = "threads") -> int:
+    """Return ``threads`` as a positive integer, or raise ``ValueError``.
+
+    The number is handed straight to ``beast -threads N`` by the generated
+    Snakemake and Nextflow workflows, which accept only a positive thread
+    count. Accepting ``0``, a negative, a fractional or a non-numeric value
+    would emit a workflow that fails on the cluster node instead of telling the
+    author at generation time.
+
+    Args:
+        threads: The candidate value. ``bool`` is refused even though it is an
+            ``int`` subclass, because ``threads: true`` in YAML is a typo.
+        where: Field name used in the message.
+
+    Returns:
+        The value as an ``int``.
+
+    Raises:
+        ValueError: If the value is not a whole number >= 1.
+    """
+    if isinstance(threads, bool):
+        raise ValueError(f"{where} must be a positive integer, got {threads!r}")
+    if isinstance(threads, float) and not threads.is_integer():
+        raise ValueError(f"{where} must be a whole number of threads, got {threads!r}")
+    try:
+        value = int(threads)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{where} must be a positive integer, got {threads!r}") from exc
+    if value < 1:
+        raise ValueError(f"{where} must be >= 1, got {value}")
+    return value
+
+
+def default_store_every(chain_length: int) -> int:
+    """Return the one documented default ``store_every`` for ``chain_length``.
+
+    Every entry point is expected to route through this function -- the YAML
+    parser, ``beast2py quick``, :meth:`beast2py.api.Beast2Py.quick_generate` and
+    the ``MCMCConfig`` dataclass default -- because three different defaults used
+    to be in play (``10000`` in the dataclass, ``chain_length // 10000`` in the
+    parser, ``"10000 by default"`` in an error message), and the same chain
+    length therefore got a different ``storeEvery`` depending on how the XML was
+    produced.
+
+    Args:
+        chain_length: Number of MCMC generations.
+
+    Returns:
+        ``max(1, chain_length // STORE_EVERY_CHAIN_DIVISOR)``. The floor of 1
+        is what stops a chain shorter than the divisor from producing
+        ``storeEvery="0"``, which BEAST2 rejects and the validator flags.
+    """
+    return max(1, int(chain_length) // STORE_EVERY_CHAIN_DIVISOR)
 
 
 @dataclass
@@ -320,25 +395,44 @@ class MCMCConfig:
         pre_burnin: Pre-burnin length.
         store_every: State storage interval **in logged samples** (MCMC.java
             tests ``(sampleNr + 1) % storeEvery == 0``), not in generations; 0
-            or -1 disables checkpointing. The default scales with the chain
-            length so a long run gets ~10 resume points instead of one at the
-            very end.
+            or -1 disables checkpointing. ``None`` -- the default -- means "use
+            the one documented rule", :func:`default_store_every`, which
+            resolves to ``max(1, chain_length // 10000)`` in
+            ``__post_init__`` so that every construction path agrees.
         sample_from_prior: Whether to sample from prior only.
         mcmc_type: Standard or nested sampling.
         particle_count: NS particle count.
         sub_chain_length: NS sub-chain length.
         seed: RNG seed written to the XML, so log file names built from the
             ``$(seed)`` macro and the run itself are reproducible.
+        threads: BEAST2 worker threads requested by the *generated* Snakemake
+            and Nextflow workflows (``beast -threads N``). It schedules the run
+            and does not change the posterior, so it is deliberately kept out
+            of the fingerprint -- see :meth:`BEASTConfig.to_dict`.
     """
 
     chain_length: int = 10000000
     pre_burnin: int = 0
-    store_every: int = 10000
+    store_every: Optional[int] = None
     sample_from_prior: bool = False
     mcmc_type: MCMCType = MCMCType.STANDARD
     particle_count: int = 1
     sub_chain_length: int = 10000
     seed: int = 1
+    threads: int = DEFAULT_BEAST2_THREADS
+
+    def __post_init__(self) -> None:
+        """Resolve ``store_every=None`` and check ``threads``.
+
+        The store interval is a function of ``chain_length``, so it cannot be a
+        static dataclass default. Resolving it here -- rather than in each
+        caller -- is what keeps the ``generate`` parser, ``beast2py quick``, the
+        Python API and hand-built configs writing the same ``storeEvery`` for
+        the same chain length (CODE-007).
+        """
+        if self.store_every is None:
+            self.store_every = default_store_every(self.chain_length)
+        self.threads = validate_threads(self.threads, where="mcmc.threads")
 
 
 @dataclass
@@ -518,7 +612,13 @@ class BEASTConfig:
                     ],
                     "calibration_method": self.calibration_method.value,
                     "parameter_priors": self.parameter_priors,
-                    "mcmc": self.mcmc.__dict__,
+                    # `mcmc.threads` is excluded on purpose: it schedules the run
+                    # (`beast -threads N` in the generated workflows) without
+                    # changing the posterior, and this method's own rule is that
+                    # nothing which cannot change the analysis may change the
+                    # fingerprint. Leaving it in would have re-labelled every
+                    # analysis published before the knob existed.
+                    "mcmc": {k: v for k, v in self.mcmc.__dict__.items() if k != "threads"},
                     "loggers": {
                         "trace_log": self.loggers.trace_log,
                         "tree_log": self.loggers.tree_log,

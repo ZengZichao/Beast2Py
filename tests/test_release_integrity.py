@@ -16,6 +16,7 @@ import json
 import math
 import pathlib
 import re
+import sys
 
 import pytest
 
@@ -164,50 +165,388 @@ class TestCanonicalSerialisation:
 class TestCommentIntegrity:
     """Earlier edit passes stripped characters from comments and docstrings.
 
-    The failures were mechanical and therefore are mechanically detectable, so
-    they are pinned here rather than left to review.
+    The failures were mechanical, so they are mechanically detectable -- but only
+    by a guard that looks where they actually happened. The first version of this
+    class missed precisely the shapes it existed to catch: it read only hash
+    comments and never a docstring, it required four or more leading spaces for a
+    prose line (so a module docstring line at column 0 was invisible), and it
+    counted parentheses only inside comment blocks (so an unbalanced docstring was
+    invisible). Those blind spots are closed here, and each new rule is pinned by a
+    test_guard method that writes a broken sample and asserts the matching predicate
+    fires. A guard that cannot fail is worse than no guard: it reads like a record
+    that the defect class was checked.
     """
 
-    # A period glued to nothing but preceded by a space is the signature of an
-    # edit that deleted the word after it.  The alternatives are what a repaired
-    # sentence can legitimately end with, and deliberately exclude "from . import".
-    ANCHOR = re.compile(r"(\w|[^\x00-\x7f]) +\.(?:$| [A-Z`#]| [-\u2014])")
-    EMPTY = re.compile(r"#\s*\.\s*$")
+    # The package sources *and* the test tree: the same edit passes touched both,
+    # and a guard that watches only the shipped package leaves the harness
+    # unmonitored.
+    TARGETS = sorted(p for root in (PKG, REPO / "tests") for p in root.rglob("*.py"))
 
-    def _prose_lines(self, path):
-        for no, line in enumerate(path.read_text(encoding="utf-8").split("\n"), 1):
-            stripped = line.strip()
-            if stripped.startswith("#") or re.match(r"^\s{4,}\S", line):
+    # A period preceded by a space is the signature of an edit that deleted the
+    # word after it. The alternatives are what a repaired sentence legitimately
+    # ends with: end of line, the opening of the next sentence, a docstring
+    # terminator, or a dash. "from . import" stays unmatched because "import"
+    # begins with a lower-case letter.
+    ANCHOR = re.compile(r"(\w|[^\x00-\x7f]) +\.(?:$|\"| [A-Z`\"'#]| [-\u2014])")
+    # A line that is nothing but a period, alone or behind a hash sign.
+    EMPTY = re.compile(r"^\s*(?:#\s*)?\.\s*$")
+    # A line that is nothing but a numbered anchor: the residue of a list whose
+    # items were merged into prose and whose numbering was left behind.
+    STRAY_ANCHOR = re.compile(r"^\s*#?\s*\((?:\d+|[a-z])\)\s*\.?\s*$")
+    # An opening parenthesis followed by a space is what a word swallowed right
+    # after it looks like. The escape keeps this file from tripping its own rule.
+    OPEN_PAREN = re.compile(r"\x28 \S")
+    # A numbered anchor is only meaningful as part of a list that starts at one
+    # and does not skip.
+    NUMBERED = re.compile(r"\((\d+)\)")
+    # A *sentence* closing on a bare numbered anchor is the other half of the same
+    # defect: the list its item belonged to was merged into prose and only the
+    # numbering survived. The sequence rule above cannot see it, because a lone
+    # anchor is trivially "a list that starts at one", so the shape needs its own
+    # test. Built from fragments: this file is one of the files the scan covers.
+    TAIL_ANCHOR = re.compile(r"\x28\d+\x29\s*(?=\.\s|\.$|\Z)")
+    # Function words that cannot close a sentence: their presence at the end of a
+    # docstring or comment block means an edit cut the text short, which is the
+    # dominant defect class in this repository.
+    DANGLING = re.compile(
+        r"\b(?:the|a|an|of|and|or|is|was|for|with|from|which|to|in|by|as)\s*$",
+        re.IGNORECASE,
+    )
+
+    @staticmethod
+    def _lines(path):
+        return path.read_text(encoding="utf-8").split("\n")
+
+    @classmethod
+    def _prose_line_numbers(cls, path):
+        """Return the line numbers that hold prose: comments and docstring bodies.
+
+        Code is deliberately out of scope. Half of the repository builds BEAST2
+        XML and LaTeX out of multi-line string literals, and those carry the
+        punctuation of the *generated* document, not of a sentence an edit pass
+        can truncate.
+        """
+        wanted = set()
+        for start, text in cls._docstrings(path):
+            wanted.update(range(start, start + len(text.split("\n"))))
+        for no, line in enumerate(cls._lines(path), 1):
+            if line.strip().startswith("#"):
+                wanted.add(no)
+        return wanted
+
+    @classmethod
+    def _prose_lines(cls, path):
+        """Yield every prose line with its number, with no indentation floor.
+
+        The floor the first version used excluded exactly the lines that were
+        damaged: a module docstring and a top-of-file comment both sit at column 0.
+        """
+        wanted = cls._prose_line_numbers(path)
+        for no, line in enumerate(cls._lines(path), 1):
+            if no in wanted and line.strip():
                 yield no, line
 
-    @pytest.mark.parametrize("path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name)
-    def test_no_space_before_sentence_period(self, path):
-        bad = [n for n, line in self._prose_lines(path) if self.ANCHOR.search(line)]
-        assert not bad, f"{path.name}: stray space before '.' at line(s) {bad}"
+    @staticmethod
+    def _docstrings(path):
+        """Yield (first_line, text) for every module, class and function docstring."""
+        import ast
 
-    @pytest.mark.parametrize("path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name)
-    def test_no_orphan_period_comment(self, path):
-        bad = [n for n, line in self._prose_lines(path) if self.EMPTY.match(line.strip())]
-        assert not bad, f"{path.name}: comment that is only a '.' at line(s) {bad}"
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not isinstance(
+                node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+            ):
+                continue
+            body = getattr(node, "body", [])
+            if not body:
+                continue
+            first = body[0]
+            if (
+                isinstance(first, ast.Expr)
+                and isinstance(first.value, ast.Constant)
+                and isinstance(first.value.value, str)
+            ):
+                yield first.value.lineno, first.value.value
 
-    @pytest.mark.parametrize("path", sorted(PKG.rglob("*.py")), ids=lambda p: p.name)
-    def test_comment_blocks_have_balanced_parentheses(self, path):
-        lines = path.read_text(encoding="utf-8").split("\n")
-        block, start, problems = [], 0, []
-        for no, line in enumerate(lines, 1):
+    @classmethod
+    def _prose_units(cls, path):
+        """Yield (line, joined_text) per docstring and per contiguous comment block.
+
+        Sentences are judged on the joined unit, never on one wrapped line: a
+        comment that wraps mid-sentence is normal, one that ends mid-sentence is
+        the damage.
+        """
+        for start, text in cls._docstrings(path):
+            joined = " ".join(line.strip() for line in text.split("\n") if line.strip())
+            if joined:
+                yield start, joined
+        block, start = [], 0
+        for no, line in enumerate(cls._lines(path), 1):
             if line.strip().startswith("#"):
                 if not block:
                     start = no
-                block.append(line.strip().lstrip("# "))
+                block.append(line.strip().lstrip("#").strip())
                 continue
             if block:
-                text = " ".join(block)
-                # interval notation such as "(0, 1]" legitimately unbalances.
-                cleaned = re.sub(r"\(\s*[\d.,\s]+?[\]\)]", "", text)
-                if cleaned.count("(") != cleaned.count(")"):
-                    problems.append((start, cleaned.count("("), cleaned.count(")")))
+                yield start, " ".join(block)
                 block = []
-        assert not problems, f"{path.name}: unbalanced parentheses at {problems}"
+        if block:
+            yield start, " ".join(block)
+
+    @classmethod
+    def paren_counts(cls, text):
+        """Return the open and close counts of `text`, ignoring interval notation.
+
+        "(0, 1]" and "[1, 2)" legitimately unbalance, and this repository writes
+        about parameter bounds, so bracketed numeric intervals are removed first.
+        """
+        cleaned = re.sub(r"[\[(]\s*[\d.,\s-]+?[\])]", "", text)
+        return cleaned.count("("), cleaned.count(")")
+
+    @classmethod
+    def stray_numbered_anchors(cls, text):
+        """Return numbered anchors in `text` that are not a sequence starting at one.
+
+        An orphan anchor refers to an item of a list that is no longer in the file,
+        which is what a batch text edit leaves behind.
+        """
+        found = sorted({int(m.group(1)) for m in cls.NUMBERED.finditer(text)})
+        if found and found != list(range(1, len(found) + 1)):
+            return found
+        return []
+
+    @classmethod
+    def anchor_lines(cls, path):
+        return [no for no, line in cls._prose_lines(path) if cls.ANCHOR.search(line)]
+
+    @classmethod
+    def empty_lines(cls, path):
+        return [no for no, line in cls._prose_lines(path) if cls.EMPTY.match(line.strip())]
+
+    @classmethod
+    def stray_anchor_lines(cls, path):
+        return [no for no, line in cls._prose_lines(path) if cls.STRAY_ANCHOR.match(line.strip())]
+
+    @classmethod
+    def open_paren_lines(cls, path):
+        return [no for no, line in cls._prose_lines(path) if cls.OPEN_PAREN.search(line)]
+
+    @classmethod
+    def unbalanced_units(cls, path):
+        return [
+            start
+            for start, text in cls._prose_units(path)
+            if cls.paren_counts(text)[0] != cls.paren_counts(text)[1]
+        ]
+
+    @classmethod
+    def truncated_units(cls, path):
+        return [
+            (start, text[-60:])
+            for start, text in cls._prose_units(path)
+            if cls.DANGLING.search(text)
+        ]
+
+    @classmethod
+    def stray_anchor_units(cls, path):
+        return [
+            (start, cls.stray_numbered_anchors(text))
+            for start, text in cls._prose_units(path)
+            if cls.stray_numbered_anchors(text)
+        ]
+
+    @classmethod
+    def sentence_tail_anchor_units(cls, path):
+        return [
+            (start, text[max(0, m.start() - 40) : m.end()])
+            for start, text in cls._prose_units(path)
+            for m in [cls.TAIL_ANCHOR.search(text)]
+            if m
+        ]
+
+    # ---------------- the scans themselves ----------------
+
+    # One case per rule rather than one per rule per file: the assertion names
+    # every offending file and the line inside it, so a failure is no harder to
+    # locate than under a per-file parametrisation, and the collected count stays
+    # a statement about distinct behaviours checked.
+
+    @classmethod
+    def _scan(cls, predicate, message):
+        """Run `predicate` over every scanned file and report each hit in place."""
+        bad = []
+        for path in cls.TARGETS:
+            found = predicate(path)
+            if found:
+                bad.append("%s: %s at %s" % (path.relative_to(REPO), message, found))
+        assert not bad, "\n  ".join(bad)
+
+    def test_no_space_before_sentence_period(self):
+        self._scan(self.anchor_lines, "stray space before a sentence period")
+
+    def test_no_orphan_period_line(self):
+        self._scan(self.empty_lines, "prose line that is only a period")
+
+    def test_no_orphan_numbered_anchor_line(self):
+        self._scan(self.stray_anchor_lines, "prose line that is only a numbered anchor")
+
+    def test_no_space_after_an_opening_parenthesis(self):
+        self._scan(self.open_paren_lines, "a word lost right after an opening parenthesis")
+
+    def test_docstrings_and_comment_blocks_have_balanced_parentheses(self):
+        self._scan(self.unbalanced_units, "unbalanced parentheses in a docstring or comment")
+
+    def test_docstrings_and_comment_blocks_are_not_truncated(self):
+        self._scan(self.truncated_units, "sentence cut off mid-phrase")
+
+    def test_numbered_anchors_point_at_a_list(self):
+        self._scan(self.stray_anchor_units, "numbered anchor with no matching list")
+
+    def test_no_sentence_ends_on_a_numbered_anchor(self):
+        self._scan(
+            self.sentence_tail_anchor_units,
+            "sentence that ends on a numbered anchor and points at nothing",
+        )
+
+    # ---------------- proof that each rule bites ----------------
+    #
+    # Samples are assembled from fragments, because this file is one of the files
+    # the scan covers and a literal damaged sentence would trip its own guard.
+
+    @staticmethod
+    def _write(tmp_path, name, text):
+        path = tmp_path / name
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_guard_sees_a_truncated_line_at_column_zero(self, tmp_path):
+        """The old indentation floor hid module docstring lines: the class defect."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            '"""Summary.\n\nSilent fallback was the largest source of wrong XML in the\n"""\n'
+            "x = 1\n",
+        )
+        fixed = self._write(
+            tmp_path,
+            "fixed.py",
+            '"""Summary.\n\nSilent fallback was the largest source of wrong XML.\n"""\n' "x = 1\n",
+        )
+        assert [start for start, _ in self.truncated_units(broken)] == [1]
+        assert not self.truncated_units(fixed)
+
+    def test_guard_sees_an_unbalanced_parenthesis_in_a_docstring(self, tmp_path):
+        """The old block scan covered comments only: the second class defect."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            'def f():\n    """Digests differ for two datasets'
+            + " ("
+            + ' /.\n\n    Returns:\n        Nothing.\n    """\n'
+            "    return None\n",
+        )
+        fixed = self._write(
+            tmp_path,
+            "fixed.py",
+            'def f():\n    """Digests differ.\n\n    Returns:\n        Nothing.\n    """\n'
+            "    return None\n",
+        )
+        assert self.unbalanced_units(broken) == [2]
+        assert not self.unbalanced_units(fixed)
+
+    def test_guard_sees_orphan_punctuation(self, tmp_path):
+        """A prose line that is only a period, or only a numbered anchor, was invisible."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            '"""Summary.\n.\n"""\n' + "# (3).\n" + "x = 1\n",
+        )
+        assert self.empty_lines(broken) == [2]
+        assert self.stray_anchor_lines(broken) == [4]
+
+    def test_guard_sees_a_stray_numbered_anchor_inside_prose(self, tmp_path):
+        """An anchor with no list to point at is reported, a real list is not."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            "# declaration order must not decide whether the config is\n# valid (0).\nx = 1\n",
+        )
+        listed = self._write(
+            tmp_path,
+            "listed.py",
+            "# Steps (1) and (2) both hold.\nx = 1\n",
+        )
+        assert self.stray_anchor_units(broken) == [(1, [0])]
+        assert not self.stray_anchor_units(listed)
+
+    def test_guard_sees_a_sentence_ending_on_its_own_anchor(self, tmp_path):
+        """A merged list leaves one anchor behind, and one anchor is a valid sequence.
+
+        The sequence rule above cannot report that shape, so the sentence-ending
+        rule exists for it: a lone anchor closing a sentence refers to an item
+        that is no longer in the file.
+        """
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            '"""Read a number.\n\nThe guards were made unreachable' + " (1)" + '.\n"""\n',
+        )
+        listed = self._write(
+            tmp_path,
+            "listed.py",
+            '"""Read a number.\n\nSteps (1) and (2) both apply to the guards.\n"""\n',
+        )
+        assert [start for start, _ in self.sentence_tail_anchor_units(broken)] == [1]
+        assert not self.sentence_tail_anchor_units(listed)
+
+    def test_guard_sees_a_word_lost_after_an_opening_parenthesis(self, tmp_path):
+        """The alias comment lost its first word inside a parenthesis; no rule saw it."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            "# Public alias: the CLI and the library agree on what validated means"
+            + " ("
+            + " covered only the CLI before).\nx = 1\n",
+        )
+        fixed = self._write(
+            tmp_path,
+            "fixed.py",
+            "# Public alias: the CLI and the library agree on what validated means"
+            + " (the helper covered only the CLI before).\nx = 1\n",
+        )
+        assert self.open_paren_lines(broken) == [1]
+        assert not self.open_paren_lines(fixed)
+
+    def test_guard_sees_a_period_glued_to_a_space(self, tmp_path):
+        """The one rule the old class had, re-proven so it cannot rot back."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            "def f():\n    " + '"""Every named choice follows the same rule' + " ." + '"""\n'
+            "    return None\n",
+        )
+        assert self.anchor_lines(broken) == [2]
+
+    def test_guard_scans_a_docstring_not_only_comments(self, tmp_path):
+        """The first version never parsed docstrings at all."""
+        broken = self._write(
+            tmp_path,
+            "broken.py",
+            "class C:\n    "
+            + '"""A Gamma beta must mean the same thing everywhere'
+            + " ."
+            + '"""\n'
+            "    pass\n",
+        )
+        assert self.anchor_lines(broken) == [2]
+        assert len(list(self._docstrings(broken))) == 1
+
+    def test_the_target_list_is_not_silently_empty(self):
+        """A guard parametrised over an empty list passes and proves nothing."""
+        names = [str(p.relative_to(REPO)) for p in self.TARGETS]
+        assert len(names) >= 30, names
+        assert any(n.startswith("beast2py/") for n in names)
+        assert any(n.startswith("tests/") for n in names)
 
 
 class TestDistributionContents:
@@ -221,6 +560,16 @@ class TestDistributionContents:
     MANIFEST = (REPO / "MANIFEST.in").read_text(encoding="utf-8")
     PYPROJECT = (REPO / "pyproject.toml").read_text(encoding="utf-8")
 
+    @classmethod
+    def _included_paths(cls):
+        """Every path an ``include`` line names, whether alone or beside others."""
+        return {
+            token
+            for line in cls.MANIFEST.splitlines()
+            if line.strip().startswith("include")
+            for token in line.split()[1:]
+        }
+
     def test_licence_and_notice_are_shipped(self):
         assert "beast2py/tools/NOTICE" in self.MANIFEST
         assert "LICENSE.BEAST2-LGPL-2.1.txt" in self.MANIFEST
@@ -233,9 +582,108 @@ class TestDistributionContents:
         assert "examples/output_basic.xml" in self.MANIFEST
         assert "output_basic.fingerprint.json" in self.MANIFEST
 
-    def test_declared_license_matches_the_bundled_classes(self):
-        assert "MIT AND LGPL-2.1-only" in self.PYPROJECT
-        assert "LGPL" in self.PYPROJECT  # the classifier, not only the SPDX string
+    def test_both_validator_launchers_are_declared(self):
+        """The archive must carry the launcher the test suite looks for by path.
+
+        ``tests/test_beast2_validation.py`` resolves ``beast2_validate.sh`` at the
+        repository root and skips all 21 BEAST2 integration tests when that one
+        file is absent. The package copy alone is not enough: an unpacked sdist
+        without the root wrapper therefore reports a fully green suite in which
+        gate 3 never ran, and the skips are only visible under ``-rs``. The root
+        file is a six-line wrapper that execs the package's own launcher, so both
+        have to ship.
+        """
+        declared = self._included_paths()
+        flat = " ".join(self.MANIFEST.split())
+        assert "beast2_validate.sh" in declared, sorted(declared)
+        assert "beast2py/beast2_validate.sh" in flat
+        assert (REPO / "beast2_validate.sh").is_file()
+        # and the package-data table must keep naming the inner one, which is
+        # what puts the launcher into the wheel
+        assert "beast2_validate.sh" in self.PYPROJECT
+
+    def test_the_test_harness_is_declared_for_the_sdist(self):
+        """A source install has to be able to *collect* the suite it advertises.
+
+        setuptools matches the ``test_*`` modules but nothing else in ``tests/``,
+        so an unpacked sdist shipped the tests without their fixtures and without
+        the package marker: every module imports them relatively, so pytest aborted
+        the whole run with "attempted relative import with no known parent
+        package", which is a louder but no better outcome than the silent skip.
+        """
+        declared = self._included_paths()
+        for harness in ("tests/conftest.py", "tests/__init__.py"):
+            assert harness in declared, sorted(declared)
+
+    def test_declared_license_is_the_same_expression_everywhere(self):
+        """One SPDX expression, asserted at every place that declares a licence.
+
+        The archived release declared its licence three different ways: the
+        package metadata and the citation file said ``MIT AND LGPL-2.1-only``
+        while ``.zenodo.json`` said bare ``MIT`` and ``beast2py.__license__`` said
+        bare ``MIT``. The bare declarations understated the vendored LGPL
+        component, and the archive record is the most authoritative place a reader
+        looks. An earlier version of this check asserted only that the letters
+        "LGPL" appeared somewhere in ``pyproject.toml``, which the SPDX string
+        already satisfies -- an assertion that cannot fail is not an assertion.
+
+        PEP 639 is why there is no ``License ::`` trove classifier: the SPDX
+        expression replaces it, and the packaging job in ``ci.yml`` asserts the
+        classifiers stay absent. Naming the licence twice, in two formats, is
+        exactly how a three-way disagreement becomes possible.
+        """
+        combined = "MIT AND LGPL-2.1-only"
+        sources = {
+            "pyproject.toml": self.PYPROJECT,
+            "CITATION.cff": (REPO / "CITATION.cff").read_text(encoding="utf-8"),
+            ".zenodo.json": (REPO / ".zenodo.json").read_text(encoding="utf-8"),
+            "README.md": (REPO / "README.md").read_text(encoding="utf-8"),
+            "README_zh.md": (REPO / "README_zh.md").read_text(encoding="utf-8"),
+            "beast2py/__init__.py": (PKG / "__init__.py").read_text(encoding="utf-8"),
+            "LICENSE": (REPO / "LICENSE").read_text(encoding="utf-8"),
+            "beast2py/tools/NOTICE": (PKG / "tools" / "NOTICE").read_text(encoding="utf-8"),
+        }
+        for label, text in sources.items():
+            assert combined in text, f"{label} does not declare {combined}"
+
+        # the bare declaration is the defect this closes: no place may state only
+        # MIT, and "MIT" may not appear as a licence value without the LGPL half.
+        assert '"license": {"id": "MIT"}' not in sources[".zenodo.json"]
+        assert '__license__ = "MIT"' not in sources["beast2py/__init__.py"]
+        # read the parsed value, not the raw text: pyproject.toml explains in a comment why
+        # the License :: trove classifiers were removed, and a substring test would trip on
+        # that explanation instead of on an actual classifier. tomllib is stdlib only from
+        # Python 3.11, so on 3.10 the guard falls back to a line-anchored scan: a real
+        # classifier entry is a quoted string alone on its line, which the prose comment
+        # never is.
+        if sys.version_info >= (3, 11):
+            import tomllib
+
+            classifiers = tomllib.loads(self.PYPROJECT).get("project", {}).get("classifiers", [])
+            offenders = [c for c in classifiers if c.startswith("License ::")]
+            assert not offenders, (
+                "a License :: classifier must not sit beside the PEP 639 SPDX "
+                f"expression: {classifiers}"
+            )
+        else:
+            assert not re.search(
+                r'^\s*"License ::', self.PYPROJECT, re.M
+            ), "a License :: classifier must not sit beside the PEP 639 SPDX expression"
+
+    def test_the_bundled_classes_keep_their_own_licence_text(self):
+        """LGPL-2.1 is only honoured if the text and the notice travel with it."""
+        lgpl = PKG / "tools" / "LICENSE.BEAST2-LGPL-2.1.txt"
+        assert lgpl.is_file(), "the vendored BEAST2 classes lost their licence text"
+        head = lgpl.read_text(encoding="utf-8", errors="replace")
+        assert "GNU LESSER GENERAL PUBLIC LICENSE" in head
+        assert "Version 2.1" in head
+        notice = (PKG / "tools" / "NOTICE").read_text(encoding="utf-8")
+        assert "beast/pkgmgmt" in notice
+        assert "LGPL" in notice and "2.1" in notice
+        # and both have to be declared, or they are in the tree but not in the
+        # archive a reader downloads
+        assert "beast2py/tools/NOTICE" in self.MANIFEST
+        assert "LICENSE.BEAST2-LGPL-2.1.txt" in self.MANIFEST
 
 
 class TestRepositoryHygiene:
@@ -446,3 +894,125 @@ class TestErrorDocumentation:
         section = text[text.index(heading) :]
         missing = [m for m in self.MESSAGES if m not in section]
         assert not missing, "%s does not document: %s" % (rel, missing)
+
+
+class TestPublicSurface:
+    """What a reader may import, and with which defaults, is itself a claim.
+
+    The article advertises the CLI "and equivalent Python functions". Two places made that
+    claim weaker than it reads: the package root did not re-export the data classes the API
+    returns, so `from beast2py import Alignment` raised ImportError, and `read_sequence`
+    defaulted to declared nucleotide data where `beast2py quick` defaults to inferring the
+    type from the residues -- an amino-acid alignment worked from the CLI and silently did not
+    work from the function of the same name. `api.py` also had no `__all__`, so nothing in the
+    package said which of its module-level names were public at all.
+    """
+
+    ROOT_REEXPORTS = ["Alignment", "Sequence", "HyperpriorConfig", "NON_SCIENCE_METADATA"]
+
+    def test_package_root_reexports_the_data_classes_the_api_returns(self):
+        import beast2py.api as api
+
+        aln = api.read_sequence(str(EXAMPLES / "primates.fasta"))
+        assert isinstance(aln, beast2py.Alignment), "the returned class is not importable by name"
+        for name in self.ROOT_REEXPORTS:
+            assert hasattr(beast2py, name), "from beast2py import %s fails" % name
+            assert name in beast2py.__all__, "%s is importable but not declared public" % name
+
+    def test_both_public_surfaces_are_declared_and_honest(self):
+        import beast2py.api as api
+
+        for mod in (beast2py, api):
+            promised = [n for n in mod.__all__ if not hasattr(mod, n)]
+            assert not promised, "%s.__all__ promises %s that the module lacks" % (
+                mod.__name__,
+                promised,
+            )
+
+    def test_api_declares_every_public_name_it_defines(self):
+        """A later addition to api.py must be declared public or this test fails."""
+        import ast
+        import beast2py.api as api
+
+        tree = ast.parse((PKG / "api.py").read_text(encoding="utf-8"))
+        defined = sorted(
+            n.name
+            for n in tree.body
+            if isinstance(n, (ast.FunctionDef, ast.ClassDef)) and not n.name.startswith("_")
+        )
+        undeclared = [n for n in defined if n not in api.__all__]
+        assert not undeclared, "api.py defines %s but keeps them off __all__" % undeclared
+
+    def test_read_sequence_defaults_to_the_same_inference_as_the_cli(self):
+        import inspect
+        import beast2py.api as api
+        from beast2py.main import build_parser
+        from beast2py.models import DataType
+
+        cli_default = (
+            build_parser().parse_args(["quick", "-a", "in.fasta", "-o", "out.xml"]).data_type
+        )
+        assert cli_default == "auto", "the CLI stopped defaulting to inference"
+        for target in (api.read_sequence, api.Beast2Py.read_sequence):
+            default = inspect.signature(target).parameters["data_type"].default
+            assert default == cli_default, "%s defaults to %r, the CLI defaults to %r" % (
+                target.__qualname__,
+                default,
+                cli_default,
+            )
+
+        inferred = api.read_sequence(str(EXAMPLES / "aminoacid.fasta"))
+        assert inferred.data_type is DataType.AMINOACID, (
+            "reading the shipped amino-acid example without arguing about its type is the "
+            "behaviour this parity claim is about; got %r" % (inferred.data_type,)
+        )
+        nucleotides = api.read_sequence(str(EXAMPLES / "primates.fasta"))
+        assert nucleotides.data_type is DataType.NUCLEOTIDE
+
+    def test_quick_mode_is_the_same_function_from_either_entry_point(self, tmp_path):
+        """The API's quick mode used to read every alignment as nucleotides.
+
+        ``beast2py quick`` infers the data type unless told, which is what its own help text
+        says makes a protein alignment work at all. The Python function of the same name had no
+        such knob and hardcoded a declared nucleotide type, so the article's "equivalent Python
+        functions" was false for the shipped amino-acid example: the two entry points emitted
+        different XML from the same input.
+        """
+        from beast2py.api import Beast2Py
+        from beast2py.main import main
+
+        aa = str(EXAMPLES / "aminoacid.fasta")
+        cli_out = tmp_path / "cli.xml"
+        api_out = tmp_path / "api.xml"
+        assert (
+            main(
+                [
+                    "quick",
+                    "-a",
+                    aa,
+                    "-o",
+                    str(cli_out),
+                    "--subst-model",
+                    "jtt",
+                    "--clock-model",
+                    "strict",
+                ]
+            )
+            == 0
+        ), "quick mode on the shipped protein example must work from the CLI"
+        Beast2Py().quick_generate(
+            alignment=aa,
+            output=str(api_out),
+            subst_model="jtt",
+            clock_model="strict",
+        )
+        cli_xml = cli_out.read_text(encoding="utf-8")
+        api_xml = api_out.read_text(encoding="utf-8")
+        assert cli_xml == api_xml, (
+            "quick mode must not depend on which entry point was used; the CLI emits %d "
+            "bytes, the API %d" % (len(cli_xml), len(api_xml))
+        )
+        assert "Dayhoff" in cli_xml or "JTT" in cli_xml, (
+            "the protein model must be present in either output, so this comparison cannot "
+            "pass by both sides being equally wrong"
+        )

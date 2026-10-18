@@ -1,3 +1,8 @@
+# The repository-root launcher is a thin wrapper that execs the package's own
+# copy. It ships because `tests/test_beast2_validation.py` looks for *this* path
+# and skips all 21 BEAST2 integration tests when it is absent -- a source install
+# without it therefore reports a green suite in which gate 3 never ran.
+include beast2_validate.sh
 include beast2py/beast2_validate.sh
 include beast2py/tools/Beast2Validator.java
 include beast2py/tools/launcher.jar
@@ -12,3 +17,11 @@ recursive-include examples *.yaml *.fasta
 # checkable without running anything, which only holds if both files ship together
 include examples/output_basic.xml examples/output_basic.fingerprint.json
 include examples/output_basic.methods.tex
+# The test harness ships as a package would, but setuptools only picks up the
+# test_* modules: conftest.py and __init__.py are not matched by any rule above,
+# and without them an unpacked sdist cannot even collect the suite (every module
+# imports its fixtures relatively, so pytest aborts with "attempted relative
+# import with no known parent package"). .flake8 travels with them because the
+# lint gate is documented as part of what a contributor runs.
+include tests/conftest.py tests/__init__.py
+include .flake8

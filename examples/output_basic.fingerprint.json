@@ -1,13 +1,13 @@
 {
-  "fingerprint": "B2P-0d0a573b1298-0.1.1",
-  "config_hash": "0d0a573b12981a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
-  "full_hash": "0d0a573b12981a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
+  "fingerprint": "B2P-69dba66a3570-0.1.2",
+  "config_hash": "69dba66a3570bbbbefa55da865876c430fd730a93cb62b8e66153d6391d3cb5c",
+  "full_hash": "69dba66a3570bbbbefa55da865876c430fd730a93cb62b8e66153d6391d3cb5c",
   "data_hash": "30be5613d3ff6862",
   "hash_bits": 48,
   "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% chance of one collision needs sqrt(2 * 2**48 * ln 2), about 1.98e+07 distinct analyses, so it is a change-detection token rather than a globally unique key.",
-  "tool_version": "0.1.1",
+  "tool_version": "0.1.2",
   "beast2_version": "2.7.8",
-  "generation_time": "2026-10-02T01:29:33.673497",
+  "generation_time": "2026-10-18T19:53:07.265644",
   "analysis_name": "primates_basic_calibration",
-  "xml_digest": "249cbe9b06a720943f5d8d79dca5ba9e5675983bb661449119521a2bcc8dcb2b"
+  "xml_digest": "ae180e4b388564190121adaf41a39c08f4bc1dbd218874d28897a6805f90b990"
 }

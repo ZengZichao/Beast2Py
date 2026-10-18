@@ -20,11 +20,11 @@ Both modes provide identical functionality. The API is recommended for
 programmatic use, pipeline integration, and Jupyter notebook workflows.
 """
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 __author__ = "曾子超 (Zichao Zeng)"
 __email__ = "zengzichao@sjtu.edu.cn"
 __orcid__ = "0000-0001-6553-970X"
-__license__ = "MIT"
+__license__ = "MIT AND LGPL-2.1-only"
 
 # Convenience imports for common API usage
 from .api import (
@@ -43,6 +43,7 @@ from .api import (
 
 # Re-export key types for type hints
 from .models import (
+    Alignment,
     BEASTConfig,
     CalibrationMethod,
     CalibrationPoint,
@@ -50,14 +51,17 @@ from .models import (
     ClockModelType,
     DataType,
     DistributionConfig,
+    HyperpriorConfig,
     InitTreeType,
     InitializationConfig,
     LoggerConfig,
     MCMCConfig,
     MCMCType,
+    NON_SCIENCE_METADATA,
     Partition,
     Provenance,
     RealParameter,
+    Sequence,
     SiteModelConfig,
     TipDatesConfig,
     TreePriorType,
@@ -78,6 +82,7 @@ __all__ = [
     "parse_config",
     "read_sequence",
     # Configuration types
+    "Alignment",
     "BEASTConfig",
     "CalibrationMethod",
     "CalibrationPoint",
@@ -85,14 +90,17 @@ __all__ = [
     "ClockModelType",
     "DataType",
     "DistributionConfig",
+    "HyperpriorConfig",
     "InitTreeType",
     "InitializationConfig",
     "LoggerConfig",
     "MCMCConfig",
     "MCMCType",
+    "NON_SCIENCE_METADATA",
     "Partition",
     "Provenance",
     "RealParameter",
+    "Sequence",
     "SiteModelConfig",
     "TipDatesConfig",
     "TreePriorType",

@@ -6,8 +6,9 @@ and constructs BEASTConfig objects.
 Validation is deliberately *fail-closed*: a key that is not understood, a
 value that is not a boolean, a ragged alignment or a malformed calibration
 raises :class:`ConfigError` instead of silently falling back to a default.
-Silent fallback was the single largest source of wrong-but-valid XML in the
-
+Silent fallback is the single largest source of wrong-but-valid XML: the file
+still parses, the model still initialises, and the analysis is nevertheless
+answering a question nobody asked it.
 """
 
 from __future__ import annotations
@@ -27,6 +28,7 @@ from .models import (
     CalibrationPoint,
     ClockModelConfig,
     ClockModelType,
+    DEFAULT_BEAST2_THREADS,
     DistributionConfig,
     HyperpriorConfig,
     InitializationConfig,
@@ -38,8 +40,11 @@ from .models import (
     Provenance,
     RealParameter,
     SiteModelConfig,
+    STORE_EVERY_CHAIN_DIVISOR,
     TipDatesConfig,
     TreePriorType,
+    default_store_every,
+    validate_threads,
 )
 from .registry import ModelRegistry
 from .utils import as_number, as_strict_bool
@@ -146,6 +151,7 @@ KNOWN_KEYS: Dict[str, Set[str]] = {
         "particle_count",
         "sub_chain_length",
         "seed",
+        "threads",
     },
     "loggers": {"trace_log", "tree_log", "screen_log"},
     "logger": {"file_name", "log_every"},
@@ -170,8 +176,8 @@ class _RegistryNames:
     A plain ``frozenset(registry._distributions)`` would snapshot the table when
     this module is first imported, so a later ``register_*`` call still would not
     be visible to the config validator -- which is the bug being fixed. Membership
-    and iteration resolve against the registry on every use instead
-    .
+    and iteration resolve against the registry on every use instead of caching a
+    copy of the name table.
 
     Args:
         table: Attribute name on ``ModelRegistry`` holding the dict to mirror.
@@ -224,6 +230,12 @@ class ConfigParser:
     }
     VALID_DISTRIBUTIONS = _RegistryNames("_distributions")
     VALID_DATA_TYPES = {"nucleotide", "aminoacid"}
+    # Provenance *values* decide behaviour, not just documentation: an
+    # unrecognised ``calibration_type`` used to fall through to the soft branch,
+    # turning a hard-bound error into a warning a notebook or a discarded stderr
+    # can swallow whole.  Both are therefore whitelisted like the key names.
+    VALID_CALIBRATION_TYPES = {"soft", "hard"}
+    VALID_PROVENANCE_SOURCES = {"fossil", "biogeographic", "secondary", "other"}
 
     # Parameters a distribution cannot be sampled without.  BEAST2 fills in its
     # own defaults for anything it does not receive, so a missing required key
@@ -306,7 +318,7 @@ class ConfigParser:
         options instead of a bare ValueError when the value is invalid.
 
         Matching is case-insensitive so that every named choice in a config
-        file follows the same rule ."""
+        file follows the same rule."""
         try:
             return enum_cls(value)
         except ValueError:
@@ -484,7 +496,7 @@ class ConfigParser:
         alignments: Dict[str, Any] = {}
         # Ids that were auto-registered as the unfiltered parent of a filtered
         # alignment.  A later *explicit* declaration of one of these is the
-        # author naming that source, not a duplicate (0).
+        # author naming that source, not a duplicate.
         implicit_alignment_ids: Set[str] = set()
         for index, aln_raw in enumerate(alignments_raw):
             where = f"alignments[{index}]"
@@ -600,7 +612,7 @@ class ConfigParser:
                 raise ConfigError(f"Duplicate alignment id: {aln_id}")
             # An implicit parent may be re-declared explicitly further down the
             # list; declaration order must not decide whether the config is
-            # valid (0).
+            # valid.
             implicit_alignment_ids.discard(aln_id)
             alignments[aln_id] = alignment
 
@@ -1652,10 +1664,27 @@ class ConfigParser:
             if not isinstance(prov_raw, dict):
                 raise ConfigError(f"Calibration '{name}': provenance must be a mapping")
             self._check_keys(prov_raw, "provenance", f"Calibration '{name}': provenance")
+            # Values are folded and whitelisted exactly like the key names. An
+            # unrecognised ``calibration_type`` used to reach the soft branch, so
+            # the hard-bound check -- the one that *stops* a file being written --
+            # was reachable only by accident of spelling.
+            prov_where = f"Calibration '{name}': provenance"
+            source_raw = prov_raw.get("source", "")
+            source = (
+                self._canonical_name(
+                    source_raw, self.VALID_PROVENANCE_SOURCES, "source", prov_where
+                )
+                if str(source_raw or "") != ""
+                else ""
+            )
+            type_raw = prov_raw.get("calibration_type", "soft")
+            calibration_type = self._canonical_name(
+                type_raw, self.VALID_CALIBRATION_TYPES, "calibration_type", prov_where
+            )
             provenance = Provenance(
-                source=prov_raw.get("source", ""),
+                source=source,
                 reference=prov_raw.get("reference", ""),
-                calibration_type=prov_raw.get("calibration_type", "soft"),
+                calibration_type=calibration_type,
                 original_age_min=self._as_num(
                     prov_raw, "original_age_min", f"Calibration '{name}': provenance"
                 ),
@@ -1824,7 +1853,9 @@ class ConfigParser:
 
         ``x or default`` also swallows 0 and None, which silently overrode an
         author's explicit value and made the range guards that follow it
-        unreachable (1).
+        unreachable -- an explicit ``0`` never reached them, because the default
+        had already been substituted for it.  Defaulting therefore happens only
+        when the key is absent.
 
         Args:
             raw: The mapping to read.
@@ -1871,11 +1902,14 @@ class ConfigParser:
         if "store_every" in mcmc_raw:
             store_every = self._int_or_default(mcmc_raw, "store_every", "mcmc", 0)
         else:
+            # Single documented default, shared with `quick`, the Python API
+            # and the MCMCConfig dataclass via models.default_store_every().
             # MCMC.java counts this in *logged samples*, not generations
             # (`(sampleNr + 1) % storeEvery == 0`), so a single fixed number
-            # would checkpoint a 10^7-generation chain once, at the very end.
-            # Scale it with the chain so any run gets ~10 resume points.
-            store_every = max(1, chain_length // 10000)
+            # would checkpoint a 10^5-state chain almost never and a 10^7-state
+            # chain only at the very end; scaling with the chain length keeps
+            # any run resumable at evenly spaced checkpoints.
+            store_every = default_store_every(chain_length)
         particle_count = self._int_or_default(mcmc_raw, "particle_count", "mcmc", 1)
         sub_chain_length = self._int_or_default(mcmc_raw, "sub_chain_length", "mcmc", 10000)
         if chain_length <= 0:
@@ -1897,7 +1931,9 @@ class ConfigParser:
         if store_every < -1:
             raise ConfigError(
                 f"mcmc.store_every = {store_every} is not a valid interval; use a positive "
-                f"number of samples (10000 by default) or -1 to disable checkpointing."
+                f"number of samples, or -1 to disable checkpointing. Omit the key to get the "
+                f"documented default for this chain length, max(1, chain_length // "
+                f"{STORE_EVERY_CHAIN_DIVISOR}) = {default_store_every(chain_length)}."
             )
         if store_every == -1:
             # Legal but reported: the validator warns that the chain cannot be
@@ -1911,6 +1947,18 @@ class ConfigParser:
         seed = self._int_or_default({"seed": seed_raw}, "seed", "mcmc", 1)
         if seed < 1:
             raise ConfigError(f"mcmc.seed must be >= 1, got {seed}")
+        # Thread count for the *generated* pipelines (`beast -threads N`). It is
+        # a scheduling knob, not part of the analysis, so it reaches the
+        # Snakefile/Nextflow emitters but is excluded from the fingerprint;
+        # models.MCMCConfig.threads documents the split.
+        threads_raw = mcmc_raw.get("threads", DEFAULT_BEAST2_THREADS)
+        threads = self._int_or_default(
+            {"threads": threads_raw}, "threads", "mcmc", DEFAULT_BEAST2_THREADS
+        )
+        try:
+            threads = validate_threads(threads, where="mcmc.threads")
+        except ValueError as exc:
+            raise ConfigError(str(exc))
         return MCMCConfig(
             chain_length=chain_length,
             pre_burnin=pre_burnin,
@@ -1920,6 +1968,7 @@ class ConfigParser:
             particle_count=particle_count,
             sub_chain_length=sub_chain_length,
             seed=seed,
+            threads=threads,
         )
 
     def _parse_real_parameter(self, raw: Any, where: str = "parameter") -> RealParameter:

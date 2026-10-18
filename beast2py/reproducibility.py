@@ -22,6 +22,7 @@ from .models import (
     BEASTConfig,
     ClockModelType,
     TreePriorType,
+    validate_threads,
 )
 
 
@@ -33,12 +34,17 @@ class FingerprintGenerator:
     date, no time zone and not the output file name, so the same YAML plus the
     same data yields the same identifier whenever and wherever it is run, while
     a changed model component, calibration, MCMC setting *or sequence* changes
-    it ( and the's.
+    it -- as does the content of the alignments themselves. The one MCMC setting
+    that does not is ``mcmc.threads``, the thread count the generated workflows
+    hand to ``beast -threads``: it schedules the run without changing the
+    posterior, so it is excluded (see :meth:`BEASTConfig.to_dict`).
     """
 
     # 12 hex characters = 48 bits of digest. By the birthday bound, a 50%
-    # chance of one collision needs ~2^24 (≈1.7e7) distinct analyses, so the
-    # collision risk is irrelevant at the scale of published phylogenies.
+    # chance of one collision needs sqrt(2 * 2**48 * ln 2) = 1.98e7 distinct
+    # analyses, so the collision risk is irrelevant at the scale of published
+    # phylogenies. `collision_bound_50pct()` is the arithmetic behind that
+    # number; the sqrt(2**48) = 1.7e7 shortcut is only a ~39% chance.
     HASH_HEX_CHARS = 12
 
     @classmethod
@@ -141,7 +147,7 @@ class FingerprintGenerator:
             config: BEAST configuration.
 
         Returns:
-            Fingerprint string, e.g. ``B2P-a3f7b2c9d1e8-0.1.1``.
+            Fingerprint string, e.g. ``B2P-69dba66a3570-0.1.2``.
         """
         tool_version = config.metadata.get("tool_version") or __version__
         return f"B2P-{FingerprintGenerator.config_hash(config)}-{tool_version}"
@@ -579,10 +585,37 @@ class PipelineGenerator:
     """Generate Snakemake/Nextflow pipeline files."""
 
     @staticmethod
+    def resolve_threads(threads: Optional[int], config: BEASTConfig) -> int:
+        """Return the thread count to write into a workflow.
+
+        Both emitters used to hard-code ``beast -threads 4``, which left a user
+        on a two-core laptop or a resource-restricted HPC partition no way to
+        change it. The knob is now ``mcmc.threads`` in the YAML (default
+        :data:`~.models.DEFAULT_BEAST2_THREADS`, still 4, so untouched configs
+        emit the same text as before) and ``--threads`` on
+        ``beast2py pipeline`` / ``threads=`` in the API, which overrides it.
+
+        Args:
+            threads: An explicit override, or ``None`` to take the configured
+                ``mcmc.threads``.
+            config: The configuration the workflow is being generated for.
+
+        Returns:
+            A validated positive integer.
+
+        Raises:
+            ValueError: If the override is not a whole number >= 1.
+        """
+        if threads is None:
+            return validate_threads(config.mcmc.threads, where="mcmc.threads")
+        return validate_threads(threads, where="threads")
+
+    @staticmethod
     def generate_snakemake(
         config: BEASTConfig,
         output_dir: str,
         config_file: str = "config.yaml",
+        threads: Optional[int] = None,
     ) -> str:
         """Generate a Snakemake pipeline file.
 
@@ -590,6 +623,9 @@ class PipelineGenerator:
             config: BEAST configuration.
             output_dir: Output directory.
             config_file: Path to the YAML config file.
+            threads: BEAST2 thread count for the run rule, overriding
+                ``mcmc.threads``; ``None`` (the default) keeps the configured
+                value, which is itself 4 unless the YAML says otherwise.
 
         Returns:
             Path to the generated Snakefile.
@@ -618,6 +654,7 @@ class PipelineGenerator:
         # the real names in a comment instead of inventing predictable ones.
         trace_name = str(config.loggers.trace_log.get("file_name", ""))
         tree_name = str(config.loggers.tree_log.get("file_name", ""))
+        n_threads = PipelineGenerator.resolve_threads(threads, config)
 
         snakefile_content = f"""# Snakemake pipeline for Beast2Py
 # Analysis: {analysis_name}
@@ -644,7 +681,7 @@ rule run_beast:
     input:
         xml = "{output_xml}"
     shell:
-        "beast -overwrite -threads 4 {{input.xml}} && touch {{output}}"
+        "beast -overwrite -threads {n_threads} {{input.xml}} && touch {{output}}"
 
 # Rule 3: Run calibration diagnostics
 rule diagnose:
@@ -684,6 +721,7 @@ rule all:
         config: BEASTConfig,
         output_dir: str,
         config_file: str = "config.yaml",
+        threads: Optional[int] = None,
     ) -> str:
         """Generate a Nextflow pipeline file.
 
@@ -691,6 +729,9 @@ rule all:
             config: BEAST configuration.
             output_dir: Output directory.
             config_file: Path to the YAML config file.
+            threads: BEAST2 thread count for the run process, overriding
+                ``mcmc.threads``; ``None`` (the default) keeps the configured
+                value, which is itself 4 unless the YAML says otherwise.
 
         Returns:
             Path to the generated Nextflow file.
@@ -700,6 +741,7 @@ rule all:
         output_xml = config.metadata.get("output_file", f"{analysis_name}.xml")
         trace_name = str(config.loggers.trace_log.get("file_name", ""))
         tree_name = str(config.loggers.tree_log.get("file_name", ""))
+        n_threads = PipelineGenerator.resolve_threads(threads, config)
 
         nextflow_content = f'''// Nextflow pipeline for Beast2Py
 // Analysis: {analysis_name}
@@ -728,7 +770,7 @@ process run_beast {{
 
     script:
     """
-    beast -overwrite -threads 4 ${{xml}}
+    beast -overwrite -threads {n_threads} ${{xml}}
     touch beast2_run.done
     """
 }}

@@ -8,8 +8,10 @@
 | < 0.1   | No       |
 
 Beast2Py is pre-1.0 and has a single maintained line, 0.1.x. The current release
-is 0.1.1 (tag `v0.1.1`) and nothing earlier was ever published, so there is no
-older line to patch. Fixes land on `main` and in the next 0.1.x tag.
+is 0.1.2 (tag `v0.1.2`), and the 0.1.x releases are also published on PyPI as
+[`beast2py`](https://pypi.org/project/beast2py/), so an advisory must name the
+earliest affected version rather than assume everyone is current. Fixes land on
+`main` and in the next 0.1.x tag.
 
 ## Reporting a vulnerability
 

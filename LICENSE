@@ -1,3 +1,18 @@
+Beast2Py, as distributed, is covered by the SPDX expression
+MIT AND LGPL-2.1-only:
+
+  * the Python package, the CLI, the tests and the documentation are released
+    under the MIT licence reproduced below;
+  * the BEAST2 package-management classes vendored under
+    beast2py/tools/classes/beast/pkgmgmt/ remain under the GNU Lesser General
+    Public Licence version 2.1, whose text is reproduced in
+    beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt and whose provenance is recorded
+    in beast2py/tools/NOTICE.
+
+SPDX-License-Identifier: MIT AND LGPL-2.1-only
+
+---
+
 MIT License
 
 Copyright (c) 2026 曾子超 (Zichao Zeng) <zengzichao@sjtu.edu.cn>

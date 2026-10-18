@@ -285,7 +285,7 @@ class XMLValidator:
                     )
                     break
 
-        # Alignment sanity inside the produced XML ( backstop)
+        # Alignment sanity inside the produced XML (a backstop)
         for data_elem in root.findall("data"):
             seqs = data_elem.findall("sequence")
             if not seqs:
@@ -403,9 +403,60 @@ class XMLValidator:
             or "not found" in lowered
             or "no such file" in lowered
             or "timed out" in lowered
+            # The JVM's own signature for "the tool you asked me to run is not
+            # on the class path". Only the exception's name is matched, because
+            # the human-readable half of that message is localized and changes
+            # language with the host locale. A tool that failed to start is a
+            # missing checker, not a BEAST2 verdict about the model.
+            or "classnotfoundexception" in lowered
+            or "could not find or load main class" in lowered
         ):
             return False, output, "unavailable"
         return False, output, "failed"
+
+    @staticmethod
+    def _validator_setup_problem(script: Optional[Path], is_bundled: bool) -> Optional[str]:
+        """Explain in English why the BEAST2 parse gate cannot be attempted.
+
+        The launcher can be present and still be unable to run: the bundled
+        BEAST2 package-management helper classes it puts on the class path may be
+        missing from the installation (a partial source install, a tree with
+        ``beast2py/tools`` removed). Reaching for java anyway produces a
+        ``ClassNotFoundException`` whose readable half is localized, and a caller
+        gating on exit codes cannot tell that apart from "BEAST2 rejected the
+        model" -- so the check happens here, before any JVM is started.
+
+        Args:
+            script: The launcher that would be run, or None.
+            is_bundled: Whether that launcher is the one this package ships. A
+                user-supplied script is taken at face value: its own exit code
+                decides, and only exit 2 means "setup error".
+
+        Returns:
+            A ``SETUP-ERROR:`` prefixed message, or None when the gate can run.
+        """
+        if script is None or not is_bundled:
+            return None
+        # A launcher found at the repository root is a thin wrapper that execs
+        # the package's own copy, so the helper it needs lives one level down.
+        tools_dirs = [script.parent / "tools", script.parent / "beast2py" / "tools"]
+        if any(
+            (tools / "classes" / "Beast2Validator.class").is_file()
+            or (tools / "Beast2Validator.java").is_file()
+            for tools in tools_dirs
+        ):
+            return None
+        return (
+            "SETUP-ERROR: the BEAST2 parse gate could not be run, because the "
+            "validator launcher this package ships is incomplete: neither "
+            "Beast2Validator.class nor Beast2Validator.java was found next to it at "
+            f"{tools_dirs[0]}. "
+            "Without it no BEAST2 class path can be assembled, so nothing has been "
+            "checked by BEAST2 -- this is not a pass and not a rejection. Reinstall "
+            "Beast2Py from a complete source tree (a source install that omitted "
+            "beast2py/tools is enough to cause this), install BEAST2 v2.7.x, or pass "
+            "--beast2-path pointing at a launcher that carries the validator."
+        )
 
     @staticmethod
     def _bundled_validator_script() -> Optional[Path]:
@@ -473,6 +524,7 @@ class XMLValidator:
 
         script: Optional[Path] = None
         beast_exec = beast2_path or "beast"
+        is_bundled = False
 
         if beast2_path and beast2_path != "beast" and os.path.isfile(beast2_path):
             if beast2_path.endswith((".sh", ".bash")):
@@ -481,6 +533,13 @@ class XMLValidator:
             # fallback below.
         else:
             script = XMLValidator._bundled_validator_script()
+            is_bundled = script is not None
+
+        # Refuse before starting a JVM when the shipped launcher cannot run: a
+        # tool that failed to start must never reach a caller as a verdict.
+        setup_problem = XMLValidator._validator_setup_problem(script, is_bundled)
+        if setup_problem is not None:
+            return False, setup_problem
 
         if script is not None:
             try:

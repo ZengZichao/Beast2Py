@@ -3,6 +3,16 @@
 Provides subcommands for generating BEAST2 XML, running calibration diagnostics,
 validating XML, generating methods descriptions, and creating pipeline files.
 
+Four numbered checks guard a generated file, and the printed output uses that
+numbering: Gate 0 is the parse-time provenance and character validation of the
+input, Gates 1 to 3 are the generation gates (structural checks, calibration
+conflicts, and the optional BEAST2 parse plus model initialisation) that must
+all pass before anything is written. ``generate`` and ``quick`` print Gate 0 and
+then Gate 1/3 to Gate 3/3; ``validate`` keeps its two-level wording but names
+the gate each level maps onto, since it reads an XML file and so has no Gate 0
+input question and no configuration to re-run Gate 2 against. The scheme, and
+why the denominators stay "/3", are set out next to the ``GATE_0`` constant.
+
 Usage:
     beast2py generate --config config.yaml --output output.xml
     beast2py diagnose --config config.yaml --report report.html
@@ -80,6 +90,54 @@ def _verbose(msg: str, verbose: bool) -> None:
 
 
 # ============================================================================
+# Gate vocabulary
+# ============================================================================
+
+# Four numbered checks stand between a YAML configuration and an XML file the
+# user can hand to BEAST2, and the CLI prints exactly that numbering (audit
+# comment LANG-012 asked the printed scheme and the manuscript's scheme to agree):
+#
+#   Gate 0  parse-time checks on the *input*: the calibration provenance rules
+#           and the character validation of the alignment, both raised by
+#           ``ConfigParser.parse`` while the YAML and FASTA are read.
+#   Gate 1  structural checks on the assembled XML.
+#   Gate 2  calibration conflict detection.
+#   Gate 3  the optional BEAST2 parse plus model initialisation.
+#
+# Gate 0 runs before an XML string exists, so it is not one of the three
+# *generation* gates, and the printed denominators for Gates 1 to 3 therefore
+# stay "/3" instead of becoming "/4". Gate 0 says so in its own label --
+# ``GATE_0`` below -- which is the least invasive way to make the two series
+# unambiguous: no gate line that the manuals already quote had to move, and the
+# reader of a transcript sees "Gate 0 (parse-time, before the 3 generation
+# gates)" followed by "Gate 1/3", "Gate 2/3", "Gate 3/3".
+#
+# ``validate`` keeps its own two-level vocabulary, because it reads an XML file
+# rather than a YAML input and so has no Gate 0 to run: its well-formedness
+# check lives inside Level 1. Its lines print the mapping explicitly --
+# "Level 1/2 (Gate 1, ...)" and "Level 2/2 (Gate 3, ...)" -- so a validate log
+# and a generate log can be lined up against the same four checks.
+GATE_0 = "Gate 0 (parse-time, before the 3 generation gates)"
+
+
+def _gate_0_passed(scope: str) -> None:
+    """Announce that the parse-time checks ran and found nothing to report.
+
+    ``scope`` names what actually reached a check. A full YAML configuration is
+    put through the provenance rules and the alignment character validation by
+    ``ConfigParser.parse``; quick mode has no YAML configuration to parse, so it
+    reports the calibration provenance rules plus as much of the alignment as
+    ``SequenceReader`` itself inspects. Naming which of the two ran keeps the
+    green tick honest, the same way the generation gates that follow refuse to
+    say "BEAST2 verified" when BEAST2 never ran.
+
+    Args:
+        scope: The sentence fragment naming the checks that passed.
+    """
+    _success(f"{GATE_0} passed: {scope}.")
+
+
+# ============================================================================
 # Subcommand: generate
 # ============================================================================
 
@@ -94,9 +152,16 @@ def _validate_and_write(
     force: bool = False,
     verbose: bool = False,
 ) -> int:
-    """Run the three validation gates, then write the artifact.
+    """Run the three generation gates, then write the artifact.
 
-    The gates are, in order:
+    This helper is where Gates 1 to 3 live. Gate 0 -- the parse-time provenance
+    and character validation done by ``ConfigParser.parse`` -- runs in the
+    caller, before an XML string exists, and is reported there with the
+    ``GATE_0`` label documented above. The four-check scheme, and why the
+    denominators below read "/3" while the numbering runs 0 to 3, are both
+    documented next to ``GATE_0``.
+
+    The generation gates are, in order:
 
     1. Beast2Py's own structural checks (ids, idrefs, duplicate ids, sequence
        sanity, prior coverage).
@@ -128,7 +193,9 @@ def _validate_and_write(
         verbose: Print per-gate detail.
 
     Returns:
-        ``0`` when everything that ran passed, ``1`` otherwise.
+        ``0`` when everything that ran passed, ``2`` when Gate 3 was asked for
+        but BEAST2 could not be reached and ``--allow-unvalidated`` was not
+        given, and ``1`` for any other failure.
     """
     out_path = Path(output_path)
 
@@ -243,6 +310,14 @@ def cmd_generate(args: argparse.Namespace) -> int:
     This is the primary command for creating BEAST2 XML files. It reads a
     YAML configuration, assembles the complete XML, optionally runs
     diagnostics, generates a fingerprint, and produces a methods description.
+
+    Four numbered checks are reported, in the scheme documented next to
+    ``GATE_0``: parsing the configuration *is* Gate 0 (the provenance rules and
+    the character validation of the alignment are raised by ``ConfigParser.parse``
+    before any XML exists), and the three generation gates that follow it are run
+    by :func:`_validate_and_write`. A Gate 0 failure therefore exits 1 with a
+    ``Configuration error`` line labelled as Gate 0 and writes nothing, exactly
+    as it did before it had a number.
     """
     verbose = args.verbose
     config_path = args.config
@@ -253,11 +328,12 @@ def cmd_generate(args: argparse.Namespace) -> int:
         parser = ConfigParser()
         config = parser.parse(config_path)
     except ConfigError as e:
-        _error(f"Configuration error: {e}")
+        _error(f"{GATE_0} failed: Configuration error: {e}")
         return 1
     except FileNotFoundError as e:
         _error(f"File not found: {e}")
         return 1
+    _gate_0_passed("calibration provenance and alignment characters")
 
     _verbose(f"Analysis: {config.metadata.get('analysis_name', 'N/A')}", verbose)
     _verbose(f"Partitions: {len(config.partitions)}", verbose)
@@ -348,7 +424,7 @@ def cmd_generate(args: argparse.Namespace) -> int:
 
 # Public alias: the Python API (beast2py.api) routes its write path through this
 # same gate helper, so the CLI and the library cannot disagree about what
-# "validated" means ( covered only the CLI before).
+# "validated" means (the helper used to cover only the CLI).
 validate_and_write = _validate_and_write
 
 
@@ -478,6 +554,16 @@ def cmd_quick(args: argparse.Namespace) -> int:
 
     Supports single partition + single calibration point scenarios.
     For complex analyses, use the `generate` command with a YAML config file.
+
+    The four-check scheme is the same as in :func:`cmd_generate`, including the
+    Gate 0 label and the rule that a parse-time failure exits 1 and writes
+    nothing. Quick mode assembles its configuration from arguments instead of
+    reading a YAML file, so what Gate 0 covers is slightly different: the
+    alignment is checked as far as ``SequenceReader`` takes it, and the
+    calibration provenance rules are applied to the ``--calibration-yaml``
+    points, which is what the printed Gate 0 line names. The three generation
+    gates then run in :func:`_validate_and_write` exactly as they do for a full
+    configuration.
     """
     verbose = args.verbose
 
@@ -496,7 +582,7 @@ def cmd_quick(args: argparse.Namespace) -> int:
     except ValueError as e:
         # AlignmentError subclasses ValueError, so header/alphabet problems from
         # the reader land here with a message that already names the record.
-        _error(f"Failed to parse alignment: {e}")
+        _error(f"{GATE_0} failed: the alignment could not be read: {e}")
         return 1
 
     _verbose(f"Taxa: {alignment.n_taxa}, Sites: {alignment.n_sites}", verbose)
@@ -563,7 +649,7 @@ def cmd_quick(args: argparse.Namespace) -> int:
         except ConfigError as e:
             # The alignment above reports its own problems cleanly; a calibration
             # file the user hand-typed can fail the same way.
-            _error(f"Configuration error: {e}")
+            _error(f"{GATE_0} failed: Configuration error: {e}")
             return 1
         _verbose(f"Calibration points: {len(calibrations)}", verbose)
 
@@ -592,6 +678,13 @@ def cmd_quick(args: argparse.Namespace) -> int:
     )
 
     # Generate XML
+    if args.calibration_yaml:
+        _gate_0_passed("calibration provenance, and the alignment as far as the reader checks it")
+    else:
+        _gate_0_passed(
+            "the alignment as far as the reader checks it; "
+            "no --calibration-yaml was supplied, so no provenance was read"
+        )
     _info("Generating BEAST2 XML...")
     from .xml_writer import XMLWriter
 
@@ -680,10 +773,53 @@ def _parse_calibration_yaml(yaml_path: str, known_taxa=None) -> List[Calibration
 def cmd_validate(args: argparse.Namespace) -> int:
     """Validate a BEAST2 XML file, reporting each level separately.
 
-    Three levels are distinguished on purpose: Beast2Py's structural checks,
-    and (optionally) BEAST2 parsing plus model initialisation. "BEAST2 could
-    read this file" is not the same statement as "this model is what the user
+    Two levels are distinguished on purpose: Beast2Py's structural checks, and
+    (optionally) BEAST2 parsing plus model initialisation. "BEAST2 could read
+    this file" is not the same statement as "this model is what the user
     specified", and the old wording blurred them.
+
+    Every line also names the gate it corresponds to in the four-check scheme
+    documented next to ``GATE_0``, so a validate log and a generate log can be
+    read against the same numbering:
+
+    - ``Level 1/2`` is ``Gate 1``, the structural checks. XML well-formedness
+      lives inside this level, and with it the closest thing a bare XML file has
+      to ``Gate 0``, the parse-time check on an input file. ``validate`` reads
+      XML rather than YAML, so it has no provenance question to answer and never
+      prints a Gate 0 line.
+    - ``Level 2/2`` is ``Gate 3``, the BEAST2 parse plus model initialisation.
+      ``Gate 2`` -- calibration conflict detection -- needs the configuration
+      that produced the XML, so this command cannot re-run it and says so in the
+      --beast2 line rather than implying a full four-gate pass.
+
+    The exit codes are:
+
+    - ``0`` the checks that ran all passed,
+    - ``1`` a check ran and failed,
+    - ``2`` ``--beast2`` was asked for and the BEAST2 parse gate could not be
+      run at all, so BEAST2 never looked at this file.
+
+    That third case is the point of this command's contract. A requested check
+    that did not happen is reported as a refusal, never as a pass: a CI job
+    running ``validate --beast2`` on a machine without BEAST2 goes red rather
+    than quietly green. ``--allow-unvalidated`` downgrades it back to a warning
+    for callers that genuinely want structural-only reporting, which is the same
+    exemption ``generate`` offers under the same flag name.
+
+    The asymmetry with ``generate`` is deliberate and documented. ``generate``
+    writes a file, so it gates: every check it was asked to run must pass before
+    anything lands on disk. ``validate`` writes nothing, so it reports: without
+    ``--beast2`` it is asking only the structural question, and passing that
+    question is a complete and honest answer, so it exits ``0``. What it must not
+    do is claim a BEAST2 verdict it never obtained, which is why ``--beast2`` on
+    an unreachable BEAST2 installation exits ``2`` in both subcommands: the
+    refusal is the same, and only the thing at risk differs.
+
+    Args:
+        args: Parsed command-line arguments.
+
+    Returns:
+        Process exit code; see above.
     """
     xml_path = args.xml
     _info(f"Validating XML: {xml_path}")
@@ -694,11 +830,14 @@ def cmd_validate(args: argparse.Namespace) -> int:
     result = XMLValidator.validate_file(xml_path)
 
     if result.errors:
-        _error(f"Level 1/2 (structural checks) failed with {len(result.errors)} error(s):")
+        _error(f"Level 1/2 (Gate 1, structural checks) failed with {len(result.errors)} error(s):")
         for err in result.errors:
             _error(f"  {err}")
     else:
-        _success("Level 1/2 passed: structural checks (ids, idrefs, priors, bounds).")
+        _success(
+            "Level 1/2 passed (Gate 1, structural checks): "
+            "ids, idrefs, priors, bounds and XML well-formedness."
+        )
 
     if result.warnings:
         _warn(f"{len(result.warnings)} warning(s):")
@@ -707,20 +846,38 @@ def cmd_validate(args: argparse.Namespace) -> int:
 
     # BEAST2 validation
     if args.beast2:
-        _info("Level 2/2: validating with BEAST2 (parse + model initialisation)...")
+        _info(
+            "Level 2/2 (Gate 3, BEAST2 parse + model initialisation): running BEAST2 on this "
+            "file. Gate 2, calibration conflicts, is not re-checked here: it needs the YAML "
+            "configuration that produced the XML."
+        )
         beast2_path = args.beast2_path or "beast"
         success, output, status = XMLValidator.beast2_validation_status(xml_path, beast2_path)
         if status == "unavailable":
-            _warn(
-                "Level 2/2 skipped: BEAST2 is not installed or its validation script was "
-                "not found, so this XML has only been checked structurally. Do not treat "
-                "the structural pass as BEAST2 verification."
+            message = (
+                "Level 2/2 not run (Gate 3, BEAST2 parse + model initialisation): the parse "
+                "gate could not be started, because no BEAST2 installation or validator "
+                "launcher was found. This XML has been checked structurally only, and has "
+                "NOT been verified by BEAST2; install BEAST2 v2.7.x (or pass --beast2-path, "
+                "or set BEAST2_JAR), or run again with --allow-unvalidated to accept a "
+                "structural-only report. The same refusal makes generate exit 2."
             )
-            print(output.strip())
+            detail = (output or "").strip()
+            if not getattr(args, "allow_unvalidated", False):
+                _error(message)
+                if detail:
+                    # Only the launcher's own English setup diagnostic reaches the
+                    # user here: the reason the gate could not start is the whole
+                    # report, and a raw JVM stack trace would bury it.
+                    _error(f"  reason: {detail.splitlines()[-1]}")
+                return 2
+            _warn(message)
+            if detail:
+                print(detail)
         elif success:
-            _success("Level 2/2 passed: BEAST2 parsed and initialised the model.")
+            _success("Level 2/2 passed (Gate 3): BEAST2 parsed and initialised the model.")
         else:
-            _error("Level 2/2 failed: BEAST2 rejected the model:")
+            _error("Level 2/2 failed (Gate 3): BEAST2 rejected the model:")
             print(output)
             return 1
 
@@ -802,12 +959,22 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
 
     pipeline_type = args.type.lower()
 
+    # `--threads` overrides mcmc.threads in the emitted workflow. Resolve it
+    # once, before any file is written, so a bad value cannot leave a half
+    # generated pipeline directory behind.
+    try:
+        n_threads = PipelineGenerator.resolve_threads(getattr(args, "threads", None), config)
+    except ValueError as e:
+        _error(str(e))
+        return 1
+
     if pipeline_type == "snakemake":
         _info("Generating Snakemake pipeline...")
         snakefile = PipelineGenerator.generate_snakemake(
             config,
             output_dir=output_dir,
             config_file=config_path,
+            threads=n_threads,
         )
         _success(f"Snakefile written to: {snakefile}")
 
@@ -817,6 +984,7 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
             config,
             output_dir=output_dir,
             config_file=config_path,
+            threads=n_threads,
         )
         _success(f"Nextflow file written to: {nf_file}")
 
@@ -826,6 +994,7 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
             config,
             output_dir=output_dir,
             config_file=config_path,
+            threads=n_threads,
         )
         _success(f"Snakefile written to: {snakefile}")
 
@@ -834,6 +1003,7 @@ def cmd_pipeline(args: argparse.Namespace) -> int:
             config,
             output_dir=output_dir,
             config_file=config_path,
+            threads=n_threads,
         )
         _success(f"Nextflow file written to: {nf_file}")
 
@@ -997,7 +1167,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--beast2-validate",
         action="store_true",
         dest="beast2_validate",
-        help="Validate XML with BEAST2 -validate",
+        help="Run Gate 3, the BEAST2 parse + model initialisation check, before writing",
     )
     p_gen.add_argument(
         "--beast2-path",
@@ -1010,8 +1180,10 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         dest="allow_unvalidated",
         help="With --beast2-validate, write the XML even when BEAST2 is not "
-        "installed. By default that case exits 2, so a CI job cannot turn "
-        "'BEAST2 missing' into a green run.",
+        "installed. By default that case exits 2 and writes nothing, so a CI "
+        "job cannot turn 'BEAST2 missing' into a green run. The flag of the "
+        "same name on the validate subcommand is the identical exemption for "
+        "the identical refusal: both stop Gate 3 from being reported as a pass.",
     )
     p_gen.add_argument(
         "--force",
@@ -1136,20 +1308,45 @@ def build_parser() -> argparse.ArgumentParser:
     p_val = subparsers.add_parser(
         "validate",
         help="Validate a BEAST2 XML file",
-        description="Validate a BEAST2 XML file for structural correctness and ID consistency.",
+        description=(
+            "Validate a BEAST2 XML file for structural correctness and ID "
+            "consistency. Without --beast2 only those structural checks run, and "
+            "passing them exits 0: this subcommand reports what it checked rather "
+            "than gating a write the way generate does. With --beast2 the file is "
+            "also parsed and initialised by BEAST2 v2.7.x, and if BEAST2 cannot be "
+            "reached the command exits 2 rather than reporting a verdict it never "
+            "obtained -- use --allow-unvalidated to accept a structural-only report "
+            "in that case. The two levels map onto generate's gates and are printed "
+            "with that mapping: Level 1/2 is Gate 1 (structural), Level 2/2 is "
+            "Gate 3 (BEAST2 parse + model initialisation); Gate 2, calibration "
+            "conflicts, needs the YAML configuration and is not re-derived from the "
+            "XML, and Gate 0, the parse-time input checks, has no counterpart for a "
+            "bare XML file because its well-formedness half runs inside Level 1."
+        ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_val.add_argument("--xml", required=True, help="XML file to validate")
     p_val.add_argument(
         "--beast2",
         action="store_true",
-        help="Also validate with BEAST2 -validate",
+        help="Also run Gate 3, the BEAST2 parse + model initialisation check "
+        "(Level 2/2 here, --beast2-validate for generate)",
     )
     p_val.add_argument(
         "--beast2-path",
         default="beast",
         dest="beast2_path",
         help="Path to BEAST2 executable (default: beast)",
+    )
+    p_val.add_argument(
+        "--allow-unvalidated",
+        action="store_true",
+        dest="allow_unvalidated",
+        help="With --beast2, report a structural-only pass as success even when "
+        "BEAST2 cannot be reached. By default that case exits 2, so a CI job "
+        "cannot turn 'BEAST2 missing' into a green run. This is the same "
+        "exemption, under the same flag name, that generate offers for its "
+        "Gate 3: both turn the identical refusal into an opt-in warning.",
     )
     p_val.set_defaults(func=cmd_validate)
 
@@ -1188,6 +1385,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=".",
         dest="output_dir",
         help="Output directory (default: current directory)",
+    )
+    p_pipe.add_argument(
+        "--threads",
+        type=int,
+        default=None,
+        help=(
+            "BEAST2 thread count written into the generated workflow as "
+            "`beast -threads N`. Overrides mcmc.threads from the YAML; with "
+            "neither set the default is 4. Must be a positive integer."
+        ),
     )
     p_pipe.set_defaults(func=cmd_pipeline)
 
