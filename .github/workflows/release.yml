@@ -220,7 +220,7 @@ jobs:
       # This is the publish path, so the action is pinned to a commit SHA
       # rather than the mutable `release/v1` branch ref. Without a `password`
       # input it uses Trusted Publishing (OIDC) by default.
-      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
 
   pypi-not-enabled:
     name: report that PyPI publishing is not enabled
