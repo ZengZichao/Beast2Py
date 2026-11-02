@@ -213,10 +213,14 @@ class ModelRegistry:
             "use_param_elements": True,
         },
         "chi_square": {
-            # BEAST2 ChiSquare input name is "df" (not "dof")
+            # BEAST2 ChiSquare input name is "df" (not "dof"), and the input is
+            # an IntegerParameter.  Writing a <parameter> child makes the XML
+            # parser create a RealParameter and BEAST2 rejects it with
+            # "type mismatch for input df"; the attribute form lets the input
+            # instantiate its own IntegerParameter.
             "spec": "beast.base.inference.distribution.ChiSquare",
             "params": {"dof": "df"},
-            "use_param_elements": True,
+            "use_param_elements": False,
         },
     }
 

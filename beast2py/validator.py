@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 from defusedxml import ElementTree as SafeElementTree
 from defusedxml.common import DefusedXmlException
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 
 class ValidationResult:
@@ -95,8 +95,8 @@ class XMLValidator:
             result.add_error("No <run> element found")
 
         # 4. Collect all IDs and idrefs
-        all_ids = set()
-        all_idrefs = set()
+        all_ids: Set[str] = set()
+        all_idrefs: Set[str] = set()
 
         XMLValidator._collect_ids(root, all_ids, all_idrefs)
 
@@ -296,7 +296,9 @@ class XMLValidator:
                     f"<data id='{data_elem.get('id')}': sequences of unequal length "
                     f"{sorted(lengths)}"
                 )
-            taxa = [seq.get("taxon") for seq in seqs]
+            # An unnamed sequence keeps its None taxon folded into "", so two
+            # of them still collide instead of vanishing from the check.
+            taxa = [seq.get("taxon") or "" for seq in seqs]
             dupes = sorted({t for t in taxa if taxa.count(t) > 1})
             if dupes:
                 result.add_error(

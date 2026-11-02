@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<beast version="2.0" namespace="beast.base.evolution.alignment:beast.base.evolution.speciation:beast.pkgmgmt:beast.base.core:beast.base.inference:beast.base.evolution.tree.coalescent:beast.base.evolution.tree:beast.base.evolution.likelihood:beast.base.inference.distribution:beast.base.evolution.operator:beast.base.inference.operator:beast.base.evolution.sitemodel:beast.base.evolution.substitutionmodel:beast.base.evolution.branchratemodel:beast.base.inference.parameter:beast.base.math:beast.base.util">
+    <!-- Analysis Fingerprint: B2P-d998cda16a18-0.2.0 | Data: 0624f49723870642 -->
+    <data id="alignment" dataType="aminoacid">
+        <sequence taxon="Cow">MAYPMQLGFQDATSPIMEELLHFHDHTLMIVFLISSLVLYIISLMLTTKLTHTSTMDAQEVETIWTILPAIILILIALPSLRILYMMDEINNPSLTVKTMGHQWYWSYEYTDYEDLSFDSYMIPTSELKPGELRLLEVDNRVVLPMEMTIRMLVSSEDVLHSWAVPSLGLKTDAIPGRLNQTTLMSSRPGLYYGQCSEICGSNHSFMPIVLELVPLKYFEKWSASML-------</sequence>
+        <sequence taxon="Carp">MAHPTQLGFKDAAMPVMEELLHFHDHALMIVLLISTLVLYIITAMVSTKLTNKYILDSQEIEIVWTILPAVILVLIALPSLRILYLMDEINDPHLTIKAMGHQWYWSYEYTDYENLGFDSYMVPTQDLAPGQFRLLETDHRMVVPMESPVRVLVSAEDVLHSWAVPSLGVKMDAVPGRLNQAAFIASRPGVFYGQCSEICGANHSFMPIVVEAVPLEHFENWSSLMLEDASLGS</sequence>
+        <sequence taxon="Chicken">MANHSQLGFQDASSPIMEELVEFHDHALMVALAICSLVLYLLTLMLMEKLS-SNTVDAQEVELIWTILPAIVLVLLALPSLQILYMMDEIDEPDLTLKAIGHQWYWTYEYTDFKDLSFDSYMTPTTDLPLGHFRLLEVDHRIVIPMESPIRVIITADDVLHSWAVPALGVKTDAIPGRLNQTSFITTRPGVFYGQCSEICGANHSYMPIVVESTPLKHFEAWSSL------LSS</sequence>
+        <sequence taxon="Human">MAHAAQVGLQDATSPIMEELITFHDHALMIIFLICFLVLYALFLTLTTKLTNTNISDAQEMETVWTILPAIILVLIALPSLRILYMTDEVNDPSLTIKSIGHQWYWTYEYTDYGGLIFNSYMLPPLFLEPGDLRLLDVDNRVVLPIEAPIRMMITSQDVLHSWAVPTLGLKTDAIPGRLNQTTFTATRPGVYYGQCSEICGANHSFMPIVLELIPLKIFEM-------GPVFTL</sequence>
+        <sequence taxon="Loach">MAHPTQLGFQDAASPVMEELLHFHDHALMIVFLISALVLYVIITTVSTKLTNMYILDSQEIEIVWTVLPALILILIALPSLRILYLMDEINDPHLTIKAMGHQWYWSYEYTDYENLSFDSYMIPTQDLTPGQFRLLETDHRMVVPMESPIRILVSAEDVLHSWALPAMGVKMDAVPGRLNQTAFIASRPGVFYGQCSEICGANHSFMPIVVEAVPLSHFENWSTLMLKDASLGS</sequence>
+        <sequence taxon="Mouse">MAYPFQLGLQDATSPIMEELMNFHDHTLMIVFLISSLVLYIISLMLTTKLTHTSTMDAQEVETIWTILPAVILIMIALPSLRILYMMDEINNPVLTVKTMGHQWYWSYEYTDYEDLCFDSYMIPTNDLKPGELRLLEVDNRVVLPMELPIRMLISSEDVLHSWAVPSLGLKTDAIPGRLNQATVTSNRPGLFYGQCSEICGSNHSFMPIVLEMVPLKYFENWSASMI-------</sequence>
+        <sequence taxon="Rat">MAYPFQLGLQDATSPIMEELTNFHDHTLMIVFLISSLVLYIISLMLTTKLTHTSTMDAQEVETIWTILPAVILILIALPSLRILYMMDEINNPVLTVKTMGHQWYWSYEYTDYEDLCFDSYMIPTNDLKPGELRLLEVDNRVVLPMELPIRMLISSEDVLHSWAIPSLGLKTDAIPGRLNQATVTSNRPGLFYGQCSEICGSNHSFMPIVLEMVPLKYFENWSASMI-------</sequence>
+        <sequence taxon="Seal">MAYPLQMGLQDATSPIMEELLHFHDHTLMIVFLISSLVLYIISLMLTTKLTHTSTMDAQEVETVWTILPAIILILIALPSLRILYMMDEINNPSLTVKTMGHQWYWSYEYTDYEDLNFDSYMIPTQELKPGELRLLEVDNRVVLPMEMTIRMLISSEDVLHSWAVPSLGLKTDAIPGRLNQTTLMTMRPGLYYGQCSEICGSNHSFMPIVLELVPLSHFEKWSTSML-------</sequence>
+        <sequence taxon="Whale">MAYPFQLGFQDAASPIMEELLHFHDHTLMIVFLISSLVLYIITLMLTTKLTHTSTMDAQEVETVWTILPAIILILIALPSLRILYMMDEVNNPSLTVKTMGHQWYWSYEYTDYEDLSFDSYMIPTSDLKPGELRLLEVDNRVVLPMEMTIRMLVSSEDVLHSWAVPSLGLKTDAIPGRLNQTTLMSTRPGLFYGQCSEICGSNHSFMPIVLELVPLEVFEKWSVSML-------</sequence>
+        <sequence taxon="Frog">MAHPSQLGFQDAASPIMEELLHFHDHTLMAVFLISTLVLYIITIMMTTKLTNTNLMDAQEIEMVWTIMPAISLIMIALPSLRILYLMDEVNDPHLTIKAIGHQWYWSYEYTNYEDLSFDSYMIPTNDLTPGQFRLLEVDNRMVVPMESPTRLLVTAEDVLHSWAVPSLGVKTDAIPGRLHQTSFIATRPGVFYGQCSEICGANHSFMPIVVEAVPLTDFENWSSSML-EASL--</sequence>
+    </data>
+    <distribution id="posterior" spec="CompoundDistribution">
+        <distribution id="prior" spec="CompoundDistribution">
+            <distribution id="yule" spec="beast.base.evolution.speciation.YuleModel" tree="@tree">
+                <parameter name="birthDiffRate" idref="birthRate"/>
+            </distribution>
+            <distribution id="birthRate.prior" spec="beast.base.inference.distribution.Prior" x="@birthRate">
+                <distr spec="beast.base.inference.distribution.LogNormalDistributionModel" id="birthRate.distr">
+                    <parameter name="M" value="0.0"/>
+                    <parameter name="S" value="2.0"/>
+                </distr>
+            </distribution>
+            <distribution id="alignment.gammaShape.prior" spec="beast.base.inference.distribution.Prior" x="@alignment.gammaShape">
+                <distr spec="beast.base.inference.distribution.LogNormalDistributionModel" id="alignment.gammaShape.distr">
+                    <parameter name="M" value="0.0"/>
+                    <parameter name="S" value="2.0"/>
+                </distr>
+            </distribution>
+            <distribution id="alignment.proportionInvariant.prior" spec="beast.base.inference.distribution.Prior" x="@alignment.proportionInvariant">
+                <distr spec="beast.base.inference.distribution.Uniform" id="alignment.proportionInvariant.distr" lower="0.0" upper="1.0"/>
+            </distribution>
+            <distribution id="alignment.clockRate.prior" spec="beast.base.inference.distribution.Prior" x="@alignment.clockRate">
+                <distr spec="beast.base.inference.distribution.LogNormalDistributionModel" id="alignment.clockRate.distr">
+                    <parameter name="M" value="-6.907755"/>
+                    <parameter name="S" value="2.0"/>
+                </distr>
+            </distribution>
+        </distribution>
+        <distribution id="likelihood" spec="CompoundDistribution">
+            <distribution id="alignment.treeLikelihood" spec="TreeLikelihood" data="@alignment" tree="@tree">
+                <siteModel id="alignment.siteModel" spec="SiteModel" gammaCategoryCount="4">
+                    <parameter idref="alignment.gammaShape" name="shape"/>
+                    <parameter idref="alignment.proportionInvariant" name="proportionInvariant"/>
+                    <substModel spec="Dayhoff" id="alignment.dayhoff"/>
+                </siteModel>
+                <branchRateModel id="alignment.clockModel" spec="beast.base.evolution.branchratemodel.StrictClockModel">
+                    <parameter idref="alignment.clockRate" name="clock.rate"/>
+                </branchRateModel>
+            </distribution>
+        </distribution>
+    </distribution>
+    <run id="mcmc" spec="MCMC" chainLength="10000" preBurnin="0" storeEvery="100">
+        <init spec="beast.base.evolution.tree.coalescent.RandomTree" id="randomTree" initial="@tree" taxa="@alignment">
+            <populationModel spec="ConstantPopulation">
+                <parameter name="popSize" value="1"/>
+            </populationModel>
+        </init>
+        <state id="state" storeEvery="100">
+            <tree id="tree" name="stateNode" estimate="true">
+                <taxonset id="tree.taxonset" spec="TaxonSet" alignment="@alignment"/>
+            </tree>
+            <parameter id="birthRate" name="stateNode" value="1" dimension="1" estimate="true" lower="0"/>
+            <parameter id="alignment.gammaShape" name="stateNode" value="1" dimension="1" estimate="true" lower="0"/>
+            <parameter id="alignment.proportionInvariant" name="stateNode" value="0.05" dimension="1" estimate="true" lower="0" upper="1"/>
+            <parameter id="alignment.clockRate" name="stateNode" value="0.001" dimension="1" estimate="true" lower="0"/>
+        </state>
+        <distribution idref="posterior"/>
+        <operator id="treeScaler" spec="ScaleOperator" scaleFactor="0.75" weight="3.0" tree="@tree"/>
+        <operator spec="beast.base.evolution.operator.Uniform" weight="30.0" tree="@tree"/>
+        <operator spec="SubtreeSlide" weight="15.0" gaussian="true" size="1.7" tree="@tree"/>
+        <operator id="narrow" spec="Exchange" isNarrow="true" weight="15.0" tree="@tree"/>
+        <operator id="wide" spec="Exchange" isNarrow="false" weight="3.0" tree="@tree"/>
+        <operator spec="WilsonBalding" weight="1.0" tree="@tree"/>
+        <operator spec="UpDownOperator" scaleFactor="0.75" weight="3.0" down="@tree" up="@alignment.clockRate"/>
+        <operator id="alignment.gammaShapeScaler" spec="ScaleOperator" scaleFactor="0.75" weight="0.1" parameter="@alignment.gammaShape"/>
+        <operator id="alignment.proportionInvariantScaler" spec="ScaleOperator" scaleFactor="0.75" weight="0.1" parameter="@alignment.proportionInvariant"/>
+        <operator id="alignment.clockRateScaler" spec="ScaleOperator" scaleFactor="0.75" weight="1.0" parameter="@alignment.clockRate"/>
+        <operator spec="ScaleOperator" weight="1.0" scaleFactor="0.25">
+            <parameter idref="birthRate"/>
+        </operator>
+        <logger id="tracelog" fileName="config_aa_dayhoff.$(seed).log" logEvery="100" mode="autodetect" model="@posterior">
+            <log idref="posterior"/>
+            <log idref="prior"/>
+            <log idref="likelihood"/>
+            <log id="treeHeight" spec="beast.base.evolution.tree.TreeHeightLogger" tree="@tree"/>
+            <parameter idref="birthRate" name="log"/>
+            <parameter idref="alignment.gammaShape" name="log"/>
+            <parameter idref="alignment.proportionInvariant" name="log"/>
+            <parameter idref="alignment.clockRate" name="log"/>
+        </logger>
+        <logger id="treelog" fileName="config_aa_dayhoff.$(seed).trees" logEvery="100" mode="tree">
+            <log idref="tree"/>
+        </logger>
+        <logger id="screenlog" logEvery="1000" mode="autodetect" model="@posterior">
+            <log idref="posterior"/>
+            <log idref="prior"/>
+            <log idref="likelihood"/>
+        </logger>
+    </run>
+</beast>

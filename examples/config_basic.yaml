@@ -2,7 +2,7 @@
 # Beast2Py 示例配置文件 1 / Example configuration 1
 # 基础场景：单 partition + Yule + HKY+Γ4 + 严格时钟 + 1 个校准
 # Basic scenario: single partition, Yule prior, HKY+Gamma4, strict
-# clock, one (soft-minimum) fossil calibration.
+# clock, one synthetic soft-minimum calibration.
 # 对标 BEAST2 examples/testCalibration.xml
 #
 # 说明 / Notes
@@ -22,8 +22,8 @@ metadata:
   analysis_description: "Basic divergence time estimation for primates with single calibration"
   author: "Beast2Py"
   date: "2026-08-01"
-  beast2_version: "2.7.8"
-  tool_version: "0.1.2"
+  beast2_version: "2.7.7"
+  tool_version: "0.2.0"
 
 # --- 序列数据 ---
 # primates.fasta: 12 taxa x 898 bp mitochondrial alignment (BEAST2's
@@ -66,16 +66,12 @@ tree_prior:
   birth_rate: {value: 1.0, lower: 0.0}
 
 # --- 校准点 ---
-# A soft minimum, not a hard bound: Sahelanthropus tchadensis from
-# Toros-Menalla is bracketed at 6.8-7.2 Ma by cosmogenic 10Be/9Be dating
-# (Lebatard et al. 2008 bracket the fossil at 6.8-7.2 Ma); the single 7.24 Ma figure
-# the older end of that bracket.  The fossil is *controversially* placed
-# near the human--chimp split, so the prior is a lognormal offset by 6.5 Ma
-# (BEAST2's OffsetLogNormalDistribution).  Checked with the tool's own
-# compute_distribution_stats("lognormal", {M: 0.35, S: 0.4}, offset 6.5):
-#   median 7.92 Ma, 95% HPD [7.02, 9.31] Ma, P(age < 7.24 Ma) = 0.05,
-# i.e. the fossil sits at the 5% quantile and the tail runs older, which is
-# the behaviour recommended for fossil minima (Rieux & Balloux 2016).
+# Synthetic soft-minimum calibration for the Homo-Pan node. The age bracket
+# and prior below are invented for this example; they are not derived from
+# any fossil, publication, or empirical dataset.
+# Checked with the tool's own compute_distribution_stats:
+# Synthetic lognormal(M=0.2, S=0.35) offset 5.0; illustrative only.
+# The prior is illustrative and carries no published boundary.
 # provenance.original_age_min/max are compared against that 95% interval at
 # parse time, so the record and the prior cannot silently disagree.
 calibrations:
@@ -84,16 +80,15 @@ calibrations:
     monophyletic: true
     distribution:
       type: "lognormal"
-      parameters: {M: 0.35, S: 0.4}
-      offset: 6.5
-    use_originate: false
+      parameters: {M: 0.2, S: 0.35}
+      offset: 5.0
     provenance:
-      source: "fossil"
-      reference: "placeholder — no source consulted; replace with the reference you used"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
-      original_age_min: 7.0
-      original_age_max: 9.5
-      notes: "illustrative input, not a published age: Sahelanthropus tchadensis soft minimum (Lebatard et al. 2008 bracket 6.8-7.2 Ma)"
+      original_age_min: 5.0
+      original_age_max: 6.0
+      notes: "Synthetic calibration card for the homininaMRCA example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in Ma and exist only to exercise the provenance fields, XML generation and diagnostics."
 
 # --- 参数先验（显式声明关键两个；其余由默认弱信息先验补齐） ---
 parameter_priors:

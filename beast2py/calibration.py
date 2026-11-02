@@ -131,6 +131,11 @@ class CalibrationBuilder:
             if config_key not in dist.parameters:
                 continue
             val = dist.parameters[config_key]
+            # BEAST2's ChiSquare.df is an IntegerParameter; writing "4.0"
+            # makes XMLParser reject the model with "type mismatch for input
+            # df".  The parser already requires an integral value.
+            if dist.type.lower() == "chi_square" and config_key == "dof":
+                val = int(round(float(val)))
 
             hp = (hyperpriors or {}).get(config_key)
             if hp is not None:
@@ -254,7 +259,7 @@ class CalibrationBuilder:
     def build_mrcaprior(
         cal: CalibrationPoint,
         tree_id: str,
-        alignment_id: str = None,
+        alignment_id: Optional[str] = None,
     ) -> ET.Element:
         """Build an MRCAPrior XML element.
 
@@ -272,11 +277,15 @@ class CalibrationBuilder:
             "monophyletic": str(cal.monophyletic).lower(),
         }
 
-        if cal.use_originate and cal.taxa is not None:
-            attrs["useOriginate"] = "true"
-
         if cal.tipsonly:
             attrs["tipsonly"] = "true"
+        if cal.use_originate:
+            if cal.taxa is None:
+                raise ValueError(
+                    f"Calibration '{cal.name}': use_originate requires a taxon set; "
+                    f"the root has no parent (stem) node."
+                )
+            attrs["useOriginate"] = "true"
 
         mrca_elem = ET.Element("distribution", attrs)
 
@@ -307,7 +316,7 @@ class CalibrationBuilder:
     @staticmethod
     def build_calibrated_yule_point(
         cal: CalibrationPoint,
-        all_taxa_ref: str = None,
+        all_taxa_ref: Optional[str] = None,
     ) -> ET.Element:
         """Build a CalibratedYuleModel CalibrationPoint XML element.
 
@@ -322,8 +331,14 @@ class CalibrationBuilder:
             {
                 "spec": "CalibrationPoint",
                 "id": f"{sanitize_id(cal.name)}.cal",
+                **({"forParent": "true"} if cal.use_originate else {}),
             },
         )
+        if cal.use_originate and cal.taxa is None:
+            raise ValueError(
+                f"Calibration '{cal.name}': use_originate requires a taxon set; "
+                f"the root has no parent (stem) node."
+            )
 
         # TaxonSet
         if cal.taxa is not None:

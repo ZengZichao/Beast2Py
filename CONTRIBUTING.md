@@ -213,8 +213,12 @@ by itself prove 2.7.8 was the version in use. The job prints the version it reso
 ## Cutting a release
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds the sdist and wheel,
-checks them, and attaches them to the GitHub release. Before tagging, set the version in
-these four places — the `verify` job refuses to build if they disagree:
+checks them, and attaches them to the GitHub release. Two jobs gate the build: `verify`
+refuses to proceed if the version strings disagree, and `test` installs a BEAST2 runtime
+(the same `.github/actions/setup-beast2` the CI integration job uses), runs the whole suite,
+and then fails the release if any Gate 3 case skipped for want of that runtime. A tag
+therefore cannot publish over a failing test or over a green-looking run whose BEAST2 checks
+never ran. Before tagging, set the version in these four places:
 
 1. `beast2py/__init__.py` — `__version__`, the single source of truth
 2. `CITATION.cff` — `version`, and add `date-released`

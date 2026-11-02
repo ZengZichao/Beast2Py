@@ -63,7 +63,8 @@ Beast2Py follows a layered architecture designed for extensibility and maintaina
    ├── Gate 0 parse-time provenance + character validation (config.py) — the step 2 checks
    ├── Gate 1 structural + semantic checks (validator.py)
    ├── Gate 2 calibration conflict detection (diagnostics.py) ← Core Innovation
-   │     temporal consistency, distribution overlap, monophyly conflicts
+   │     same node, nested time order, intersecting non-nested monophyly;
+   │     unchecked counted; prior similarity is descriptive and opt-in
    └── Gate 3 optional BEAST2 parse + initAndValidate (beast2_validate.sh + tools/)
         │
         ▼
@@ -104,10 +105,12 @@ The `ModelRegistry` class in `registry.py` implements the Registry Pattern, mapp
 
 7. **One Linked Topology**: Every partition is assembled on a single shared tree. The parser refuses `tree: separate` and per-partition tree ids outright: if it silently fell back to linked gene trees, an analysis intended as *BEAST-style would become a fully linked one
 
-8. **Scale-Free Diagnostics**: The distribution-overlap criterion is dimensionless by default — the 1-Wasserstein distance between two priors, divided by the mean width of their 95% intervals, with a threshold of 0.15. The previous absolute criterion (2.0 time units) remains selectable through `diagnostics.overlap_measure`. The check skips distributions that have no defined statistics (OneOnX)
+8. **Descriptive Similarity, Not Redundancy**: Similar marginal priors of independent clades are not a conflict. The prior-similarity report is off by default; when enabled with an explicit threshold it returns severity `info`, no merge recommendation, and no Gate 2 effect. Structural conflicts — same node, nested time order, intersecting non-nested monophyly — are the only blocking rules. Distributions with undefined statistics (OneOnX) produce `unchecked` pairs. No similarity threshold ships as a default: `diagnostics.py` deliberately holds no such constant, because none has been calibrated against a reference set, and requesting the report without a threshold is an error rather than a silent fallback
 
-9. **Self-Contained BEAST2 Gate**: The headless validator lives inside the package (`beast2py/beast2_validate.sh`, `beast2py/tools/`), so a plain `pip install .` ships a working gate 3. The script searches a batch of candidate paths for a JDK 17 or newer (`BEAST2_JAVA_CANDIDATES`, `JAVA_HOME`, `/usr/libexec/java_home`, the Homebrew and system JVM directories, and only then `java` on `PATH`), and honours `BEAST2_JAR`, `BEAST2_SKIP_JAVA_HOME_TOOL`, `BEAST2_SKIP_JDK_PROBES` and `BEAST2_VALIDATE_TRACE`
+9. **Gate 2 States Its Own Boundary**: `diagnostics.DETECTABLE_CHECKS`, `NOT_DETECTABLE_CHECKS`, `NOT_DETECTABLE_LABELS` and `PRIOR_LAYERS` are the single source for what the static gate decides and what it cannot see (effective-marginal-prior distortion, posterior dominance, MCMC non-convergence, insufficient data). `gate2_scope_lines()` renders them for the CLI and `gate2_scope_html()` for the report, so an output that says "passed" cannot imply more than the code can deliver
 
-10. **Date-Free Fingerprint**: The analysis fingerprint is `B2P-{hash12}-{version} | Data: {hash16}`, that is, the configuration digest plus a digest over the alignment sequences. The same configuration and the same data therefore produce the same identifier on every machine and on every day; the wall-clock generation time lives only in the JSON sidecar file
+10. **Self-Contained BEAST2 Gate**: The headless validator lives inside the package (`beast2py/beast2_validate.sh`, `beast2py/tools/`), so a plain `pip install .` ships a working gate 3. The script searches a batch of candidate paths for a JDK 17 or newer (`BEAST2_JAVA_CANDIDATES`, `JAVA_HOME`, `/usr/libexec/java_home`, the Homebrew and system JVM directories, and only then `java` on `PATH`), and honours `BEAST2_JAR`, `BEAST2_SKIP_JAVA_HOME_TOOL`, `BEAST2_SKIP_JDK_PROBES` and `BEAST2_VALIDATE_TRACE`
 
-11. **BEAST2 v2.7.x Namespace**: Uses `beast.base.*` package names, verified against BEAST 2.7.8 — whose class files require a JDK 17 or newer at run time
+11. **Date-Free Fingerprint**: The analysis fingerprint is `B2P-{hash12}-{version} | Data: {hash16}`, that is, the configuration digest plus a digest over the alignment sequences. The same configuration and the same data therefore produce the same identifier on every machine and on every day; the wall-clock generation time lives only in the JSON sidecar file
+
+12. **BEAST2 v2.7.x Namespace**: Uses `beast.base.*` package names, verified against BEAST 2.7.8 — whose class files require a JDK 17 or newer at run time

@@ -858,7 +858,7 @@ class TestKeyAndCalibrationChecks:
             c.severity == "error" for c in conflicts
         ), "a root prior entirely younger than its nested clade went undetected"
 
-    def test_overlap_criterion_is_scale_free(self, tmp_path):
+    def test_prior_similarity_criterion_is_scale_free(self, tmp_path):
         from beast2py.diagnostics import ConflictDetector
         from beast2py.models import CalibrationPoint, DistributionConfig
 
@@ -876,31 +876,51 @@ class TestKeyAndCalibrationChecks:
                 ),
             ]
 
-        # Shallow and deep pairs with the same *relative* redundancy: separated
-        # by 1.25 prior widths in both cases.
+        # Shallow and deep pairs with the same relative separation.
         shallow, deep = pair(5.0, 6.0, 0.4), pair(100.0, 120.0, 8.0)
 
         def relative(cals):
             return bool(
                 ConflictDetector.detect_conflicts(
                     cals,
-                    settings={"overlap_measure": "relative", "relative_overlap_threshold": 0.5},
+                    settings={
+                        "prior_similarity": True,
+                        "similarity_measure": "relative",
+                        "similarity_threshold": 0.5,
+                    },
                 )
             )
 
         def absolute(cals):
             return bool(
                 ConflictDetector.detect_conflicts(
-                    cals, settings={"overlap_measure": "absolute", "overlap_threshold": 2.0}
+                    cals,
+                    settings={
+                        "prior_similarity": True,
+                        "similarity_measure": "absolute",
+                        "similarity_threshold": 2.0,
+                    },
                 )
             )
 
         assert relative(shallow) == relative(
             deep
-        ), "the relative criterion changed its verdict with node depth"
-        # The absolute criterion is the one that misbehaves: identical relative
-        # redundancy, opposite verdicts. That is why relative is the default.
+        ), "the relative similarity criterion changed its verdict with node depth"
+        # The absolute criterion is scale-dependent; that is one reason the
+        # report is opt-in and descriptive rather than a Gate 2 rule.
         assert absolute(shallow) and not absolute(deep)
+        for cals in (shallow, deep):
+            assert all(
+                c.severity == "info"
+                for c in ConflictDetector.detect_conflicts(
+                    cals,
+                    settings={
+                        "prior_similarity": True,
+                        "similarity_measure": "relative",
+                        "similarity_threshold": 0.5,
+                    },
+                )
+            )
 
 
 # ---------------------------------------------------------------------------

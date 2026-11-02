@@ -1,6 +1,6 @@
 # Beast2Py User Manual
 
-- **Version:** 0.1.2
+- **Version:** 0.2.0
 - **Authors:** Zichao Zeng (曾子超) · [ORCID: 0000-0001-6553-970X](https://orcid.org/0000-0001-6553-970X)
 - **Date:** 2026
 
@@ -50,8 +50,7 @@ The tool supports multi-partition analyses (including codon partitioning) and ca
 unlink models between partitions; all partitions are assembled on a single linked topology
 (see [Section 12](#12-multi-partition-analysis)).
 
-On the diagnostics side, Beast2Py provides automated calibration conflict detection (temporal
-consistency, distribution overlap, monophyly conflicts) and prior sensitivity analysis
+On the diagnostics side, Beast2Py provides automated structural calibration diagnostics (same-node contradictions, nested temporal order, intersecting non-nested monophyly, with explicit unchecked pairs) and prior sensitivity analysis
 (leave-one-out XML generation). It also supports calibration distribution visualization,
 automatic generation of analysis fingerprints and methods descriptions, and Snakemake/Nextflow
 pipeline file generation.
@@ -83,7 +82,7 @@ Note that prior-only sampling is also available outside Beast2Py: the BEAST2 com
 
 ### 2.1 Prerequisites
 
-Beast2Py requires Python 3.10 or higher and the pip package manager. Generation, diagnostics and the structural validator are pure Python. The optional BEAST2 validation gate additionally needs a BEAST2 installation and a **JDK 17 or newer** runtime, because BEAST 2.7.x class files refuse to load on anything older. Everything here has been verified against **BEAST2 v2.7.8**; other 2.7.x releases are expected to work but have not been tested.
+Beast2Py requires Python 3.10 or higher and the pip package manager. Generation, diagnostics and the structural validator are pure Python. The optional BEAST2 validation gate additionally needs a BEAST2 installation and a **JDK 17 or newer** runtime, because BEAST 2.7.x class files refuse to load on anything older. Everything here has been verified against **BEAST2 v2.7.7** with its bundled JDK 17; other 2.7.x releases are expected to work but have not been tested.
 
 ### 2.2 Install from source
 
@@ -137,14 +136,14 @@ pip install -e ".[xml]"
 ```bash
 # Check the version
 beast2py --version
-# Output: Beast2Py v0.1.2
+# Output: Beast2Py v0.2.0
 
 # List supported models
 beast2py list-models
 
 # Verify the Python API
 python3 -c "import beast2py; print(beast2py.__version__)"
-# Output: 0.1.2
+# Output: 0.2.0
 ```
 
 Without installing the package, every command is reachable from a clone of the
@@ -554,8 +553,8 @@ The same validator parses the calibration YAML, so a quoted `monophyletic: "fals
     type: "normal"
     parameters: {mean: 6.0, sigma: 0.5}
   provenance:
-    source: "fossil"
-    reference: "DOI:10.1038/nature12323"
+    source: "other"
+    reference: "Synthetic example data; no publication source"
     calibration_type: "soft"
 
 - name: "rootCalibration"
@@ -714,7 +713,7 @@ beast2py fingerprint \
 | `--verbose` | `-v` | No | False | Show detailed fingerprint information |
 
 **Fingerprint format:** `B2P-{first 12 hex digits of the config digest}-{tool version}`,
-e.g. `B2P-69dba66a3570-0.1.2`. The identifier carries **no date and no time zone**, so
+e.g. `B2P-3f43bfab58c3-0.2.0`. The identifier carries **no date and no time zone**, so
 rerunning the same configuration on the same data always reproduces it. Twelve hex
 digits are 48 bits of digest: by the birthday bound, a 50% chance of even one collision needs
 sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ distinct analyses — about 2 × 10⁷, not the 2**24 = 1.7 × 10⁷ that a
@@ -724,21 +723,21 @@ square-root shortcut would suggest. It is a change-detection token, not a global
 
 ```json
 {
-  "fingerprint": "B2P-69dba66a3570-0.1.2",
-  "config_hash": "fe47b06592091a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
-  "full_hash": "fe47b06592091a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
-  "data_hash": "30be5613d3ff6862",
+  "fingerprint": "B2P-3f43bfab58c3-0.2.0",
+  "config_hash": "3f43bfab58c3181b58a4fce3b738a50c2a1e9d10cca476cae01a8177471a5cf8",
+  "full_hash": "3f43bfab58c3181b58a4fce3b738a50c2a1e9d10cca476cae01a8177471a5cf8",
+  "data_hash": "72a8314e0bde0640",
   "hash_bits": 48,
   "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% chance of one collision needs sqrt(2 * 2**48 * ln 2), about 1.98e+07 distinct analyses, so it is a change-detection token rather than a globally unique key.",
-  "tool_version": "0.1.2",
-  "beast2_version": "2.7.8",
-  "generation_time": "2026-09-29T18:01:17.890711",
+  "tool_version": "0.2.0",
+  "beast2_version": "2.7.7",
+  "generation_time": "2026-11-02T15:25:43.301130",
   "analysis_name": "primates_basic_calibration",
-  "xml_digest": "249cbe9b06a720943f5d8d79dca5ba9e5675983bb661449119521a2bcc8dcb2b"
+  "xml_digest": "9f7a2771775f9fcfdf59f419576ea866f048fce879484b9d96fbd95266323bc8"
 }
 ```
 
-`generation_time` above is the moment this sample was captured; the identifier itself has no time component, so the same configuration on the same alignment always yields `B2P-69dba66a3570-0.1.2`.
+`generation_time` above is the moment this sample was captured; the identifier itself has no time component, so the same configuration on the same alignment always yields `B2P-3f43bfab58c3-0.2.0`.
 
 `data_hash` condenses the digest of each alignment's content down to the first 16 hex
 characters, and travels in the XML as `| Data: {hash16}` inside the fingerprint comment.
@@ -1052,7 +1051,7 @@ metadata:
   author: "Your Name"                   # Author (optional)
   date: "2026-08-01"                    # Free-text date (optional)
   beast2_version: "2.7.8"              # BEAST2 version (default 2.7.8)
-  tool_version: "0.1.2"                # Beast2Py version (default 0.1.2)
+  tool_version: "0.2.0"                # Beast2Py version (default 0.2.0)
   embed_fingerprint: true              # Accepted here and in `output`; `output` wins
 
 # === Sequence data ===
@@ -1126,12 +1125,12 @@ calibrations:
     use_originate: false                # Use the stem node (default false)
     tipsonly: false                     # Tip-only calibration (default false)
     provenance:                         # Provenance metadata (optional)
-      source: "fossil"                  # Source type: fossil / biogeographic / secondary / other
-      reference: "DOI:10.1038/xxxxx"    # Reference DOI or URL
+      source: "other"                   # Source type: fossil / biogeographic / secondary / other
+      reference: "Synthetic example data; no publication source"
       calibration_type: "soft"          # soft / hard
-      original_age_min: 5.5            # Original minimum age
-      original_age_max: 7.0            # Original maximum age
-      notes: "Fossil description"
+      original_age_min: 5.0             # Original minimum age
+      original_age_max: 6.0             # Original maximum age
+      notes: "Synthetic example description"
 
 # === Calibration method ===
 calibration_method: "mrca_prior"        # mrca_prior / calibrated_yule (default mrca_prior)
@@ -1187,9 +1186,10 @@ operator_weights:
 
 # === Calibration diagnostics settings (optional) ===
 diagnostics:
-  overlap_measure: relative             # relative / absolute / both (default relative)
-  overlap_threshold: 2.0                # absolute Wasserstein distance, time units
-  relative_overlap_threshold: 0.15      # dimensionless ratio (default 0.15)
+  prior_similarity: false               # descriptive report; default off
+  similarity_measure: relative          # relative / absolute / both
+  similarity_threshold: 0.05            # required when prior_similarity is true; uncalibrated, choose and justify it
+  strict_distributions: false           # true = Beta(no offset)/Poisson/OneOnX are errors
 
 # === Output settings ===
 output:
@@ -1666,12 +1666,12 @@ Each calibration point can carry provenance metadata recording the fossil source
 
 ```yaml
 provenance:
-  source: "fossil"              # Source type: fossil / biogeographic / secondary / other
-  reference: "DOI:10.1038/xxx"  # Reference DOI or URL
+  source: "other"               # Source type: fossil / biogeographic / secondary / other
+  reference: "Synthetic example data; no publication source"
   calibration_type: "soft"      # soft (soft bound) / hard (hard bound)
-  original_age_min: 5.5         # Original minimum fossil age
-  original_age_max: 7.0         # Original maximum fossil age
-  notes: "Fossil description"   # Free-text notes
+  original_age_min: 5.0         # Original minimum age
+  original_age_max: 6.0         # Original maximum age
+  notes: "Synthetic example description"   # Free-text notes
 ```
 
 **The record and the prior must not contradict each other.** The parser compares
@@ -1905,17 +1905,82 @@ Calibration diagnostics is the core innovation of Beast2Py and consists of three
 
 ### 14.2 Conflict detection
 
-The conflict detector analyzes pairs of calibration points for three classes of problems:
+The conflict detector analyzes pairs of calibration points for three classes of structural problem, each decided from topology or time order alone:
 
-**Temporal consistency conflicts:** for nested clades (taxon set A ⊂ B), it checks whether the parent clade (B) is calibrated older than the child clade (A). It compares the 95% HPD intervals: the detector reports an error when the parent's HPD upper bound is younger than the child's HPD lower bound, and a warning when only the means disagree while the HPD intervals still overlap.
+**Same-node conflicts (`same_node`):** two calibrations attached to the same node. Identical distributions on one taxon set are a duplicate (warning); disjoint intervals on one node are a contradiction (error); a crown and a stem calibration on the same taxon set are parent and child, so they are compared as a nested pair rather than as a duplicate.
 
-**Distribution overlap warnings:** it computes the 1-Wasserstein distance (Earth Mover's Distance) between calibration distributions. For a non-nested pair whose distance is too small, it reports a warning that points at possibly redundant information. **The default criterion is the dimensionless one** — the Wasserstein distance divided by the mean width of the two priors' 95% intervals, warned below `relative_overlap_threshold` (default 0.15). The absolute criterion (distance below `overlap_threshold`, default 2.0 time units) is opt-in, because a fixed distance is scale-dependent: it grows with node depth, so one threshold flags shallow nodes almost automatically and never reaches the deep ones. See [Section 14.9](#149-the-diagnostics-block) for how to switch and tune this.
+**Temporal consistency conflicts (`temporal`):** for nested clades (taxon set A ⊂ B), it checks whether the parent clade (B) is calibrated older than the child clade (A). It compares the 95% HPD intervals: the detector reports an error when the parent's HPD upper bound is younger than the child's HPD lower bound, i.e. when the two intervals cannot be satisfied by any tree. Overlapping intervals are not reported, including the case where the parent's mean is younger than the child's: a soft parent prior with a long tail can have a younger mean and still be perfectly compatible, so reporting that shape would be a false positive.
 
-**Monophyly conflicts:** it detects taxon sets that intersect but are not nested. When both calibrations enforce monophyly, that topology cannot exist, and the detector reports an error.
+**Monophyly conflicts (`topology`):** it detects taxon sets that intersect but are not nested. When both calibrations enforce monophyly, that topology cannot exist, and the detector reports an error.
+
+**Prior similarity is descriptive, not a conflict.** Two independent clades may legitimately have similar age priors; similar marginal densities do not show that fossil information is redundant and do not justify merging or removing a calibration. The report is therefore **off by default**. If you enable it with an explicit `similarity_threshold`, the detector reports pairs below that threshold as `prior_similarity` with severity `info`; the entry recommends no action and never blocks Gate 2. The tool ships no calibrated default threshold. See [Section 14.9](#149-the-diagnostics-block).
+
+#### What Gate 2 decides, and what it cannot
+
+Gate 2 reads the configuration, not a trace. The `generate`, `quick` and `diagnose` output and the HTML report all print this boundary, and `beast2py/diagnostics.py` (`DETECTABLE_CHECKS`, `NOT_DETECTABLE_CHECKS`, `PRIOR_LAYERS`) is its single source:
+
+| Gate 2 decides | Gate 2 cannot decide, so a passing gate rules none of it out |
+| --- | --- |
+| an incompatible or duplicated pair on the same node | distortion of the **effective marginal prior** by the tree prior, the constraints and the remaining calibrations |
+| a nested pair whose parent prior is wholly younger | **posterior dominance**, which needs the likelihood and matched posterior traces |
+| a set of monophyly claims no rooted tree can satisfy | **MCMC non-convergence**, poor mixing, an inadequate ESS |
+| a semantically illegal combination (root + originate, tipsonly + originate, out-of-support or non-finite parameters) | **too little data to inform a node**, a property of the alignment and model |
+
+The four distributions the table turns on are distinct and are named the same way everywhere:
+
+- **specified marginal prior** — the distribution written in the YAML; the only one Gate 2 sees;
+- **effective marginal prior** — what a node actually samples once the tree prior, the topological constraints and the other calibrations act on it; observable only by running a prior-only chain (Section 14.3);
+- **joint effective prior** — the simultaneous distribution of two or more node ages; one trace column is a marginal, so the joint needs joint samples from one trace, not a pile of marginals;
+- **posterior** — what the likelihood produces; Beast2Py runs no MCMC with data and estimates nothing of it.
+
+Pairs the detector cannot evaluate are counted as `unchecked` and are never written as passes: a prior with undefined quantiles (`OneOnX`), an undecidable crown/stem relation, or an intersection whose monophyly assumption is not determinable from taxon containment alone.
 
 ### 14.3 Sensitivity analysis
 
-The sensitivity analyzer generates N+1 prior-only sampling XMLs (N is the number of calibration points): one version with the full calibration set, and N leave-one-out versions (removing one calibration point at a time). The user runs these short-chain XMLs with BEAST2 (1 million generations is enough) and compares the tree-height posteriors, which reveals the marginal influence of each calibration point. (Sampling from the prior alone is a built-in BEAST2 capability, available for any XML via `beast -sampleFromPrior`; what the sensitivity analyzer automates is the N+1 leave-one-out design.) The files land in a `sensitivity/` subfolder of the report's `diagnostics/` directory; when you set `--sensitivity-xml-dir`, they land in the `sensitivity/` subfolder of that directory instead.
+The sensitivity analyzer generates N+1 prior-only sampling XMLs (N is the number of calibration points): one version with the full calibration set, and N leave-one-out versions (removing one calibration point at a time). The user runs these XMLs with BEAST2 and compares the tree-height and calibrated-node-age distributions between the full run and each leave-one-out run. Because the chains sample from the prior, that comparison measures each calibration's effect on the **effective marginal prior**, not on a posterior: no likelihood is involved, so nothing here can show posterior dominance. The generator does not decide the run length for you — set the chain length, sampling interval, burn-in and an ESS criterion before running, and report them with the result. (Sampling from the prior alone is a built-in BEAST2 capability, available for any XML via `beast -sampleFromPrior`; what the sensitivity analyzer automates is the N+1 leave-one-out design.) The files land in a `sensitivity/` subfolder of the report's `diagnostics/` directory; when you set `--sensitivity-xml-dir`, they land in the `sensitivity/` subfolder of that directory instead.
+
+#### Reading the runs back: `prior-summary`
+
+The generated XMLs are a design until they are run. `prior-summary` is the
+matching read-side command: it parses BEAST2 `.log` files by column *name* (never
+by position), applies a burn-in, and reports the median, the 95% highest-density
+interval and the effective sample size of the tree height and each calibrated
+node. With `--reference` it also reports how far a leave-one-out scenario moved
+those quantities relative to the full calibration set, including the interval
+width ratio.
+
+```bash
+# One scenario against the full calibration set
+beast2py prior-summary \
+    --trace runs/without_cladeA/cladeA.log \
+    --reference runs/full_calibration/cladeA.log \
+    --column treeHeight --column cladeA \
+    --label without_cladeA \
+    --burn-in-fraction 0.1 --ess-min 200 --out results/without.tsv
+
+# Pool two independent runs of the same scenario
+beast2py prior-summary --trace run1.log --trace run2.log --column treeHeight
+```
+
+What it refuses, and why:
+
+- **a missing column is an error, not a zero.** A leave-one-out run does not log
+  the node of the calibration it removed (its `MRCAPrior` is gone from the XML),
+  so asking for that column exits with code 2 rather than reporting a number that
+  was never sampled;
+- **non-numeric cells, ragged rows and duplicated sample ids fail the read.** A
+  duplicated id means two chains were concatenated into one file — keep them
+  separate and pass them as repeated `--trace` arguments, which pools them only
+  after checking that the column sets match and the lengths are equal;
+- **a run below the ESS criterion is still printed**, labelled `converged=False`,
+  with a warning. Dropping the awkward scenario is how a leave-one-out figure
+  becomes a selected result instead of a validation.
+
+The arithmetic is `beast2py/trace.py` (`read_trace`, `effective_sample_size`,
+`hpd_interval`, `prior_shift`), and a leave-one-out summary table can be
+recomputed from the raw logs. `tests/test_trace.py` exercises that arithmetic on
+synthetic traces, so no figure number depends on bundled empirical data. The command reads prior-only marginals: it
+estimates no posterior, and its output says so.
 
 ### 14.4 Visualization
 
@@ -1964,27 +2029,28 @@ b2p.plot_calibrations("config.yaml", output_file="calibrations.pdf")
 
 ### 14.8 Interpreting conflict detection results
 
-Conflict detection returns a list of `Conflict` objects, each with the following attributes: `conflict_type` (conflict type: temporal, distribution_overlap, monophyly), `severity` (severity: error, warning, info), `calibration_a` and `calibration_b` (the calibration names involved), `description` (detailed description), and `recommendation` (suggested action).
+Conflict detection returns a list of `Conflict` objects, each with the following attributes: `conflict_type` (conflict type: temporal, same_node, duplicate, topology, unchecked, prior_similarity), `severity` (severity: error, warning, info), `calibration_a` and `calibration_b` (the calibration names involved), `description` (detailed description), and `recommendation` (suggested action).
 
-- **error** indicates a problem that must be fixed (e.g. a temporal inconsistency or monophyly conflict).
-- **warning** indicates an issue that deserves attention but is not fatal (e.g. distribution overlap or mean inconsistency).
-- **info** indicates informational messages.
+- **error** indicates a problem that must be fixed (same-node disjoint priors, a nested temporal contradiction, or an intersecting non-nested monophyly conflict).
+- **warning** indicates an issue that deserves attention but is not fatal (a duplicate calibration or two different priors on the same node with overlapping intervals).
+- **info** indicates informational messages, including `unchecked` pairs and the opt-in `prior_similarity` report.
 
 ### 14.9 The `diagnostics:` block
 
-The `diagnostics:` section configures the thresholds behind the distribution-overlap check. The same section is passed to Gate 2 of `generate`:
+The `diagnostics:` block controls the descriptive prior-similarity report and the distribution-usage checks. Structural conflicts (same node, nested time order, intersecting non-nested monophyly) are always checked and are not configurable.
 
 ```yaml
 diagnostics:
-  overlap_measure: "relative"           # relative (default) | absolute | both
-  overlap_threshold: 2.0                # absolute criterion: Wasserstein distance in time units
-  relative_overlap_threshold: 0.15      # dimensionless criterion: W / mean 95%-interval width
+  prior_similarity: false          # default; descriptive only
+  similarity_measure: "relative"   # relative | absolute | both
+  similarity_threshold: 0.05       # required when prior_similarity is true; uncalibrated, choose and justify it
+  strict_distributions: false      # true = Beta(no offset)/Poisson/OneOnX become errors
 ```
 
-- `overlap_measure` decides which criteria run. `relative` (the default) is the scale-free ratio described above; `absolute` restores the previous fixed-distance test; `both` reports a warning when either criterion trips. The parser rejects an unrecognised value with `diagnostics.overlap_measure must be relative, absolute or both, got ...`.
-- `overlap_threshold` (default `2.0`) and `relative_overlap_threshold` (default `0.15`) are the two thresholds, and only the criteria named by `overlap_measure` take effect.
-
-Under the dimensionless default criterion, a fixed `2.0` does not mean the same thing across a tree with widely divergent node ages. A warning fires when two priors are nearly interchangeable *relative to their own widths*, which is the scale-free notion of redundant calibration information.
+- `prior_similarity` is off by default. When enabled, a positive `similarity_threshold` is required; the tool ships no calibrated default.
+- `similarity_measure` chooses the dimensionless ratio (W divided by the mean 95%-interval width), the absolute distance, or both. The output is `prior_similarity` with severity `info`; it carries no merge recommendation and never blocks Gate 2.
+- `strict_distributions: true` upgrades the Beta-without-offset, Poisson and OneOnX usage warnings to configuration errors.
+- The old `overlap_measure` / `overlap_threshold` / `relative_overlap_threshold` keys are accepted as aliases but only enable the same descriptive report.
 
 ---
 
@@ -1992,7 +2058,7 @@ Under the dimensionless default criterion, a fixed `2.0` does not mean the same 
 
 ### 15.1 Analysis fingerprint
 
-The analysis fingerprint is a deterministic identifier generated from the SHA-256 hash of the *scientific* configuration, in the date-free format `B2P-{hash12}-{version}`, e.g. `B2P-69dba66a3570-0.1.2`. It carries **no date and no time zone**, so the same configuration over the same alignment data reproduces byte-for-byte on every rerun.
+The analysis fingerprint is a deterministic identifier generated from the SHA-256 hash of the *scientific* configuration, in the date-free format `B2P-{hash12}-{version}`, e.g. `B2P-3f43bfab58c3-0.2.0`. It carries **no date and no time zone**, so the same configuration over the same alignment data reproduces byte-for-byte on every rerun.
 
 These changes alter the fingerprint, because `models.py::to_dict` includes them in the hash: the sequence content, the tree setting (`Partition.tree`), a crown/stem (`use_originate`) or `tipsonly` flag, a hyperprior, a `parameter_priors` entry, a tip date, or an operator weight. Renaming the output file alone does not.
 
@@ -2165,7 +2231,7 @@ declares it as a dependency; `config_nested_sampling.yaml` still cleared Gate 3,
 `XMLParser` resolves the classes a file names and does not enforce add-on package dependencies at
 parse time (see 16.2 for what that does and does not show).
 
-The test suite comprises **395** collected tests: **374** unit, semantic and release-integrity
+The test suite comprises **559** collected tests: **538** unit, semantic and release-integrity
 tests and **21** BEAST2 integration tests. The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and check each with the
 real BEAST 2.7.8 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests
@@ -2218,7 +2284,7 @@ Setting `sample_from_prior` to `true` generates an XML that samples from the pri
 ```yaml
 mcmc:
   type: "standard"
-  chain_length: 1000000       # A short chain suffices
+  chain_length: 1000000       # a starting point only: set an ESS criterion and report it
   sample_from_prior: true
 ```
 
@@ -2529,9 +2595,9 @@ Confirm the installed versions with the Package Manager or `beast -version`; the
 
 The parent clade is calibrated younger than the child clade. Check the distribution parameters of the nested calibration points and make sure the parent clade's HPD interval covers an older time range than the child clade's.
 
-**Distribution overlap warnings**
+**Prior similarity (descriptive)**
 
-By the default (relative) criterion, the detector takes the 1-Wasserstein distance between two non-nested calibrations, divides it by the mean width of their 95% intervals, and warns when that ratio falls below `relative_overlap_threshold` (default 0.15). In other words, the two priors are nearly interchangeable relative to their own widths. Check whether these calibrations provide redundant information, and whether they could be merged. See [Section 14.9](#149-the-diagnostics-block) to switch to (or add) the absolute `overlap_threshold` criterion.
+Similar marginal priors of independent clades are not evidence of redundant fossil information and do not justify merging or removing a calibration. The report is off by default; if you enable it with an explicit threshold, the detector returns `prior_similarity` entries with severity `info`, no recommendation, and no Gate 2 effect. See [Section 14.9](#149-the-diagnostics-block).
 
 **Monophyly conflicts**
 

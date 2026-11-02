@@ -12,16 +12,14 @@
 # 2. trait_name 只能是 date-forward / date-backward；写成 date_backward 会
 #    产出一份"能被解析、但 BEAST2 从不把它当日期"的合法 XML。
 # 3. **整个分析只有一条时间轴**。末端日期以 year 为单位，所以校准先验和时钟
-#    速率也必须以 year 为单位：7.9 Ma 要写成 7 925 453，灵长类 mtDNA 速率
-#    2e-3 subs/site/Myr 要写成 2e-6 subs/site/year，lognormal 的 M 也从
-#    ln(1.42) 变成 ln(1 420 000) = 14.17。原示例用 units: year 的 0-20 与
-#    Ma 尺度的 uniform[20,40] 共用一根数轴，相差六个数量级。
+#    速率也必须以 year 为单位：示例校准用 5 000 000 year 的 offset；
+#    时钟速率与末端日期共用 year 单位，不再换算 Ma 尺度。
 #
 # 末端日期为何全为 0 / Why every date below is 0
 # ----
-# 这是数据事实，不是能力限制：primates.fasta 的 12 条序列全部来自现生标本，
-# 因此 date-backward 全为 0 才是如实写法——BEAST2 由此得到“所有末端在同一时刻”，
-# 绝对时间轴完全由校准点决定。
+# 这是示例设定，不是能力限制：primates.fasta 的 12 条序列均为虚拟构造的现生
+# 序列，因此 date-backward 全为 0 是合适的写法——BEAST2 由此得到“所有末端在
+# 同一时刻”，绝对时间轴完全由校准点决定。
 # 真正的异时采样数据（古 DNA、亚化石）可以走同一条路径：把若干末端日期改为非 0
 # 后，本版本（0.1.2）生成的 TipDatesRandomWalker 由 BEAST2 v2.7.8 解析并初始化
 # 通过（2026-10-08 实测：两个非 0 日期的变体，gate 3 pass）。
@@ -38,8 +36,8 @@ metadata:
   analysis_description: "Tip-dated (TraitSet) analysis of a contemporaneous primate sample"
   author: "Beast2Py"
   date: "2026-08-01"
-  beast2_version: "2.7.8"
-  tool_version: "0.1.2"
+  beast2_version: "2.7.7"
+  tool_version: "0.2.0"
 
 alignments:
   - id: "alignment"
@@ -91,25 +89,25 @@ tree_prior:
 
 # --- 校准点：与末端日期同一条数轴（year） ---
 # The offset shifts the distribution and M/S describe the lognormal *above* the
-# offset, in the axis units, so M = ln(1 420 000) = 14.17 here; in Ma units the
-# same shape is M = 0.35.  Checked with
-#   compute_distribution_stats("lognormal", {M: 14.17, S: 0.4}, 6500000)
-# -> median 7 925 453, 95% HPD [7 021 030, 9 331 427] years.
+# offset, in the axis units, so M = 14.0 here; in Ma units the
+# same shape is M = 0.2.  Checked with
+#   compute_distribution_stats("lognormal", {M: 14.0, S: 0.35}, 5000000)
+# -> illustrative prior only (synthetic values).
 calibrations:
   - name: "homininaMRCA"
     taxa: ["Homo_sapiens", "Pan"]
     monophyletic: true
     distribution:
       type: "lognormal"
-      parameters: {M: 14.17, S: 0.4}
-      offset: 6500000.0
+      parameters: {M: 14.0, S: 0.35}
+      offset: 5000000.0
     provenance:
-      source: "fossil"
-      reference: "placeholder — no source consulted; replace with the reference you used"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
-      original_age_min: 7000000.0
-      original_age_max: 9500000.0
-      notes: "illustrative input, not a published age: Sahelanthropus tchadensis soft, expressed in years"
+      original_age_min: 5000000.0
+      original_age_max: 6000000.0
+      notes: "Synthetic calibration card for the homininaMRCA example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in years and exist only to exercise the provenance fields, XML generation and diagnostics."
 
 mcmc:
   type: "standard"

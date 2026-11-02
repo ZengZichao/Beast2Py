@@ -28,8 +28,8 @@ metadata:
   analysis_description: "Multi-partition (codon) analysis with a linked clock model"
   author: "Beast2Py"
   date: "2026-08-01"
-  beast2_version: "2.7.8"
-  tool_version: "0.1.2"
+  beast2_version: "2.7.7"
+  tool_version: "0.2.0"
 
 # --- 序列数据：母本比对 + 两个互不相交的密码子分区 ---
 alignments:
@@ -91,40 +91,35 @@ tree_prior:
 
 # --- 校准点 ---
 calibrations:
-  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92 Ma, 95% HPD [7.02, 9.31]
+  # Synthetic lognormal(M=0.2, S=0.35) offset 5.0; illustrative only.
   - name: "homininaMRCA"
     taxa: ["Homo_sapiens", "Pan"]
     monophyletic: true
     distribution:
       type: "lognormal"
-      parameters: {M: 0.35, S: 0.4}
-      offset: 6.5
+      parameters: {M: 0.2, S: 0.35}
+      offset: 5.0
     provenance:
-      source: "fossil"
-      reference: "placeholder — no source consulted; replace with the reference you used"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
-      original_age_min: 7.0
-      original_age_max: 9.5
-      notes: "illustrative input, not a published age: Sahelanthropus tchadensis soft; soft minimum"
-
-  # 根校准：这份比对的根是 Strepsirrhini vs Haplorhini（Lemur_catta vs 其余），
-  # 不是阔鼻/狭鼻类之分。M=2.5, S=0.3 的中位数只有 12.2 Ma，比真正的灵长类根
-  # 年轻了 50 Myr，而且它的 95% 区间还允许根比自己的子节点更年轻。
-  # uniform[55, 75] -> median 65.0, 95% HPD [55, 75]，完全包住子节点先验。
+      original_age_min: 5.0
+      original_age_max: 6.0
+      notes: "Synthetic calibration card for the homininaMRCA example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in Ma and exist only to exercise the provenance fields, XML generation and diagnostics."
   - name: "primateRoot"
     taxa: null
     monophyletic: true
     distribution:
-      type: "uniform"
-      parameters: {lower: 55.0, upper: 75.0}
-    use_originate: true
+      type: "exponential"
+      parameters: {mean: 2.5}
+      offset: 50.0
     provenance:
-      source: "secondary"
-      reference: "TimeTree of Life, crown-Primates estimates (https://www.timetree.org)"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
-      original_age_min: 55.0
-      original_age_max: 75.0
-      notes: "Secondary calibration from published divergence-time estimates"
+      original_age_min: 50.0
+      original_age_max: 60.0
+      notes: "Synthetic calibration card for the primateRoot example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in Ma and exist only to exercise the provenance fields, XML generation and diagnostics."
 
 # --- MCMC ---
 mcmc:

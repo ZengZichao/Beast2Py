@@ -24,7 +24,7 @@ Beast2Py is a Python framework for **standardizing, validating, and diagnosing n
 
 | Feature | Description |
 |---------|-------------|
-| **Calibration conflict detection** | Automatic detection of temporal inconsistencies, distribution overlaps, and monophyly conflicts between calibration points |
+| **Calibration conflict detection** | Automatic detection of same-node contradictions, nested temporal inconsistencies, and intersecting non-nested monophyly constraints; crown/stem-aware and with explicit `unchecked` pairs. Prior similarity is a separate, opt-in descriptive report, not a conflict |
 | **Prior sensitivity analysis** | Automatic generation of "prior-only sampling" XMLs to evaluate the marginal impact of calibration priors |
 | **Calibration provenance metadata** | Each calibration point records fossil source, reference DOI, and calibration type (hard/soft bound) |
 | **Reproducibility framework** | YAML configuration versioning + analysis fingerprint + LaTeX methods description + Snakemake/Nextflow pipeline generation |
@@ -56,7 +56,7 @@ Beast2Py is a Python framework for **standardizing, validating, and diagnosing n
 ### Prerequisites
 
 - Python 3.10 or higher
-- BEAST2 2.7.x. The generated XML targets the BEAST 2.7 `beast.base.*` namespace. Continuous integration validates against a **2.7.7** runtime whose `BEAST.base` package is then upgraded to **2.7.8**; other 2.7.x releases are expected to work but have not been tested. BEAST 2.7.x class files require **JDK 17 or newer**
+- BEAST2 2.7.x. The generated XML targets the BEAST 2.7 `beast.base.*` namespace. Continuous integration validates against a **2.7.7** runtime; a best-effort job can upgrade the `BEAST.base` package to **2.7.8**. Other 2.7.x releases are expected to work but have not been tested. BEAST 2.7.x class files require **JDK 17 or newer**
 - JDK 17 or newer, only for the optional BEAST2 validation gate (`--beast2-validate` / `validate --beast2`); everything else is pure Python
 
 ### Install from PyPI
@@ -99,6 +99,9 @@ beast2py generate --config examples/config_basic.yaml --output output_basic.xml 
 
 # Run calibration diagnostics (conflict detection + sensitivity + visualization)
 beast2py diagnose --config examples/config_basic.yaml --report report.html --sensitivity --visualize
+
+# Read prior-only BEAST2 runs back: median, 95% HPD, ESS, leave-one-out shift
+beast2py prior-summary --trace full.log --reference loo.log --column treeHeight
 
 # Quick mode for a simple single-partition analysis
 beast2py quick \
@@ -184,7 +187,7 @@ Each manual also carries a **strict validation** section listing every input the
 
 The `examples/` directory holds **19** complete YAML configurations.
 `tests/test_beast2_validation.py` generates XML for all 19 and checks each one
-against the real BEAST 2.7.8 `XMLParser`, which parses *and* initialises the model.
+against the real BEAST 2.7.7 `XMLParser`, which parses *and* initialises the model.
 Their actual coverage is:
 
 - **Substitution models:** 9 of the 13 supported models are exemplified — all seven nucleotide models (JC69, HKY, TN93, GTR, SYM, TIM, TVM) plus two of the six amino-acid matrices (WAG, JTT). `dayhoff`, `blosum62`, `cprev` and `mtrev` are supported but have no example
@@ -214,13 +217,13 @@ Their actual coverage is:
 | `config_bd_skyline.yaml` | BD Skyline Serial | BD Skyline Serial | HKY+Γ4 | Strict | 1 | requires the [bdsky](https://github.com/BEAST2-Dev/bdsky) add-on package |
 | `config_nested_sampling.yaml` | Nested Sampling | Yule | HKY+Γ4 | Strict | 1 | NS MCMC (requires the [NS](https://github.com/BEAST2-Dev/nested-sampling) add-on package) |
 
-In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick` subcommand, and the example alignments `primates.fasta` (12 taxa × 898 bp, converted from the BEAST2 example alignment `Primates.nex`) and `aminoacid.fasta` (10 taxa × 234 aa) are included.
+In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick` subcommand, and the example alignments `primates.fasta` (12 synthetic taxa × 898 bp) and `aminoacid.fasta` (10 synthetic taxa × 234 aa) are included. All sequences are randomly generated for testing; taxon labels are illustrative.
 
 ## Repository Structure
 
 - `beast2py/` — Source code of the Beast2Py Python package (CLI, API, configuration parsing, XML generation, diagnostics, reproducibility, and validation modules)
 - `examples/` — 19 example configurations, example alignments (FASTA), and example output artifacts
-- `tests/` — Test suite (395 collected tests: 374 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
+- `tests/` — Test suite (559 collected tests: 538 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
 - `beast2py/tools/` — Headless BEAST2 validation helper bundled *inside* the package (`Beast2Validator.java` source plus the precompiled `classes/` and `launcher.jar`), shipped as `package-data` by `pyproject.toml`; the repository root keeps only a thin `beast2_validate.sh` wrapper
 - `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English)
 - `beast2_validate.sh` — Launcher script for headless BEAST2 validation (needs `BEAST.base.jar` and JDK 17 or newer; it auto-detects `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`, or set `BEAST2_JAR`)
@@ -250,7 +253,7 @@ needs `--force`, otherwise it is refused, and the CLI warns when a sibling
    that every estimated parameter carries a `Prior`, that every estimated state node carries
    an operator, and that no operator touches a fixed parameter
 2. **Calibration conflict detection (Gate 2)** — temporal consistency between nested
-   clades (root calibrations included), distribution overlap, monophyly conflicts
+   clades (root calibrations included), same-node contradictions and intersecting non-nested monophyly conflicts; prior similarity is descriptive and off by default
 3. **BEAST2 check (Gate 3, optional, `--beast2-validate`)** — the headless BEAST2 `XMLParser` calls
    `initAndValidate()` on every object after parsing, so what is checked is whether the
    model can **complete initialisation**, not merely whether it parses
@@ -258,6 +261,35 @@ needs `--force`, otherwise it is refused, and the CLI warns when a sibling
 **What validation does not prove:** none of the four checks can tell you whether
 the model answers your biological question. A model that BEAST2 happily
 initialises may still be the wrong model.
+
+**Gate 2's boundary, stated as a list.** Gate 2 reads the YAML, so it decides
+things about the *specified marginal priors* and the taxon sets they attach to —
+nothing else. It detects: an incompatible or duplicated pair of calibrations on
+the same node; a nested pair whose parent prior is wholly younger than its child
+prior; a set of monophyly declarations no rooted tree can satisfy; and a
+semantically illegal combination (root + originate, tipsonly + originate, an
+out-of-support or non-finite distribution parameter). It cannot detect, and a
+passing Gate 2 therefore does not rule out:
+
+1. **distortion of the effective marginal prior** — the tree prior, the
+   topological constraints and the remaining calibrations can truncate or reshape
+   a specified prior while no structural contradiction exists;
+2. **posterior dominance** — deciding it needs the likelihood, i.e. matched
+   posterior traces, which Beast2Py neither runs nor reads;
+3. **MCMC non-convergence**, poor mixing or an inadequate ESS;
+4. **insufficient data to inform a node** — a property of the alignment and the
+   model, not of the configuration.
+
+The four distributions these sentences turn on are distinct, and the manuals, the
+CLI notice and the HTML report all use the same names for them: a *specified
+marginal prior* is what the YAML says; an *effective marginal prior* is what a
+node actually samples once the tree prior and the other calibrations act on it,
+visible only from a prior-only run; a *joint effective prior* is the simultaneous
+distribution of two or more node ages, which needs joint samples rather than a
+pile of per-column marginals; a *posterior* is what the likelihood produces, and
+Beast2Py produces no estimate of it. Items 1–4 are printed by `generate`, `quick`
+and `diagnose` alongside the green Gate 2 line and appear in the HTML report, so
+the boundary cannot be read out of the output by editing the prose elsewhere.
 
 Gate 3 only runs where BEAST2 and JDK 17 are installed. If you ask for
 `--beast2-validate` and BEAST2 cannot be found, generation stops with exit code 2 and
@@ -273,7 +305,7 @@ Gate 3 also does not police add-on package dependencies. `XMLParser` resolves th
 file names and never consults an installed add-on's `version.xml`, so an XML that references
 `nestedsampling.gss.NS` parses and initialises even when the MODEL_SELECTION package that NS
 1.2.0 declares as a dependency is not installed — which is exactly the environment these
-results were verified on (BEAST 2.7.8, BDSKY 1.5.1 and NS 1.2.0 under `~/.beast/2.7/`, no
+results were verified on (BEAST 2.7.7 with its bundled JDK 17.0.3, BDSKY 1.5.1, and NS 1.2.2 with MODEL_SELECTION 1.6.2, all in a project-local runtime, no
 MODEL_SELECTION). A green Gate 3 therefore does not show the add-on set is complete; install
 MODEL_SELECTION before running a nested-sampling analysis.
 
@@ -284,7 +316,7 @@ not prove 2.7.8 was the version in use. What has actually been verified is the B
 2.7.8 band; other 2.7.x releases are untested. The `integration` job prints the version it
 resolved, so the exact combination is visible in the run log rather than assumed.
 
-The test suite comprises 395 collected tests (374 unit/semantic/release-integrity + 21 BEAST2
+The test suite comprises 559 collected tests (538 unit/semantic/release-integrity + 21 BEAST2
 integration). The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and
 check each with the real BEAST2 parser and model initialisation. When the
@@ -294,7 +326,7 @@ BEAST2 jars or JDK 17 are missing, those tests simply skip instead of failing. T
 
 Beast2Py generates the following reproducibility artifacts:
 
-- **Analysis fingerprint** — deterministic identifier `B2P-{sha256(config)[:12]}-{version}` (e.g. `B2P-69dba66a3570-0.1.2`). It contains **no date component**, so the same configuration plus the same alignment data yields the same bytes and the same identifier in any time zone and at any rerun time. Renaming the output file does not change the fingerprint; changing the sequence content, the tree setting, a crown/stem flag, a hyperprior, a parameter prior, a tip date or an operator weight does
+- **Analysis fingerprint** — deterministic identifier `B2P-{sha256(config)[:12]}-{version}` (e.g. `B2P-3f43bfab58c3-0.2.0`). It contains **no date component**, so the same configuration plus the same alignment data yields the same bytes and the same identifier in any time zone and at any rerun time. Renaming the output file does not change the fingerprint; changing the sequence content, the tree setting, a crown/stem flag, a hyperprior, a parameter prior, a tip date or an operator weight does
 - **Data digest** — besides the identifier, the XML comment carries a separate digest: 16 hex characters over the alignment *content*. The wall-clock generation time appears only in the `.fingerprint.json` sidecar file, never in the XML
 - **LaTeX methods description** — Publication-ready methods paragraph
 - **Snakemake/Nextflow pipeline** — End-to-end reproducible workflow files
@@ -324,7 +356,7 @@ Adjacent open-source tools in the BEAST2 ecosystem (see also the BEAST2 blog pos
 | [LPhy](https://github.com/LinguaPhylo/linguaPhylo) / [LPhyBeast](https://github.com/LinguaPhylo/LPhyBeast) | Java | Probabilistic model specification language → BEAST XML (already targeting BEAST 3) |
 | [pybeast](https://github.com/Wytamma/pybeast) / [beastiary](https://github.com/Wytamma/beastiary) | Python | BEAST2 run wrapper (run directories/seeds/resume) and live MCMC trace monitoring (ESS/HPD) |
 
-Beast2Py's differentiator is that it integrates the following into a single configuration-stage pipeline: declarative YAML configuration, three-way calibration conflict detection (temporal consistency, distribution overlap, monophyly), automated leave-one-out prior-sensitivity XML generation, and calibration provenance (DOI), analysis fingerprint, methods description and pipeline generation.
+Beast2Py's differentiator is that it integrates the following into a single configuration-stage pipeline: declarative YAML configuration, crown/stem-aware calibration conflict detection (same node, nested time order, intersecting non-nested monophyly, with explicit unchecked pairs), an opt-in descriptive prior-similarity report, automated leave-one-out prior-only XML generation, and calibration provenance cards, analysis fingerprint, methods description and pipeline generation.
 
 ## Third-party licences
 
@@ -343,17 +375,18 @@ The package is MIT; the bundled BEAST2 package-management classes are LGPL-2.1 (
 
 If you use Beast2Py in your research, please cite the software:
 
-> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.2. Zenodo. https://doi.org/10.5281/zenodo.23088756
+> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.2.0. Zenodo. https://doi.org/10.5281/zenodo.23088756
 
 Machine-readable citation metadata is available in [CITATION.cff](CITATION.cff).
 
 The repository is archived on Zenodo. The concept DOI
 [10.5281/zenodo.23088756](https://doi.org/10.5281/zenodo.23088756) always resolves to
-the latest archived version; v0.1.1 is archived as
-[10.5281/zenodo.23088757](https://doi.org/10.5281/zenodo.23088757). Every GitHub
-release is archived automatically and receives its own version DOI — cite the concept
-DOI by default, or the version DOI when you need to pin a version. Both are recorded
-in [CITATION.cff](CITATION.cff).
+the latest archived version. The v0.1.1 and v0.1.2 records are
+[10.5281/zenodo.23088757](https://doi.org/10.5281/zenodo.23088757) and
+[10.5281/zenodo.23452749](https://doi.org/10.5281/zenodo.23452749); the v0.2.0 version
+DOI is minted when the tag is deposited. Every GitHub release is archived
+automatically and receives its own version DOI — cite the concept DOI by default, or
+the version DOI when you need to pin a version.
 
 ## Development
 

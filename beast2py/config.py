@@ -17,7 +17,7 @@ import hashlib
 import math
 import warnings
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import yaml
 
@@ -117,6 +117,7 @@ KNOWN_KEYS: Dict[str, Set[str]] = {
         "death_rate",
         "sampling_rate",
         "sample_probability",
+        "conditional_on_root",
         "pop_size",
         "growth_rate",
         "pop_sizes",
@@ -158,9 +159,17 @@ KNOWN_KEYS: Dict[str, Set[str]] = {
     "tip_dates": {"enabled", "trait_name", "units", "dates", "file"},
     "initialization": {"tree_type", "newick_file"},
     "diagnostics": {
+        # Prior similarity is descriptive only and is off by default.  The old
+        # `overlap_measure`/`overlap_threshold` keys are still accepted as
+        # aliases so existing files parse, but they no longer create a
+        # conflict or a Gate 2 failure.
+        "prior_similarity",
+        "similarity_measure",
+        "similarity_threshold",
         "overlap_measure",
         "overlap_threshold",
         "relative_overlap_threshold",
+        "strict_distributions",
     },
     "parameter_prior": {"parameter", "distribution"},
     "output": {"file", "embed_fingerprint"},
@@ -430,24 +439,24 @@ class ConfigParser:
         Raises:
             ConfigError: If the configuration is invalid.
         """
-        config_path = Path(config_path)
-        if not config_path.is_absolute():
-            config_path = self.base_dir / config_path
+        resolved = Path(config_path)
+        if not resolved.is_absolute():
+            resolved = self.base_dir / resolved
 
-        if not config_path.exists():
-            raise ConfigError(f"Configuration file not found: {config_path}")
+        if not resolved.exists():
+            raise ConfigError(f"Configuration file not found: {resolved}")
 
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(resolved, "r", encoding="utf-8") as f:
                 raw = yaml.safe_load(f)
         except yaml.YAMLError as e:
-            raise ConfigError(f"Invalid YAML in {config_path}: {e}")
+            raise ConfigError(f"Invalid YAML in {resolved}: {e}")
 
         if not isinstance(raw, dict):
             raise ConfigError("Configuration root must be a mapping")
 
         # Set base dir to config file's directory for resolving relative paths
-        self.base_dir = config_path.parent
+        self.base_dir = resolved.parent
 
         return self._build_config(raw)
 
@@ -699,11 +708,20 @@ class ConfigParser:
 
         tree_prior_type = TreePriorType(tp_type_str)
         tree_prior_params = {k: v for k, v in tp_raw.items() if k != "type"}
+        if "conditional_on_root" in tree_prior_params:
+            tree_prior_params["conditional_on_root"] = self._as_bool(
+                tree_prior_params, "conditional_on_root", False, "tree_prior"
+            )
+            if tree_prior_type != TreePriorType.BIRTH_DEATH:
+                raise ConfigError(
+                    "tree_prior.conditional_on_root is only meaningful for the "
+                    "birth_death prior (BirthDeathGernhard08Model)"
+                )
         self._validate_tree_prior_params(tree_prior_type, tree_prior_params)
 
         # --- Calibrations ---
         cals_raw = raw.get("calibrations", []) or []
-        calibrations = []
+        calibrations: List[CalibrationPoint] = []
         all_taxa: Set[str] = set()
         for aln in alignments.values():
             all_taxa.update(aln.taxa_names)
@@ -824,22 +842,62 @@ class ConfigParser:
         # --- Operator weights ---
         operator_weights = raw.get("operator_weights", {}) or {}
 
-        # --- Diagnostics (overlap criteria exposed to the user
-        #: the absolute 2.0 Ma threshold was only editable in the
-        # source) ---
+        # --- Diagnostics ---
+        # Prior similarity is a descriptive, opt-in measure.  The old
+        # `overlap_*` keys are accepted as aliases but never create a
+        # conflict: two independent clades may legitimately share a similar
+        # age prior, so similarity is not evidence of redundancy and must not
+        # block generation.
         diag_raw = raw.get("diagnostics", {}) or {}
         self._check_keys(diag_raw, "diagnostics", "diagnostics")
         diagnostics = dict(diag_raw)
-        measure = str(diagnostics.get("overlap_measure", "relative")).lower()
+        legacy_keys = {
+            "overlap_measure",
+            "overlap_threshold",
+            "relative_overlap_threshold",
+        }
+        if legacy_keys & set(diagnostics) and "prior_similarity" not in diagnostics:
+            diagnostics["prior_similarity"] = True
+        diagnostics["prior_similarity"] = self._as_bool(
+            diagnostics, "prior_similarity", False, "diagnostics"
+        )
+        measure = str(diagnostics.get("similarity_measure", "relative")).lower()
         if measure not in ("relative", "absolute", "both"):
             raise ConfigError(
-                f"diagnostics.overlap_measure must be relative, absolute or both, got "
-                f"{diagnostics.get('overlap_measure')!r}"
+                "diagnostics.similarity_measure must be relative, absolute or both, "
+                f"got {diagnostics.get('similarity_measure')!r}"
             )
-        diagnostics["overlap_measure"] = measure
-        for key in ("overlap_threshold", "relative_overlap_threshold"):
-            if key in diagnostics:
-                diagnostics[key] = self._as_num(diagnostics, key, "diagnostics")
+        diagnostics["similarity_measure"] = measure
+        # Legacy thresholds: retained for parsing, but remapped to the new
+        # single similarity threshold.  `relative_overlap_threshold` is the
+        # dimensionless ratio; `overlap_threshold` was in time units.
+        if "similarity_threshold" not in diagnostics:
+            if "relative_overlap_threshold" in diagnostics:
+                diagnostics["similarity_threshold"] = self._as_num(
+                    diagnostics, "relative_overlap_threshold", "diagnostics"
+                )
+                diagnostics["similarity_measure"] = "relative"
+            elif "overlap_threshold" in diagnostics:
+                diagnostics["similarity_threshold"] = self._as_num(
+                    diagnostics, "overlap_threshold", "diagnostics"
+                )
+                diagnostics["similarity_measure"] = "absolute"
+        if "similarity_threshold" in diagnostics:
+            diagnostics["similarity_threshold"] = self._as_num(
+                diagnostics, "similarity_threshold", "diagnostics"
+            )
+            if diagnostics["similarity_threshold"] <= 0:
+                raise ConfigError("diagnostics.similarity_threshold must be > 0")
+        elif diagnostics["prior_similarity"]:
+            raise ConfigError(
+                "diagnostics.prior_similarity is enabled but no "
+                "diagnostics.similarity_threshold is given. The tool ships no "
+                "calibrated default: choose a threshold explicitly, report its "
+                "sensitivity, and treat the output as descriptive."
+            )
+        diagnostics["strict_distributions"] = self._as_bool(
+            diagnostics, "strict_distributions", False, "diagnostics"
+        )
 
         # --- Output ---
         output_raw = raw.get("output", {}) or {}
@@ -869,6 +927,8 @@ class ConfigParser:
             diagnostics=diagnostics,
         )
         self._validate_calibration_provenance(config)
+        self._validate_calibration_node_semantics(config)
+        self._validate_calibration_distribution_usage(config)
         return config
 
     # -- section helpers ----------------------------------------------------
@@ -1332,6 +1392,114 @@ class ConfigParser:
                     )
         return dates
 
+    def _validate_calibration_node_semantics(self, config: BEASTConfig) -> None:
+        """Reject stem semantics that refer to a node that does not exist.
+
+        A non-null taxon list that contains every alignment taxon also
+        resolves to the root: MRCA(all taxa) = root.  Such a calibration has no
+        parent (stem) node, exactly like ``taxa: null``.  The parser can only
+        detect this once all alignments are known, which is here.
+
+        Args:
+            config: The assembled configuration.
+
+        Raises:
+            ConfigError: If a whole-ingroup calibration requests a stem node.
+        """
+        all_taxa = {
+            taxon
+            for alignment in getattr(config, "all_alignments", []) or []
+            for taxon in alignment.taxa_names
+        }
+        if not all_taxa:
+            return
+        for cal in config.calibrations:
+            if cal.taxa is None or not cal.use_originate:
+                continue
+            if set(cal.taxa) == all_taxa:
+                raise ConfigError(
+                    f"Calibration '{cal.name}': use_originate: true, but its taxon "
+                    f"set contains every taxon in the analysis, so MRCA(taxa) is "
+                    f"the root and has no parent (stem) node. Remove "
+                    f"use_originate, or restrict the taxon set to a non-root clade."
+                )
+
+    def _validate_calibration_distribution_usage(self, config: BEASTConfig) -> None:
+        """Check whether a distribution is appropriate for a node age.
+
+        The check is about the *use* of the distribution, not whether BEAST2
+        can parse it.  A Beta without offset lives on [0, 1], which on a Ma
+        axis is a one-million-year window at the present; Poisson is discrete
+        and has no continuous density on a divergence-time axis; OneOnX is
+        improper and its mean/quantiles do not exist.  All three are legal
+        BEAST2 priors and are reported as warnings by default; projects that
+        declare ``diagnostics.strict_distributions: true`` turn them into
+        errors.  Beta + offset and all ordinary continuous age priors pass
+        without comment.
+
+        Args:
+            config: The assembled configuration, including its diagnostics
+                block and calibrations.
+
+        Raises:
+            ConfigError: In strict mode, for a distribution the project does
+                not accept as a node-age prior.
+        """
+        import math
+
+        strict = bool((config.diagnostics or {}).get("strict_distributions", False))
+        for cal in config.calibrations:
+            dist = cal.distribution
+            if dist is None or cal.tipsonly:
+                continue
+            for key, value in (dist.parameters or {}).items():
+                if isinstance(value, bool):
+                    continue
+                try:
+                    numeric = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(numeric):
+                    message = (
+                        f"Calibration '{cal.name}': {dist.type}.{key} = {value!r} is "
+                        f"not finite. BEAST2 will accept the value and then fail or "
+                        f"sample an improper density."
+                    )
+                    if strict:
+                        raise ConfigError(message)
+                    warnings.warn(message, stacklevel=2)
+
+            dt = dist.type.lower()
+            problem = None
+            if dt == "beta" and float(dist.offset or 0.0) == 0.0:
+                problem = (
+                    "Beta without offset has support [0, 1] in the current time "
+                    "unit (Ma here unless the whole analysis uses another unit). "
+                    "That is a one-Ma window at the present, usually not the "
+                    "intended node-age prior. A Beta with an offset o has support "
+                    "[o, o+1]; use a distribution whose support matches the fossil "
+                    "evidence, or state explicitly why a [0, 1] Ma window is meant."
+                )
+            elif dt == "poisson":
+                problem = (
+                    "Poisson is a discrete count distribution. BEAST2 accepts it as "
+                    "a node-age prior, but a divergence time in Ma is continuous, so "
+                    "the density is a point mass on integer ages. Use it only if a "
+                    "discrete time model is intended and documented."
+                )
+            elif dt == "one_on_x":
+                problem = (
+                    "OneOnX is an improper prior (density proportional to 1/x) whose "
+                    "mean and quantiles are undefined. It can be parsed, but its "
+                    "effective prior cannot be summarised and calibration checks "
+                    "report it as unchecked. Prefer a proper age prior."
+                )
+            if problem:
+                message = f"Calibration '{cal.name}': {problem}"
+                if strict:
+                    raise ConfigError(message)
+                warnings.warn(message, stacklevel=2)
+
     def _validate_calibration_provenance(self, config: BEASTConfig) -> None:
         """Cross-check recorded fossil ages against the prior that is used.
 
@@ -1368,6 +1536,13 @@ class ConfigParser:
             except ValueError:
                 continue  # improper distributions (OneOnX) are already excluded
             lo, hi = stats["hpd_lower"], stats["hpd_upper"]
+            # An offset distribution is a minimum-style prior: the fossil gives
+            # a lower bound, and the divergence is allowed to be older than the
+            # fossil's own age bracket.  Checking the maximum side against a
+            # bracket that is itself the fossil's age would flag the intended
+            # soft upper tail as an error, so only the minimum side is used
+            # here.  Distributions without an offset keep both checks.
+            minimum_style = float(cal.distribution.offset or 0.0) > 0.0
             problem = None
             if prov.original_age_min is not None and hi < float(prov.original_age_min):
                 problem = (
@@ -1376,7 +1551,11 @@ class ConfigParser:
                     f"{cal.distribution.type} prior is [{lo:.3g}, {hi:.3g}], i.e. entirely "
                     f"younger than the fossil"
                 )
-            elif prov.original_age_max is not None and lo > float(prov.original_age_max):
+            elif (
+                not minimum_style
+                and prov.original_age_max is not None
+                and lo > float(prov.original_age_max)
+            ):
                 problem = (
                     f"provenance records an original maximum age of "
                     f"{prov.original_age_max} but the 95% interval of the "
@@ -1598,7 +1777,7 @@ class ConfigParser:
         all_taxa: set,
         where: str,
         check_taxa: bool = True,
-    ) -> Optional[CalibrationPoint]:
+    ) -> CalibrationPoint:
         """Parse a calibration point.
 
         Args:
@@ -1611,7 +1790,9 @@ class ConfigParser:
                 they pass ``False`` and get the check later.
 
         Returns:
-            A validated CalibrationPoint.
+            A validated CalibrationPoint. It never returns ``None``: every
+            rejected calibration raises, so a caller may use the result without
+            re-checking it.
 
         Raises:
             ConfigError: On any structural, boolean, taxon or distribution
@@ -1636,6 +1817,36 @@ class ConfigParser:
         monophyletic = self._as_bool(cal_raw, "monophyletic", True, where)
         use_originate = self._as_bool(cal_raw, "use_originate", False, where)
         tipsonly = self._as_bool(cal_raw, "tipsonly", False, where)
+
+        # Crown/stem semantics.  MRCAPrior resolves use_originate=true to
+        # parent(MRCA(taxa)); the root has no parent, so root + originate is
+        # not a stem calibration, it is undefined.  Silently dropping the
+        # flag (the old behaviour when taxa was null) produced XML that
+        # calibrated a different node than the YAML described.
+        if taxa is None and use_originate:
+            raise ConfigError(
+                f"Calibration '{name}': use_originate: true requires a taxon set, "
+                f"but this calibration has taxa: null and therefore refers to the "
+                f"root. The root has no parent (stem) node, so 'root + originate' "
+                f"is undefined. Remove use_originate or calibrate a non-root clade."
+            )
+        if tipsonly and use_originate:
+            raise ConfigError(
+                f"Calibration '{name}': use_originate cannot be combined with "
+                f"tipsonly: true. A tip date is attached to a tip, which has no "
+                f"stem node; BEAST2's TipDatesRandomWalker handles the tip date."
+            )
+        if tipsonly and taxa is None:
+            raise ConfigError(
+                f"Calibration '{name}': tipsonly: true requires a taxon list of "
+                f"tips; taxa: null refers to the root, not to a tip."
+            )
+        if use_originate and taxa is not None and len(set(taxa)) < 2:
+            raise ConfigError(
+                f"Calibration '{name}': use_originate: true requires at least two "
+                f"taxa; a single taxon has no clade MRCA whose parent could be "
+                f"calibrated."
+            )
 
         # Parse distribution
         dist = None
@@ -1782,7 +1993,9 @@ class ConfigParser:
                 f"to its own defaults and sample a different prior."
             )
 
-        spec = {
+        # ``None`` means "any finite real"; a pair is an inclusive lower bound
+        # and an optional upper bound.
+        ranges: Dict[str, Dict[str, Optional[Tuple[float, Optional[float]]]]] = {
             "normal": {"mean": None, "sigma": (0.0, None)},
             "lognormal": {"S": (0.0, None)},  # M is a log-scale mean: any real value
             "uniform": {"lower": None, "upper": None},
@@ -1794,7 +2007,8 @@ class ConfigParser:
             "poisson": {"lambda": (0.0, None)},
             "chi_square": {"dof": (0.0, None)},
             "one_on_x": {},
-        }[dist.type]
+        }
+        spec = ranges[dist.type]
 
         for key, range_spec in spec.items():
             if key not in params:
@@ -1828,6 +2042,15 @@ class ConfigParser:
                     f"Calibration '{where}': uniform lower ({lo}) must be strictly below "
                     f"upper ({hi}); as given, the density is zero on the whole support."
                 )
+        if dist.type == "chi_square":
+            dof = params.get("dof")
+            if dof is not None:
+                value = as_number(dof, f"'{where}'.chi_square.dof")
+                if value != int(value):
+                    raise ConfigError(
+                        f"Calibration '{where}': chi_square.dof = {value} must be an "
+                        f"integer; BEAST2's ChiSquare takes an IntegerParameter."
+                    )
         if dist.type == "lognormal":
             for flag in ("mean_in_real_space",):
                 if flag in params:

@@ -74,9 +74,56 @@ jobs:
           print("All version references agree.")
           PY
 
+  test:
+    name: run the suite and Gate 3 before publishing
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up a BEAST2 runtime for Gate 3
+        # The same composite action the CI integration job uses, so the release
+        # gate and CI cannot drift into validating different things.
+        uses: ./.github/actions/setup-beast2
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run the whole suite, BEAST2 included
+        # This job existed as a version-string check only. A tag could therefore
+        # publish a build whose tests fail, which is the one thing the
+        # pre-submission review asked to make impossible: "a CI failure blocks
+        # the release". `-rs` keeps skips visible, and the skip audit below
+        # refuses a release whose Gate 3 never actually ran.
+        run: pytest tests -q -rs | tee suite.log
+
+      - name: Refuse a release whose Gate 3 was skipped
+        run: |
+          set -uo pipefail
+          if grep -Eiq "SKIPPED.*(beast|jar|jdk|java|runtime)" suite.log; then
+            echo "::error::a BEAST2-dependent test skipped because the runtime was not found."
+            echo "::error::Publishing on a skipped gate is exactly what the review called"
+            echo "  "a silent skip read as full coverage". Fix the install, do not ship it."
+            grep -i "SKIPPED" suite.log
+            exit 1
+          fi
+          echo "No runtime-shaped skips: Gate 3 ran for real."
+
   build:
     name: build and attach distributions
-    needs: verify
+    needs: [verify, test]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

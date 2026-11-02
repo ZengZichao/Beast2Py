@@ -14,13 +14,114 @@ import html
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
 from . import __version__
 from .models import BEASTConfig, CalibrationPoint, DistributionConfig
 from .utils import compute_distribution_stats, compute_wasserstein_distance
+
+# ============================================================================
+# Gate 2 capability boundary
+# ============================================================================
+
+# Gate 2 reads the YAML, not a trace, so its reach has to be stated as a list
+# rather than implied by a green tick.  These two tuples are the single source
+# of that statement: the CLI, the HTML report and the manuals all render them.
+
+#: The structural properties Gate 2 can decide from the configuration alone.
+DETECTABLE_CHECKS: Tuple[str, ...] = (
+    "an incompatible or duplicated pair of calibrations on the same node",
+    "a nested pair whose parent prior is wholly younger than its child prior",
+    "a set of monophyly declarations that no rooted tree can satisfy",
+    "a semantically illegal combination (root + originate, tipsonly + originate, "
+    "an out-of-support or non-finite distribution parameter)",
+)
+
+#: What Gate 2 cannot see, and which therefore cannot be ruled out by Gate 2.
+NOT_DETECTABLE_CHECKS: Tuple[str, ...] = (
+    "a distorted effective marginal prior: the tree prior, the topological "
+    "constraints and the remaining calibrations can truncate or reshape a "
+    "specified prior without any structural contradiction existing",
+    "posterior dominance: deciding it needs the likelihood, i.e. matched "
+    "posterior traces, which Beast2Py neither runs nor reads",
+    "MCMC non-convergence, poor mixing or an inadequate ESS",
+    "too little data to inform a node, which is a property of the alignment and "
+    "the model rather than of the configuration",
+)
+
+#: One-name summaries of the entries above, for the single-line CLI notice.
+#: A test pins that the two tuples stay the same length and order.
+NOT_DETECTABLE_LABELS: Tuple[str, ...] = (
+    "distortion of the effective marginal prior",
+    "posterior dominance",
+    "MCMC non-convergence",
+    "insufficient data to inform a node",
+)
+
+#: The four distributions Gate 2's vocabulary is deliberately restricted to the
+#: first of, and which a prior-only run is needed to see the second of.
+PRIOR_LAYERS: Tuple[Tuple[str, str], ...] = (
+    (
+        "specified marginal prior",
+        "the distribution written in the YAML, which is all Gate 2 reads",
+    ),
+    (
+        "effective marginal prior",
+        "the marginal a node actually samples once the tree prior, the "
+        "constraints and the other calibrations act on it; observable only by "
+        "running a prior-only chain",
+    ),
+    (
+        "joint effective prior",
+        "the simultaneous distribution of two or more node ages; a single trace "
+        "column gives a marginal, so the joint needs joint samples (per-column "
+        "medians of one .log), not a pile of marginals",
+    ),
+    (
+        "posterior",
+        "the distribution after the likelihood is applied; out of scope for "
+        "Beast2Py, which produces no estimate of it",
+    ),
+)
+
+
+def gate2_scope_lines() -> List[str]:
+    """Render the Gate 2 boundary as plain text.
+
+    The CLI, the ``diagnose`` output and the manuals all print this, so the
+    wording of what a green Gate 2 does not mean cannot drift apart between
+    them.
+    """
+    lines = ["Gate 2 can detect (static structure only):"]
+    lines += [f"  - {item}" for item in DETECTABLE_CHECKS]
+    lines.append("Gate 2 cannot detect, so a passing Gate 2 rules none of these out:")
+    lines += [f"  - {item}" for item in NOT_DETECTABLE_CHECKS]
+    return lines
+
+
+def gate2_scope_html() -> str:
+    """The same boundary, for the HTML report."""
+    detectable = "".join(f"<li>{html.escape(item)}</li>" for item in DETECTABLE_CHECKS)
+    undetectable = "".join(f"<li>{html.escape(item)}</li>" for item in NOT_DETECTABLE_CHECKS)
+    layers = "".join(
+        f"<dt>{html.escape(name)}</dt><dd>{html.escape(gloss)}</dd>" for name, gloss in PRIOR_LAYERS
+    )
+    return (
+        "<h3>What this gate decides, and what it cannot</h3>"
+        f"<p>Gate 2 reads the configuration, not a trace. It checks the "
+        f"<b>specified marginal priors</b> and the taxon sets they attach to. "
+        f"The four distributions below are distinct; only the first is visible "
+        f"to this gate.</p>"
+        f"<dl>{layers}</dl>"
+        f"<p><b>Detected here:</b></p><ul>{detectable}</ul>"
+        f"<p><b>Not detectable here — a passing Gate 2 does not rule these "
+        f"out:</b></p><ul>{undetectable}</ul>"
+        "<p>Pairs that could not be compared are counted separately as "
+        "<code>unchecked</code> and are never reported as passes.</p>"
+    )
+
 
 # ============================================================================
 # Data Classes for Diagnostic Results
@@ -49,7 +150,9 @@ class CalibrationSummary:
     distribution_type: str
     distribution_params: Dict[str, Any]
     offset: float
-    stats: Dict[str, float]  # mean, median, hpd_lower, hpd_upper
+    # mean/median/hpd_lower/hpd_upper are floats; ``warning`` is a string the
+    # report shows in their place when the distribution has no defined quantiles.
+    stats: Dict[str, Any]
     provenance_source: str = ""
     provenance_reference: str = ""
     calibration_type: str = ""
@@ -62,6 +165,7 @@ class DiagnosticReport:
     config: BEASTConfig
     conflicts: List[Conflict]
     summaries: List[CalibrationSummary]
+    assessments: List[PairAssessment] = field(default_factory=list)
     sensitivity_xmls: List[str] = field(default_factory=list)
     visualization_file: Optional[str] = None
     report_path: Optional[str] = None
@@ -73,17 +177,130 @@ class DiagnosticReport:
 # ============================================================================
 
 
-class ConflictDetector:
-    """Detect conflicts between calibration points."""
+@dataclass
+class PairAssessment:
+    """Structural assessment of one calibration pair.
 
-    # Threshold for distribution overlap warning (Wasserstein distance, in the
-    # analysis' time units). Applied only when ``overlap_measure`` asks for
-    # it; the relative criterion below is the default because an absolute
-    # cut-off is scale-dependent.
-    OVERLAP_DISTANCE_THRESHOLD = 2.0
-    # Dimensionless threshold: W divided by the mean width of the two priors'
-    # 95% intervals. Below ~0.15 the two priors are nearly interchangeable.
-    OVERLAP_RATIO_THRESHOLD = 0.15
+    ``relation`` names the taxon-set relation; ``node_a``/``node_b`` name the
+    node each calibration resolves to (root, crown, stem or tip).  ``status``
+    is ``checked`` when a structural rule was applied, ``unchecked`` when the
+    available information could not decide the relation, and
+    ``not_applicable`` when no ordering or topology rule applies (disjoint
+    clades, tip dates).
+    """
+
+    calibration_a: str
+    calibration_b: str
+    relation: str
+    node_a: str
+    node_b: str
+    status: str
+    conflicts: List["Conflict"] = field(default_factory=list)
+
+
+class ConflictDetector:
+    """Detect structural conflicts between calibration points.
+
+    Only three families of conflict are diagnosed, each with a topological or
+    temporal justification:
+
+    * ``same_node`` -- two calibrations constrain the same node to incompatible
+      distributions (or repeat it).  Crown-crown and stem-stem pairs on the
+      same taxon set are the same node; crown-stem pairs are parent/child.
+    * ``temporal`` -- a strictly nesting pair whose parent prior is wholly
+      younger than its child prior.
+    * ``topology`` -- two intersecting, non-nested taxon sets both declared
+      monophyletic, which no rooted tree can satisfy.
+
+    Similar marginal densities of *independent* clades are not a conflict.
+    They are reported, only when the user opts in with an explicit threshold,
+    as ``prior_similarity`` with severity ``info``.  Such a report carries no
+    merge recommendation and never blocks Gate 2.
+
+    :data:`DETECTABLE_CHECKS` and :data:`NOT_DETECTABLE_CHECKS` state the
+    boundary of that decision in full; nothing else is inside Gate 2.
+    """
+
+    # No similarity threshold ships as a default.  The report is off unless the
+    # configuration both enables it and supplies a number, because no reference
+    # set has calibrated one: see ``_normalise_settings``.
+
+    @staticmethod
+    def _normalise_settings(
+        settings: Optional[Dict[str, Any]],
+        overlap_threshold: Optional[float],
+        relative_threshold: Optional[float],
+    ) -> Dict[str, Any]:
+        cfg = dict(settings or {})
+        enabled = bool(cfg.get("prior_similarity", False))
+        measure = str(cfg.get("similarity_measure", "relative")).lower()
+        threshold = cfg.get("similarity_threshold")
+
+        # Explicit function arguments are an opt-in for callers that do not go
+        # through the YAML parser (library users, older notebooks).
+        if overlap_threshold is not None:
+            enabled = True
+            measure = "absolute"
+            threshold = overlap_threshold
+        if relative_threshold is not None:
+            enabled = True
+            measure = "relative"
+            threshold = relative_threshold
+
+        if measure not in ("relative", "absolute", "both"):
+            raise ValueError(
+                "diagnostics.similarity_measure must be relative, absolute or both, "
+                f"got {measure!r}"
+            )
+        if enabled and threshold is None:
+            raise ValueError(
+                "prior similarity was requested without a threshold. Beast2Py ships "
+                "no calibrated default; pass diagnostics.similarity_threshold."
+            )
+        if threshold is not None:
+            threshold = float(threshold)
+            if threshold <= 0:
+                raise ValueError("similarity threshold must be > 0")
+        return {
+            "prior_similarity": enabled,
+            "similarity_measure": measure,
+            "similarity_threshold": threshold,
+        }
+
+    @staticmethod
+    def assess(
+        calibrations: List[CalibrationPoint],
+        overlap_threshold: Optional[float] = None,
+        relative_threshold: Optional[float] = None,
+        settings: Optional[Dict[str, Any]] = None,
+        all_taxa: Optional[List[str]] = None,
+    ) -> List[PairAssessment]:
+        """Assess every calibration pair once.
+
+        Args:
+            calibrations: Calibration points.
+            overlap_threshold: Absolute similarity threshold in time units.
+                Passing it opts in to the descriptive report.
+            relative_threshold: Dimensionless similarity threshold.
+            settings: The configuration's ``diagnostics`` block.
+            all_taxa: Every taxon in the analysis, when known.  A non-null
+                taxon set that contains all of them resolves to the root, so
+                ``use_originate`` on it is invalid and is reported as unchecked
+                here (the parser rejects it when it has the same information).
+
+        Returns:
+            One :class:`PairAssessment` per unordered pair.
+        """
+        opts = ConflictDetector._normalise_settings(settings, overlap_threshold, relative_threshold)
+        all_taxa_set = set(all_taxa) if all_taxa is not None else None
+        assessments: List[PairAssessment] = []
+
+        for i, cal_a in enumerate(calibrations):
+            for j, cal_b in enumerate(calibrations):
+                if i >= j:
+                    continue
+                assessments.append(ConflictDetector._assess_pair(cal_a, cal_b, opts, all_taxa_set))
+        return assessments
 
     @staticmethod
     def detect_conflicts(
@@ -91,350 +308,227 @@ class ConflictDetector:
         overlap_threshold: Optional[float] = None,
         relative_threshold: Optional[float] = None,
         settings: Optional[Dict[str, Any]] = None,
+        all_taxa: Optional[List[str]] = None,
     ) -> List[Conflict]:
-        """Detect all types of conflicts between calibration points.
-
-        Args:
-            calibrations: List of calibration points.
-            overlap_threshold: Absolute Wasserstein threshold in time units.
-                ``None`` means "use the class default only if
-                ``settings['overlap_measure']`` asks for the absolute
-                criterion"; pass a number to force it.
-            relative_threshold: Dimensionless threshold, or None for the class
-                default.
-            settings: The configuration's ``diagnostics`` block, e.g.
-                ``{"overlap_measure": "relative",
-                   "overlap_threshold": 2.0,
-                   "relative_overlap_threshold": 0.15}``.
-
-        Returns:
-            List of detected conflicts.
-        """
+        """Return the flattened list of conflicts from :meth:`assess`."""
         conflicts: List[Conflict] = []
+        for assessment in ConflictDetector.assess(
+            calibrations,
+            overlap_threshold=overlap_threshold,
+            relative_threshold=relative_threshold,
+            settings=settings,
+            all_taxa=all_taxa,
+        ):
+            conflicts.extend(assessment.conflicts)
+        return conflicts
 
-        if len(calibrations) < 2:
-            return conflicts
+    @staticmethod
+    def summarize(assessments: List[PairAssessment]) -> Dict[str, int]:
+        """Count pair statuses and conflict severities for reports."""
+        summary = {
+            "pairs": len(assessments),
+            "checked": 0,
+            "unchecked": 0,
+            "not_applicable": 0,
+            "errors": 0,
+            "warnings": 0,
+            "info": 0,
+            "prior_similarity": 0,
+        }
+        for assessment in assessments:
+            summary[assessment.status] = summary.get(assessment.status, 0) + 1
+            for conflict in assessment.conflicts:
+                summary[conflict.severity] = summary.get(conflict.severity, 0) + 1
+                if conflict.conflict_type == "prior_similarity":
+                    summary["prior_similarity"] += 1
+        return summary
 
-        settings = settings or {}
-        measure = str(settings.get("overlap_measure", "relative")).lower()
-        if measure not in ("relative", "absolute", "both"):
-            raise ValueError(
-                "diagnostics.overlap_measure must be relative, absolute or both, "
-                f"got {measure!r}"
-            )
-        absolute = settings.get("overlap_threshold", ConflictDetector.OVERLAP_DISTANCE_THRESHOLD)
-        relative = settings.get(
-            "relative_overlap_threshold", ConflictDetector.OVERLAP_RATIO_THRESHOLD
+    # -- pair assessment ----------------------------------------------------
+
+    @staticmethod
+    def _node_kind(cal: CalibrationPoint, all_taxa: Optional[set]) -> str:
+        if cal.tipsonly:
+            return "tip"
+        if cal.taxa is None:
+            return "root"
+        if all_taxa is not None and set(cal.taxa) == all_taxa:
+            # A non-null taxon list that spans the whole ingroup still resolves
+            # to the root: MRCA(all taxa) = root and the root has no stem.
+            return "root"
+        return "stem" if cal.use_originate else "crown"
+
+    @staticmethod
+    def _contains(
+        outer: Optional[Set[str]],
+        inner: Optional[Set[str]],
+    ) -> bool:
+        """Whether ``outer`` strictly contains ``inner``, False when either is absent.
+
+        ``nested`` and ``intersecting`` are only ever reported for a pair that
+        carries two taxon sets, so the ``None`` arms do not arise in those
+        branches; spelling the guard out keeps the classifier's contract in one
+        place instead of relying on a caller remembering it.
+        """
+        if outer is None or inner is None:
+            return False
+        return inner < outer
+
+    @staticmethod
+    def _assess_pair(
+        cal_a: CalibrationPoint,
+        cal_b: CalibrationPoint,
+        opts: Dict[str, Any],
+        all_taxa: Optional[set],
+    ) -> PairAssessment:
+        node_a = ConflictDetector._node_kind(cal_a, all_taxa)
+        node_b = ConflictDetector._node_kind(cal_b, all_taxa)
+        set_a = set(cal_a.taxa) if cal_a.taxa is not None else None
+        set_b = set(cal_b.taxa) if cal_b.taxa is not None else None
+
+        assessment = PairAssessment(
+            calibration_a=cal_a.name,
+            calibration_b=cal_b.name,
+            relation="",
+            node_a=node_a,
+            node_b=node_b,
+            status="not_applicable",
         )
-        if overlap_threshold is not None:
-            absolute = overlap_threshold
-        if relative_threshold is not None:
-            relative = relative_threshold
 
-        abs_arg = absolute if measure in ("absolute", "both") else None
-        rel_arg = relative if measure in ("relative", "both") else None
+        # Tip dates are observations, not clade-age constraints.  They cannot
+        # be ordered against a clade MRCA without a dated tree, so no
+        # structural rule applies.
+        if node_a == "tip" or node_b == "tip":
+            assessment.relation = "tip"
+            return assessment
 
-        conflicts.extend(ConflictDetector._check_temporal_consistency(calibrations))
-        conflicts.extend(
-            ConflictDetector._check_distribution_overlap(
-                calibrations,
-                overlap_threshold=abs_arg,
-                relative_threshold=rel_arg,
-            )
-        )
-        conflicts.extend(ConflictDetector._check_monophyly_conflicts(calibrations))
+        both_root = node_a == "root" and node_b == "root"
+        same_set = both_root or (set_a is not None and set_b is not None and set_a == set_b)
 
-        return conflicts
-
-    @staticmethod
-    def _compare_parent_child(parent: CalibrationPoint, child: CalibrationPoint) -> List[Conflict]:
-        """Compare one calibration that must be older than another.
-
-        Args:
-            parent: The clade that nests ``child`` (or the root).
-            child: The nested clade.
-
-        Returns:
-            Zero, one or two conflicts describing hard and soft violations.
-        """
-        conflicts: List[Conflict] = []
-        stats_a = ConflictDetector._get_stats(parent)
-        stats_b = ConflictDetector._get_stats(child)
-        if not stats_a or not stats_b:
-            # Reporting nothing here let a pair that was never *evaluated* look
-            # identical to a pair that was evaluated and found consistent, so
-            # `one_on_x` calibrations -- whose quantiles are unbounded --
-            # produced a green "No conflicts detected.".
-            unclear = [c.name for c, s in ((parent, stats_a), (child, stats_b)) if not s]
-            return [
-                Conflict(
-                    conflict_type="unchecked",
-                    severity="info",
-                    calibration_a=parent.name,
-                    calibration_b=child.name,
-                    description=(
-                        f"Not checked: {', '.join(unclear)} uses a distribution "
-                        f"whose mean or quantiles are undefined, so this pair "
-                        f"could not be compared."
-                    ),
-                    recommendation=(
-                        "Treat the absence of a conflict below as covering only "
-                        "the pairs that were compared, or switch to a prior with "
-                        "finite quantiles."
-                    ),
+        if same_set:
+            if node_a == node_b or both_root:
+                assessment.relation = "same_node"
+                assessment.status = "checked"
+                assessment.conflicts.extend(ConflictDetector._check_same_node(cal_a, cal_b, node_a))
+            elif {node_a, node_b} == {"crown", "stem"}:
+                # Same taxon set, one crown and one stem: stem(parent) is
+                # strictly older than crown(child).  This is a determinate
+                # parent/child relation, not a duplicate.
+                parent, child = (cal_a, cal_b) if node_a == "stem" else (cal_b, cal_a)
+                assessment.relation = "same_set_crown_stem"
+                assessment.status = "checked"
+                assessment.conflicts.extend(
+                    ConflictDetector._compare_parent_child(
+                        parent,
+                        child,
+                        relation=(
+                            "the stem node is the parent of the crown node for the "
+                            "same taxon set"
+                        ),
+                    )
                 )
-            ]
+            else:
+                assessment.relation = "same_set_unknown"
+                assessment.status = "unchecked"
+                assessment.conflicts.append(
+                    ConflictDetector._unchecked(
+                        cal_a,
+                        cal_b,
+                        f"the same taxon set resolves to nodes ({node_a}, {node_b}) "
+                        f"whose ordering cannot be decided from the configuration",
+                    )
+                )
+            ConflictDetector._maybe_similarity(cal_a, cal_b, opts, assessment)
+            if any(c.conflict_type == "unchecked" for c in assessment.conflicts):
+                assessment.status = "unchecked"
+            return assessment
 
-        if stats_a["hpd_upper"] < stats_b["hpd_lower"]:
-            conflicts.append(
-                Conflict(
-                    conflict_type="temporal",
-                    severity="error",
-                    calibration_a=parent.name,
-                    calibration_b=child.name,
-                    description=(
-                        f"Temporal inconsistency: '{parent.name}' (parent clade) "
-                        f"has HPD upper {stats_a['hpd_upper']:.2f}, younger than "
-                        f"'{child.name}' (nested clade) HPD lower "
-                        f"{stats_b['hpd_lower']:.2f}. "
-                        f"Parent clade MRCA must be older than nested clade MRCA."
-                    ),
-                    recommendation=(
-                        f"Adjust calibration distributions so that '{parent.name}' "
-                        f"spans older times than '{child.name}'."
-                    ),
+        # One or both calibrations are the root, or the sets are nested,
+        # intersecting or disjoint.
+        relation = ConflictDetector._taxon_relation(set_a, set_b, node_a, node_b)
+        assessment.relation = relation
+
+        if relation == "root_vs_clade":
+            parent, child = (cal_a, cal_b) if node_a == "root" else (cal_b, cal_a)
+            assessment.status = "checked"
+            assessment.conflicts.extend(
+                ConflictDetector._compare_parent_child(
+                    parent, child, relation="the root is an ancestor of every clade"
                 )
             )
-        elif stats_a["mean"] < stats_b["mean"]:
-            conflicts.append(
-                Conflict(
-                    conflict_type="temporal",
-                    severity="warning",
-                    calibration_a=parent.name,
-                    calibration_b=child.name,
-                    description=(
-                        f"Potential temporal issue: '{parent.name}' (parent clade) "
-                        f"mean {stats_a['mean']:.2f} is younger than "
-                        f"'{child.name}' (nested clade) mean "
-                        f"{stats_b['mean']:.2f}. Parent should generally be "
-                        f"older, though HPD intervals may overlap."
-                    ),
-                    recommendation=("Review calibration distributions for consistency."),
+        elif relation == "nested":
+            nested = ConflictDetector._contains(set_a, set_b)
+            parent, child = (cal_a, cal_b) if nested else (cal_b, cal_a)
+            parent_node, child_node = (node_a, node_b) if nested else (node_b, node_a)
+            if parent_node == "crown" and child_node == "stem":
+                # C(parent) >= C(child) and S(child) > C(child); the stem of
+                # the child may sit above or below the crown of the parent.
+                assessment.status = "unchecked"
+                assessment.conflicts.append(
+                    ConflictDetector._unchecked(
+                        parent,
+                        child,
+                        "the nested child is calibrated on its stem while the "
+                        "parent is calibrated on its crown, so their relative "
+                        "ages are not determined by taxon containment",
+                    )
                 )
-            )
-        return conflicts
+            else:
+                assessment.status = "checked"
+                assessment.conflicts.extend(
+                    ConflictDetector._compare_parent_child(
+                        parent,
+                        child,
+                        relation="the parent taxon set strictly contains the child",
+                    )
+                )
+        elif relation == "intersecting":
+            if cal_a.monophyletic and cal_b.monophyletic:
+                assessment.status = "checked"
+                assessment.conflicts.append(
+                    ConflictDetector._topology_conflict(
+                        cal_a, cal_b, (set_a or set()) & (set_b or set())
+                    )
+                )
+            else:
+                assessment.status = "unchecked"
+                assessment.conflicts.append(
+                    ConflictDetector._unchecked(
+                        cal_a,
+                        cal_b,
+                        "the taxon sets intersect but neither contains the other, "
+                        "and at least one calibration does not assert monophyly; "
+                        "the topology constraint cannot be evaluated",
+                    )
+                )
+        else:  # disjoint
+            assessment.status = "not_applicable"
+
+        ConflictDetector._maybe_similarity(cal_a, cal_b, opts, assessment)
+        if any(c.conflict_type == "unchecked" for c in assessment.conflicts):
+            assessment.status = "unchecked"
+        return assessment
 
     @staticmethod
-    def _check_temporal_consistency(
-        calibrations: List[CalibrationPoint],
-    ) -> List[Conflict]:
-        """Check temporal consistency between nested clades.
+    def _taxon_relation(
+        set_a: Optional[set],
+        set_b: Optional[set],
+        node_a: str,
+        node_b: str,
+    ) -> str:
+        if set_a is None or set_b is None:
+            # Only one side can be the root here (both-root was handled as the
+            # same node); the root nests every clade.
+            return "root_vs_clade"
+        if set_a < set_b or set_b < set_a:
+            return "nested"
+        if set_a & set_b:
+            return "intersecting"
+        return "disjoint"
 
-        If clade A contains clade B (A.taxa ⊃ B.taxa), then A's MRCA time
-        should be >= B's MRCA time. A root calibration (``taxa is None``) nests
-        every other clade, so it is compared as the parent of each of them:
-        without those comparisons, "root younger than its own descendant" — the
-        most severe violation available — would be the one thing the detector
-        could never report.
-        """
-        conflicts: List[Conflict] = []
-
-        for i, cal_a in enumerate(calibrations):
-            for j, cal_b in enumerate(calibrations):
-                if i >= j:
-                    continue
-
-                # Check taxon set containment, with the root as universal parent
-                if cal_a.taxa is None or cal_b.taxa is None:
-                    if cal_a.taxa is None and cal_b.taxa is None:
-                        continue  # two roots: nothing to order
-                    root_cal = cal_a if cal_a.taxa is None else cal_b
-                    other = cal_b if cal_a.taxa is None else cal_a
-                    if other.tipsonly:
-                        continue  # tip dates are not clade ages
-                    conflicts.extend(ConflictDetector._compare_parent_child(root_cal, other))
-                    continue
-
-                set_a = set(cal_a.taxa)
-                set_b = set(cal_b.taxa)
-
-                # If A contains B (A is parent/ancestor clade)
-                if set_b.issubset(set_a) and set_b != set_a:
-                    conflicts.extend(ConflictDetector._compare_parent_child(cal_a, cal_b))
-
-                # If B contains A (B is parent/ancestor clade)
-                elif set_a.issubset(set_b) and set_a != set_b:
-                    conflicts.extend(ConflictDetector._compare_parent_child(cal_b, cal_a))
-
-        return conflicts
-
-    @staticmethod
-    def _check_distribution_overlap(
-        calibrations: List[CalibrationPoint],
-        overlap_threshold: Optional[float] = None,
-        relative_threshold: Optional[float] = None,
-    ) -> List[Conflict]:
-        """Check for excessive distribution overlap between calibrations.
-
-        Two criteria are available:
-
-        * absolute — the 1-Wasserstein distance below a fixed number of time
-          units (opt-in through ``overlap_measure``, ``OVERLAP_DISTANCE_THRESHOLD``);
-        * relative — that distance divided by the mean width of the two
-          priors' 95% intervals, which is dimensionless.
-
-        The absolute criterion is scale-dependent: W between two priors grows
-        with node depth, so at a fixed threshold shallow nodes are flagged as
-        redundant almost automatically while deep ones never are, and the alarm
-        rate ends up measuring phylogenetic position rather than information
-        redundancy. The relative criterion is therefore
-        the default; both can be reported at once.
-
-        Args:
-            calibrations: Calibration points to compare pairwise.
-            overlap_threshold: Absolute threshold in time units, or None to
-                skip the absolute criterion.
-            relative_threshold: Dimensionless threshold, or None to skip it.
-
-        Returns:
-            List of detected conflicts.
-        """
-        conflicts: List[Conflict] = []
-
-        for i, cal_a in enumerate(calibrations):
-            for j, cal_b in enumerate(calibrations):
-                if i >= j:
-                    continue
-
-                if not cal_a.distribution or not cal_b.distribution:
-                    continue
-
-                # Skip pairs involving a root calibration (taxa=None): the root
-                # clade nests every other clade, which is handled by the
-                # temporal consistency check instead.
-                if cal_a.taxa is None or cal_b.taxa is None:
-                    continue
-
-                # Skip nested clades (already checked in temporal consistency)
-                set_a = set(cal_a.taxa)
-                set_b = set(cal_b.taxa)
-                if set_a.issubset(set_b) or set_b.issubset(set_a):
-                    continue
-
-                # Compute Wasserstein distance
-                try:
-                    distance = compute_wasserstein_distance(
-                        cal_a.distribution.type,
-                        cal_a.distribution.parameters,
-                        cal_a.distribution.offset,
-                        cal_b.distribution.type,
-                        cal_b.distribution.parameters,
-                        cal_b.distribution.offset,
-                    )
-                except ValueError:
-                    # Unsupported distribution (e.g. OneOnX): overlap undefined
-                    continue
-
-                stats_a = ConflictDetector._get_stats(cal_a)
-                stats_b = ConflictDetector._get_stats(cal_b)
-                pooled_scale = None
-                if stats_a and stats_b:
-                    width_a = stats_a["hpd_upper"] - stats_a["hpd_lower"]
-                    width_b = stats_b["hpd_upper"] - stats_b["hpd_lower"]
-                    pooled_scale = (width_a + width_b) / 2.0
-                ratio = distance / pooled_scale if pooled_scale and pooled_scale > 0 else None
-
-                flagged = False
-                reasons: List[str] = []
-                if (
-                    relative_threshold is not None
-                    and ratio is not None
-                    and ratio < relative_threshold
-                ):
-                    flagged = True
-                    reasons.append(
-                        f"relative Wasserstein distance = {ratio:.3f} of the pooled "
-                        f"95%-interval width (threshold {relative_threshold})"
-                    )
-                if overlap_threshold is not None and distance < overlap_threshold:
-                    flagged = True
-                    reasons.append(
-                        f"Wasserstein distance = {distance:.3f} below the absolute "
-                        f"threshold {overlap_threshold}"
-                    )
-
-                if flagged:
-                    conflicts.append(
-                        Conflict(
-                            conflict_type="distribution_overlap",
-                            severity="warning",
-                            calibration_a=cal_a.name,
-                            calibration_b=cal_b.name,
-                            description=(
-                                f"Distributions of '{cal_a.name}' and '{cal_b.name}' "
-                                f"are very similar ({'; '.join(reasons)}). "
-                                f"If these calibrate different nodes, consider whether they "
-                                f"provide independent information."
-                            ),
-                            recommendation=(
-                                "Consider whether overlapping calibrations provide "
-                                "redundant information or if they could be merged."
-                            ),
-                        )
-                    )
-
-        return conflicts
-
-    @staticmethod
-    def _check_monophyly_conflicts(
-        calibrations: List[CalibrationPoint],
-    ) -> List[Conflict]:
-        """Check for monophyly conflicts (overlapping but non-nested taxon sets).
-
-        Two calibrations with intersecting but non-nested taxon sets cannot
-        both be monophyletic on the same tree.
-        """
-        conflicts: List[Conflict] = []
-
-        for i, cal_a in enumerate(calibrations):
-            for j, cal_b in enumerate(calibrations):
-                if i >= j:
-                    continue
-
-                if not cal_a.taxa or not cal_b.taxa:
-                    continue
-                if not cal_a.monophyletic or not cal_b.monophyletic:
-                    continue
-
-                set_a = set(cal_a.taxa)
-                set_b = set(cal_b.taxa)
-
-                intersection = set_a & set_b
-                if intersection and not set_a.issubset(set_b) and not set_b.issubset(set_a):
-                    conflicts.append(
-                        Conflict(
-                            conflict_type="monophyly",
-                            severity="error",
-                            calibration_a=cal_a.name,
-                            calibration_b=cal_b.name,
-                            description=(
-                                f"Monophyly conflict: '{cal_a.name}' and '{cal_b.name}' have "
-                                f"overlapping but non-nested taxon sets "
-                                f"(shared: {', '.join(sorted(intersection))}). "
-                                f"Both cannot be monophyletic on the same tree."
-                            ),
-                            recommendation=(
-                                "Ensure calibration taxon sets are either disjoint or nested, "
-                                "or relax monophyly constraint for one of the calibrations."
-                            ),
-                        )
-                    )
-
-        return conflicts
+    # -- rule implementations ----------------------------------------------
 
     @staticmethod
     def _get_stats(cal: CalibrationPoint) -> Optional[Dict[str, float]]:
-        """Get distribution statistics for a calibration point."""
         if not cal.distribution:
             return None
         try:
@@ -444,9 +538,297 @@ class ConflictDetector:
                 cal.distribution.offset,
             )
         except ValueError:
-            # Unsupported distribution type: skip time-consistency checking
-            # for this calibration pair rather than aborting the analysis.
             return None
+
+    @staticmethod
+    def _signature(cal: CalibrationPoint) -> Any:
+        dist = cal.distribution
+        if dist is None:
+            # No distribution to compare: two such points on one node are
+            # indistinguishable, which is what a duplicate reading means here.
+            return ("<none>", (), 0.0)
+        return (
+            dist.type.lower(),
+            tuple(sorted((str(k), str(v)) for k, v in (dist.parameters or {}).items())),
+            float(dist.offset or 0.0),
+        )
+
+    @staticmethod
+    def _unchecked(
+        cal_a: CalibrationPoint,
+        cal_b: CalibrationPoint,
+        reason: str,
+    ) -> Conflict:
+        return Conflict(
+            conflict_type="unchecked",
+            severity="info",
+            calibration_a=cal_a.name,
+            calibration_b=cal_b.name,
+            description=f"Not checked: {reason}.",
+            recommendation=(
+                "No pass is implied for this pair. Supply a proper distribution "
+                "with finite quantiles and a determinate node relation, or verify "
+                "the pair manually."
+            ),
+        )
+
+    @staticmethod
+    def _check_same_node(
+        cal_a: CalibrationPoint,
+        cal_b: CalibrationPoint,
+        node_kind: str,
+    ) -> List[Conflict]:
+        stats_a = ConflictDetector._get_stats(cal_a)
+        stats_b = ConflictDetector._get_stats(cal_b)
+        if not stats_a or not stats_b:
+            unclear = [c.name for c, s in ((cal_a, stats_a), (cal_b, stats_b)) if not s]
+            return [
+                ConflictDetector._unchecked(
+                    cal_a,
+                    cal_b,
+                    f"{', '.join(unclear)} uses a distribution whose mean or "
+                    f"quantiles are undefined, so the two constraints on the "
+                    f"same {node_kind} node cannot be compared",
+                )
+            ]
+
+        if ConflictDetector._signature(cal_a) == ConflictDetector._signature(cal_b):
+            return [
+                Conflict(
+                    conflict_type="duplicate",
+                    severity="warning",
+                    calibration_a=cal_a.name,
+                    calibration_b=cal_b.name,
+                    description=(
+                        f"'{cal_a.name}' and '{cal_b.name}' declare the same "
+                        f"{node_kind} node (identical taxon set) with an identical "
+                        f"distribution. The prior is counted twice."
+                    ),
+                    recommendation=(
+                        "Keep one calibration, or make the two constraints "
+                        "intentionally different and document why the node is "
+                        "constrained twice."
+                    ),
+                )
+            ]
+
+        disjoint = (
+            stats_a["hpd_upper"] < stats_b["hpd_lower"]
+            or stats_b["hpd_upper"] < stats_a["hpd_lower"]
+        )
+        if disjoint:
+            return [
+                Conflict(
+                    conflict_type="same_node",
+                    severity="error",
+                    calibration_a=cal_a.name,
+                    calibration_b=cal_b.name,
+                    description=(
+                        f"'{cal_a.name}' and '{cal_b.name}' constrain the same "
+                        f"{node_kind} node (identical taxon set) to distributions "
+                        f"with disjoint 95% intervals "
+                        f"([{stats_a['hpd_lower']:.2f}, {stats_a['hpd_upper']:.2f}] "
+                        f"vs [{stats_b['hpd_lower']:.2f}, {stats_b['hpd_upper']:.2f}]). "
+                        f"At most one of the two can describe the node's fossil "
+                        f"evidence."
+                    ),
+                    recommendation=(
+                        "Decide which fossil/estimate applies to this node and "
+                        "remove or replace the other calibration. This is a "
+                        "same-node contradiction, not a similarity between "
+                        "independent clades."
+                    ),
+                )
+            ]
+
+        return [
+            Conflict(
+                conflict_type="same_node",
+                severity="warning",
+                calibration_a=cal_a.name,
+                calibration_b=cal_b.name,
+                description=(
+                    f"'{cal_a.name}' and '{cal_b.name}' constrain the same "
+                    f"{node_kind} node (identical taxon set) with two different "
+                    f"distributions. Their 95% intervals overlap, so this is not a "
+                    f"hard contradiction, but the node prior is their product, "
+                    f"which is usually not what either entry describes."
+                ),
+                recommendation=(
+                    "Check that two constraints on the same node are intended; "
+                    "otherwise keep one."
+                ),
+            )
+        ]
+
+    @staticmethod
+    def _compare_parent_child(
+        parent: CalibrationPoint,
+        child: CalibrationPoint,
+        relation: str,
+    ) -> List[Conflict]:
+        stats_parent = ConflictDetector._get_stats(parent)
+        stats_child = ConflictDetector._get_stats(child)
+        if not stats_parent or not stats_child:
+            unclear = [c.name for c, s in ((parent, stats_parent), (child, stats_child)) if not s]
+            return [
+                ConflictDetector._unchecked(
+                    parent,
+                    child,
+                    f"{', '.join(unclear)} uses a distribution whose mean or "
+                    f"quantiles are undefined, so the temporal ordering "
+                    f"({relation}) cannot be compared",
+                )
+            ]
+
+        if stats_parent["hpd_upper"] < stats_child["hpd_lower"]:
+            return [
+                Conflict(
+                    conflict_type="temporal",
+                    severity="error",
+                    calibration_a=parent.name,
+                    calibration_b=child.name,
+                    description=(
+                        f"Temporal inconsistency: '{parent.name}' (parent) has "
+                        f"95% upper {stats_parent['hpd_upper']:.2f}, younger than "
+                        f"'{child.name}' (child) 95% lower "
+                        f"{stats_child['hpd_lower']:.2f}; {relation}. The parent "
+                        f"MRCA cannot be younger than the nested child MRCA."
+                    ),
+                    recommendation=(
+                        f"Adjust the priors so that '{parent.name}' spans older "
+                        f"times than '{child.name}', or correct the taxon sets."
+                    ),
+                )
+            ]
+        # Overlapping intervals are not a contradiction: a soft parent prior
+        # with a long tail can have a younger mean than its child's prior while
+        # remaining perfectly compatible.  Only a wholly younger parent
+        # interval is reported.
+        return []
+
+    @staticmethod
+    def _topology_conflict(
+        cal_a: CalibrationPoint,
+        cal_b: CalibrationPoint,
+        shared: set,
+    ) -> Conflict:
+        return Conflict(
+            conflict_type="topology",
+            severity="error",
+            calibration_a=cal_a.name,
+            calibration_b=cal_b.name,
+            description=(
+                f"Topology conflict: '{cal_a.name}' and '{cal_b.name}' have "
+                f"intersecting but non-nested taxon sets (shared: "
+                f"{', '.join(sorted(shared))}) and both assert monophyly. Two "
+                f"monophyletic clades in a rooted tree must be nested or disjoint, "
+                f"so no tree can satisfy both."
+            ),
+            recommendation=(
+                "Make the taxon sets nested or disjoint, or set monophyletic: "
+                "false on one calibration if it is not a clade constraint."
+            ),
+        )
+
+    # -- descriptive similarity --------------------------------------------
+
+    @staticmethod
+    def _maybe_similarity(
+        cal_a: CalibrationPoint,
+        cal_b: CalibrationPoint,
+        opts: Dict[str, Any],
+        assessment: PairAssessment,
+    ) -> None:
+        if not opts.get("prior_similarity"):
+            return
+        if assessment.relation == "same_node":
+            return
+        if not cal_a.distribution or not cal_b.distribution:
+            return
+        try:
+            distance = compute_wasserstein_distance(
+                cal_a.distribution.type,
+                cal_a.distribution.parameters,
+                cal_a.distribution.offset,
+                cal_b.distribution.type,
+                cal_b.distribution.parameters,
+                cal_b.distribution.offset,
+            )
+        except ValueError:
+            if assessment.status != "checked":
+                assessment.status = "unchecked"
+                assessment.conflicts.append(
+                    ConflictDetector._unchecked(
+                        cal_a,
+                        cal_b,
+                        "prior similarity could not be computed because at least "
+                        "one distribution has no finite quantiles",
+                    )
+                )
+            return
+
+        stats_a = ConflictDetector._get_stats(cal_a)
+        stats_b = ConflictDetector._get_stats(cal_b)
+        ratio = None
+        if stats_a and stats_b:
+            width_a = stats_a["hpd_upper"] - stats_a["hpd_lower"]
+            width_b = stats_b["hpd_upper"] - stats_b["hpd_lower"]
+            pooled = (width_a + width_b) / 2.0
+            if pooled > 0:
+                ratio = distance / pooled
+
+        measure = opts["similarity_measure"]
+        threshold = opts["similarity_threshold"]
+        reasons: List[str] = []
+        flagged = False
+        if measure in ("relative", "both") and ratio is not None:
+            reasons.append(
+                f"relative Wasserstein distance = {ratio:.3f} of the pooled "
+                f"95%-interval width (threshold {threshold})"
+            )
+            if ratio < threshold:
+                flagged = True
+        if measure in ("absolute", "both"):
+            reasons.append(
+                f"Wasserstein distance = {distance:.3f} time units " f"(threshold {threshold})"
+            )
+            if distance < threshold:
+                flagged = True
+
+        if flagged:
+            assessment.conflicts.append(
+                Conflict(
+                    conflict_type="prior_similarity",
+                    severity="info",
+                    calibration_a=cal_a.name,
+                    calibration_b=cal_b.name,
+                    description=(
+                        f"Prior densities of '{cal_a.name}' and '{cal_b.name}' are "
+                        f"similar ({'; '.join(reasons)}). This is a descriptive "
+                        f"summary of two specified marginal priors, not evidence "
+                        f"that fossil information is redundant. Independent clades "
+                        f"may legitimately share a similar age prior."
+                    ),
+                    recommendation=(
+                        "None. This entry is not a conflict, does not block Gate 2, "
+                        "and does not justify merging or removing a calibration."
+                    ),
+                )
+            )
+
+    # -- retained helper for external users --------------------------------
+
+    @staticmethod
+    def _check_monophyly_conflicts(
+        calibrations: List[CalibrationPoint],
+    ) -> List[Conflict]:
+        """Backward-compatible wrapper returning only topology conflicts."""
+        return [
+            conflict
+            for conflict in ConflictDetector.detect_conflicts(calibrations)
+            if conflict.conflict_type == "topology"
+        ]
 
 
 # ============================================================================
@@ -537,10 +919,21 @@ class SensitivityAnalyzer:
         Returns:
             Path to the generated XML file.
         """
-        # Create a copy with sample_from_prior=True
+        # Create a copy with sample_from_prior=True.  The chain length is the
+        # configured one: a hard-coded 1M cap produced too few samples for a
+        # 200-ESS convergence criterion.  Each scenario gets a distinct seed so
+        # the chains are independent and their $(seed) log names cannot collide.
         prior_config = copy.deepcopy(config)
         prior_config.mcmc.sample_from_prior = True
-        prior_config.mcmc.chain_length = min(config.mcmc.chain_length, 1000000)
+        base_seed = int(getattr(prior_config.mcmc, "seed", 1) or 1)
+        if suffix.startswith("00_"):
+            prior_config.mcmc.seed = base_seed
+        else:
+            try:
+                index = int(suffix.split("_", 1)[0])
+            except ValueError:
+                index = 1
+            prior_config.mcmc.seed = base_seed + index
 
         # Generate XML
         from .xml_writer import XMLWriter
@@ -589,11 +982,12 @@ class VisualizationGenerator:
         import matplotlib
 
         matplotlib.use("Agg")  # Non-interactive backend
+        import matplotlib
         import matplotlib.pyplot as plt
 
         fig, ax = plt.subplots(figsize=(10, 6))
 
-        colors = plt.cm.tab10(np.linspace(0, 1, max(len(calibrations), 1)))
+        colors = matplotlib.colormaps["tab10"](np.linspace(0, 1, max(len(calibrations), 1)))
 
         all_x_min = float("inf")
         all_x_max = float("-inf")
@@ -690,6 +1084,7 @@ class ReportGenerator:
         sensitivity_xmls: List[str],
         visualization_file: Optional[str],
         output_file: str,
+        assessments: Optional[List[PairAssessment]] = None,
     ) -> str:
         """Generate an HTML diagnostic report.
 
@@ -735,7 +1130,10 @@ class ReportGenerator:
         # Build conflict table
         conflict_rows = []
         for c in conflicts:
-            severity_class = "conflict-error" if c.severity == "error" else "conflict-warning"
+            severity_class = {
+                "error": "conflict-error",
+                "warning": "conflict-warning",
+            }.get(c.severity, "conflict-info")
             conflict_rows.append(f"""
                 <tr class="{severity_class}">
                     <td>{html.escape(c.conflict_type)}</td>
@@ -771,6 +1169,17 @@ class ReportGenerator:
 
         n_errors = sum(1 for c in conflicts if c.severity == "error")
         n_warnings = sum(1 for c in conflicts if c.severity == "warning")
+        stats = (
+            ConflictDetector.summarize(assessments)
+            if assessments is not None
+            else {
+                "pairs": 0,
+                "checked": 0,
+                "unchecked": sum(1 for c in conflicts if c.conflict_type == "unchecked"),
+                "not_applicable": 0,
+                "prior_similarity": 0,
+            }
+        )
 
         conflicts_table = (
             "<table><thead><tr><th>Type</th><th>Severity</th>"
@@ -783,12 +1192,27 @@ class ReportGenerator:
         unchecked_note = (
             "<p class='stat-warn'><b>"
             f"{len(unchecked_pairs)} calibration pair(s) could NOT be checked: "
-            "a prior with undefined quantiles has no comparable interval. The "
-            "absence of a conflict above covers only the pairs that were "
-            "compared.</b></p>"
+            "a prior with undefined quantiles, an undecidable crown/stem relation, "
+            "or a non-monophyletic intersection has no comparable structural "
+            "prediction. The absence of a structural conflict covers only the "
+            "pairs that were compared; it is not a pass for these pairs.</b></p>"
             if unchecked_pairs
             else ""
         )
+        similarity_note = (
+            "<p class='stat-warn'><b>Prior similarity is descriptive only.</b> "
+            "Similar marginal priors of independent clades are not evidence of "
+            "redundant fossil information, are not a conflict, and must not be "
+            "used to merge or remove a calibration.</p>"
+            if any(c.conflict_type == "prior_similarity" for c in conflicts)
+            else ""
+        )
+        pass_note = (
+            '<p class="stat-ok">\u2713 No structural conflicts among the checked pairs.</p>'
+            if not n_errors and not n_warnings
+            else ""
+        )
+        capability_block = gate2_scope_html()
 
         html_content = f"""<!DOCTYPE html>
 <html lang="en">
@@ -810,6 +1234,7 @@ class ReportGenerator:
         tr:nth-child(even) {{ background: #f2f2f2; }}
         .conflict-error {{ background: #fee !important; }}
         .conflict-warning {{ background: #fffde7 !important; }}
+        .conflict-info {{ background: #eef6ff !important; }}
         .summary {{ display: flex; gap: 20px; margin: 15px 0; }}
         .stat-card {{ background: white; padding: 15px; border-radius: 8px; flex: 1;
                       text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
@@ -836,7 +1261,7 @@ class ReportGenerator:
     <div class="summary">
         <div class="stat-card">
             <div class="stat-number {'stat-errors' if n_errors else 'stat-ok'}">{n_errors}</div>
-            <div class="stat-label">Errors</div>
+            <div class="stat-label">Structural errors</div>
         </div>
         <div class="stat-card">
             <div class="stat-number
@@ -845,8 +1270,17 @@ class ReportGenerator:
             <div class="stat-label">Warnings</div>
         </div>
         <div class="stat-card">
-            <div class="stat-number">{len(config.calibrations)}</div>
-            <div class="stat-label">Calibration Points</div>
+            <div class="stat-number {'stat-warnings' if stats.get('unchecked') else 'stat-ok'}">
+              {stats.get('unchecked', 0)}</div>
+            <div class="stat-label">Unchecked pairs</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{stats.get('checked', 0)}</div>
+            <div class="stat-label">Checked pairs</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{stats.get('not_applicable', 0)}</div>
+            <div class="stat-label">No applicable relation</div>
         </div>
     </div>
 
@@ -868,17 +1302,25 @@ class ReportGenerator:
     </div>
 
     <div class="section">
-        <h2>3. Conflict Detection Results</h2>
-        {f'<p class="stat-ok">✓ No conflicts detected.</p>' if not conflicts else ''}
+        <h2>3. Structural Conflict Detection Results</h2>
+        <p><b>{stats.get('pairs', 0)} pairs assessed:</b>
+           {stats.get('checked', 0)} checked,
+           {stats.get('unchecked', 0)} unchecked,
+           {stats.get('not_applicable', 0)} with no applicable structural relation.
+           "Checked" means the pair was compared, not that the whole model is correct.</p>
+        {pass_note}
         {unchecked_note}
+        {similarity_note}
+        {capability_block}
         {conflicts_table if conflicts else ''}
     </div>
 
     <div class="section">
-        <h2>4. Prior Sensitivity Analysis</h2>
-        <p>The following XML files have been generated for prior sensitivity analysis.
-        Run each with BEAST2 (short chains are sufficient, e.g., 1M generations)
-        and compare the resulting tree height posteriors.</p>
+        <h2>4. Prior-Only Sensitivity Design</h2>
+        <p>The following XML files record a prior-only analysis design. Running
+        them samples the specified and effective marginal priors; it does not
+        sample or diagnose the posterior. Inspect ESS and mixing, and report the
+        chain length, burn-in and convergence criteria used.</p>
         {sensitivity_list if sensitivity_xmls else '<p>No sensitivity analysis XMLs generated.</p>'}
     </div>
 
@@ -955,10 +1397,18 @@ class DiagnosticEngine:
             if stats_warning:
                 summaries[-1].stats = {"warning": stats_warning}
 
-        # 2. Detect conflicts
-        conflicts = ConflictDetector.detect_conflicts(
-            config.calibrations, settings=getattr(config, "diagnostics", None)
+        # 2. Detect conflicts.  The full taxon list lets a calibration whose
+        # non-null taxon list spans the whole ingroup resolve to the root
+        # rather than to a nonexistent stem.
+        all_taxa: List[str] = []
+        for alignment in getattr(config, "all_alignments", []) or []:
+            all_taxa.extend(alignment.taxa_names)
+        assessments = ConflictDetector.assess(
+            config.calibrations,
+            settings=getattr(config, "diagnostics", None),
+            all_taxa=sorted(set(all_taxa)) or None,
         )
+        conflicts = [conflict for assessment in assessments for conflict in assessment.conflicts]
 
         # 3. Sensitivity analysis
         sensitivity_xmls: List[str] = []
@@ -983,6 +1433,7 @@ class DiagnosticEngine:
             config=config,
             conflicts=conflicts,
             summaries=summaries,
+            assessments=assessments,
             sensitivity_xmls=sensitivity_xmls,
             visualization_file=viz_file,
             visualization_error=viz_error,

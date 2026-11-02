@@ -18,6 +18,7 @@ htmlcov/
 .mimosa/
 .probe_tmp/
 .v2c/
+_scratch/
 .video_agent/
 
 # OS / editor noise

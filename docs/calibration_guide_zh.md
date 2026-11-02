@@ -35,15 +35,15 @@ calibrations:
     taxa: ["Homo_sapiens", "Pan"]
     distribution:
       type: "lognormal"
-      parameters: {M: 0.35, S: 0.4}
-      offset: 6.5
+      parameters: {M: 0.2, S: 0.35}
+      offset: 5.0
     provenance:
-      source: "fossil"           # fossil / biogeographic / secondary / other
-      reference: "DOI:10.1038/nature12323"
+      source: "other"            # fossil / biogeographic / secondary / other
+      reference: "Synthetic example data; no publication source"
       calibration_type: "soft"    # soft / hard
-      original_age_min: 7.0
-      original_age_max: 9.5
-      notes: "Sahelanthropus tchadensis, Toros-Menalla 7.24 Ma; soft minimum"
+      original_age_min: 5.0
+      original_age_max: 6.0
+      notes: "Synthetic example calibration; values are illustrative only"
 ```
 
 `provenance` 恰好接受 `source`、`reference`、`calibration_type`、`original_age_min`、`original_age_max` 与 `notes` 六个键，解析阶段会拒绝其他任何键；`original_age_min` 不得大于 `original_age_max`。
@@ -52,8 +52,8 @@ calibrations:
 
 使用 `diagnose` 命令检测：
 
-- **时间不一致**：嵌套 clade 的父节点比子节点更年轻。父 clade 的 HPD 上界比子 clade 的 HPD 下界更年轻时判为错误，只有均值冲突时判为警告。根校准（`taxa: null`）充当其余每个 clade 的父节点参与比较
-- **分布重叠**：两个非嵌套校准的先验几乎可以互换。默认判据是**无量纲的**：两个先验之间的 1-Wasserstein 距离，除以它们 95% 区间的平均宽度，低于 `0.15` 时告警。固定距离会随节点深度增长，因此在浅节点上容易触发，在深节点上几乎不会触发。旧有的绝对判据（Wasserstein 距离低于 `2.0` 个时间单位）仍然可用：把同一 `diagnostics` 段里的 `overlap_measure` 设为 `absolute`（或 `both`），并用 `overlap_threshold` / `relative_overlap_threshold` 调整切点。`OneOnX` 没有定义的均值与区间，重叠检查会跳过它
+- **时间不一致**：嵌套配对中父节点先验**整体**比子节点先验更年轻。只有当父 clade 的 HPD 上界比子 clade 的 HPD 下界更年轻时才判为错误；区间重叠时不报告，包括父节点均值比子节点更年轻的场合——长尾的柔性父先验均值更年轻仍可能完全兼容。根校准（`taxa: null`）充当其余每个 clade 的父节点参与比较
+- **先验相似度（描述性，默认关闭）**：两个独立支系完全可以有相似的年龄先验。若显式开启 `diagnostics.prior_similarity` 并给出 `similarity_threshold`，工具会返回严重度 `info` 的 `prior_similarity` 条目；它不给出合并建议，也不阻断 Gate 2。`OneOnX` 没有定义的均值与区间，涉及它的配对报告为 unchecked。
 - **单系性冲突**：有交集但不嵌套的分类子集
 
 同一套冲突检测会作为 `generate` 与 `quick` 的闸门 2 自动运行：出现 `error` 级别的冲突时，闸门不写出任何文件，命令以非零码退出。
@@ -66,7 +66,7 @@ calibrations:
 beast2py diagnose --config config.yaml --report report.html --sensitivity
 ```
 
-此命令生成 N+1 个仅先验采样 XML（N 为校准点数量）：一个包含完整校准集，外加 N 个留一法版本。它们落在 `<报告目录>/diagnostics/sensitivity/` 下，或落在 `--sensitivity-xml-dir` 所指目录的 `sensitivity/` 子目录里。用 BEAST2 运行每个 XML，然后比较树高的后验。短链即可：1,000,000 代，即 `mcmc.chain_length: 1000000`。
+此命令生成 N+1 个仅先验采样 XML（N 为校准点数量）：一个包含完整校准集，外加 N 个留一法版本。它们落在 `<报告目录>/diagnostics/sensitivity/` 下，或落在 `--sensitivity-xml-dir` 所指目录的 `sensitivity/` 子目录里。用 BEAST2 运行每个 XML，然后比较完整运行与各留一法运行的树高及校准节点年龄。这些链从先验采样，因此该比较针对的是每组校准所产生的**有效边缘先验**；其中不涉及似然，故与后验无关。链长、抽样间隔与 burn-in 需自行设定，并在运行前确定 ESS 判据、随结果一并报告——仅先验运行既不自动很快，也不自动收敛。
 
 ## 常见陷阱
 
