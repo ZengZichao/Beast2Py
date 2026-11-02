@@ -383,6 +383,11 @@ class TestDisclosedDefectRegistry:
                 ["git", "tag", "-l"], cwd=str(REPO), capture_output=True, text=True
             ).stdout.splitlines()
         }
+        if not tags:
+            pytest.skip(
+                "git tags are not available in this checkout; the Release workflow "
+                "fetches tags and enforces the fixed_in versions"
+            )
         for entry in DISCLOSED_DEFECTS:
             assert entry["fixed_in"] in tags, (entry["id"], entry["fixed_in"], sorted(tags))
 

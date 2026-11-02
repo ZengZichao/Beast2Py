@@ -80,6 +80,11 @@ jobs:
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The disclosed-defect audit asserts every fixed_in version has a
+          # release tag. PR checkouts do not fetch tags, so that audit skips
+          # there; the release gate must fetch them and run it for real.
+          fetch-depth: 0
 
       - uses: actions/setup-python@v7
         with:
