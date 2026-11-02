@@ -22,8 +22,8 @@ metadata:
   analysis_description: "Nested sampling for marginal likelihood estimation"
   author: "Beast2Py"
   date: "2026-08-01"
-  beast2_version: "2.7.8"
-  tool_version: "0.1.2"
+  beast2_version: "2.7.7"
+  tool_version: "0.2.0"
 
 alignments:
   - id: "alignment"
@@ -51,22 +51,22 @@ tree_prior:
 
 calibrations:
   # Crown Primates (Lemur_catta vs the rest of this alignment).  A Normal(25, 3)
-  # root would be ~40 Ma too young; secondary calibration instead.
-  # uniform[55, 75] -> median 65.0, 95% HPD [55, 75].
+  # root would be too young; a synthetic root calibration is used instead.
+  # exponential(mean=2.5) offset 50.0; illustrative only.
   - name: "primateRoot"
     taxa: null
     monophyletic: true
     distribution:
-      type: "uniform"
-      parameters: {lower: 55.0, upper: 75.0}
-    use_originate: true
+      type: "exponential"
+      parameters: {mean: 2.5}
+      offset: 50.0
     provenance:
-      source: "secondary"
-      reference: "TimeTree of Life, crown-Primates estimates (https://www.timetree.org)"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
-      original_age_min: 55.0
-      original_age_max: 75.0
-      notes: "Secondary calibration from published divergence-time estimates"
+      original_age_min: 50.0
+      original_age_max: 60.0
+      notes: "Synthetic calibration card for the primateRoot example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in Ma and exist only to exercise the provenance fields, XML generation and diagnostics."
 
 # --- Nested Sampling MCMC ---
 mcmc:

@@ -11,12 +11,13 @@
 #   后验。解析器现在拒绝两个 partition 指向同一个 file-backed alignment。
 # * 这里 site model 与 clock 都用 linked_to 链接到 codon12（"全链接"写法）；
 #   只链接时钟、不链接取代模型的场景见 config_multi_partition.yaml。
-# * hyperpriors：Normal 校准的 sigma 本身作为待估参数，给它一个 LogNormal 先验。
-#   键名必须是该分布**真实存在**的参数名（normal -> mean/sigma），否则会报错。
-# * 根校准：uniform[20,40] 对这份比对太年轻——它的根是 Strepsirrhini vs
-#   Haplorhini（Lemur_catta vs 其余），约 65 Ma。改成 uniform[55,75] 后，
-#   三个校准按嵌套次序 Hominina [7.0,9.3] < Hominidae [13.0,17.4] <
-#   root [55,75] 不再互相打架。
+# * hyperpriors：lognormal 校准的 S（对数尺度形状参数）本身作为待估参数，
+#   给它一个 LogNormal(median 0.4, S=0.3) 先验。
+#   键名必须是该分布**真实存在**的参数名（lognormal -> M/S），否则会报错。
+# * 根校准：过小的根年龄对这份比对不合适——它的根是 Strepsirrhini vs
+#   Haplorhini（Lemur_catta vs 其余）。三个虚拟校准演示嵌套次序：
+#   exponential mean 2.5 offset 50.0；区间依次为 Hominina 5-6 Ma、
+#   Hominidae 10-20 Ma、root 50-60 Ma。
 # ============================================================
 
 metadata:
@@ -24,8 +25,8 @@ metadata:
   analysis_description: "Advanced multi-partition analysis with UCLN clock and multiple calibrations"
   author: "Beast2Py"
   date: "2026-08-01"
-  beast2_version: "2.7.8"
-  tool_version: "0.1.2"
+  beast2_version: "2.7.7"
+  tool_version: "0.2.0"
 
 # --- 序列数据（母本比对 + 两个互不相交的密码子分区） ---
 alignments:
@@ -91,53 +92,51 @@ calibrations:
     taxa: ["Homo_sapiens", "Pan"]
     monophyletic: true
     distribution:
-      type: "normal"
-      parameters: {mean: 8.0, sigma: 0.8}
-      # sigma 的超先验：sigma 作为待估参数，其自身服从 LogNormal 先验
+      type: "lognormal"
+      parameters: {M: 0.2, S: 0.35}
+      offset: 5.0
+      # sigma 的超先验演示：这里估计 lognormal 的 S（对数尺度形状参数），
+      # 其自身服从 LogNormal(median 0.4, S=0.3)。键名必须是该分布真实存在的
+      # 参数名（lognormal -> M/S），否则解析期报错。
       hyperpriors:
-        sigma:
+        S:
           type: "lognormal"
-          parameters: {M: 0.0, S: 0.5}
+          parameters: {M: -0.916, S: 0.3}
     provenance:
-      source: "fossil"
-      reference: "placeholder — no source consulted; replace with the reference you used"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
-      original_age_min: 7.0
-      original_age_max: 9.5
-      notes: "illustrative input, not a published age: Sahelanthropus tchadensis soft; the prior's 95% HPD [6.4, 9.6] stays above it only softly"
-
-  # lognormal(M=1.0, S=0.4) offset 12 -> median 14.7, 95% HPD [13.0, 17.4]
+      original_age_min: 5.0
+      original_age_max: 6.0
+      notes: "Synthetic calibration card for the homininaMRCA example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in Ma and exist only to exercise the provenance fields, XML generation and diagnostics."
   - name: "hominidaeMRCA"
     taxa: ["Homo_sapiens", "Pan", "Gorilla", "Pongo"]
     monophyletic: true
     distribution:
-      type: "lognormal"
-      parameters: {M: 1.0, S: 0.4, mean_in_real_space: false}
-      offset: 12.0
+      type: "exponential"
+      parameters: {mean: 2.0}
+      offset: 10.0
     provenance:
-      source: "fossil"
-      reference: "placeholder — no source consulted; replace with the reference you used"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
-      original_age_min: 12.5
-      original_age_max: 17.5
-      notes: "Sivapithecus / late-Miocene hominoid record; 12 Ma offset = hard floor"
-
-  # uniform[55, 75] -> median 65.0 (see the note above: 20-40 Ma is six times
-  # too young for the strepsirrhine/haplorhine split).
+      original_age_min: 10.0
+      original_age_max: 20.0
+      notes: "Synthetic calibration card for the hominidaeMRCA example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in Ma and exist only to exercise the provenance fields, XML generation and diagnostics."
   - name: "primateRoot"
     taxa: null
     monophyletic: true
     distribution:
-      type: "uniform"
-      parameters: {lower: 55.0, upper: 75.0}
-    use_originate: true
+      type: "exponential"
+      parameters: {mean: 2.5}
+      offset: 50.0
     provenance:
-      source: "secondary"
-      reference: "placeholder — no source consulted; replace with the reference you used"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
-      original_age_min: 55.0
-      original_age_max: 75.0
-      notes: "Secondary calibration from a published primate divergence-time estimate"
+      original_age_min: 50.0
+      original_age_max: 60.0
+      notes: "Synthetic calibration card for the primateRoot example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in Ma and exist only to exercise the provenance fields, XML generation and diagnostics."
 
 # --- 参数先验 ---
 # These name the *derived* state nodes of the BirthDeathGernhard08Model
@@ -154,15 +153,18 @@ parameter_priors:
       type: "uniform"
       parameters: {lower: 0.0, upper: 1.0}
 
-# --- 诊断阈值（beast2py diagnose / generate 的第 2 道闸门） ---
-# overlap_measure: relative (default) | absolute | both.  The relative measure
-# divides the 1-Wasserstein distance of two prior densities by the mean width
-# of their 95% intervals, so it does not flag every pair of shallow nodes just
-# because deep nodes are far apart in absolute time.
+# --- 诊断设置（beast2py diagnose / generate 的第 2 道闸门） ---
+# 结构性冲突（同一节点、嵌套时间顺序、相交非嵌套拓扑）始终检查并可能阻断；
+# prior_similarity 是**非诊断性**描述，默认关闭。若要查看两个先验的密度相似度，
+# 必须显式给出阈值，例如：
+#   prior_similarity: true
+#   similarity_measure: "relative"   # relative | absolute | both
+#   similarity_threshold: 0.05       # 纯占位写法示例；该数值未经灵敏度/特异度标定，采用前须自行论证
+# 该输出不会建议合并校准，也不参与 Gate 2 阻断。strict_distributions: true 会把
+# Beta(无 offset)/Poisson/OneOnX 等不适用于连续节点年龄的分布升级为错误。
 diagnostics:
-  overlap_measure: "both"
-  overlap_threshold: 2.0
-  relative_overlap_threshold: 0.15
+  prior_similarity: false
+  strict_distributions: false
 
 # --- MCMC ---
 mcmc:

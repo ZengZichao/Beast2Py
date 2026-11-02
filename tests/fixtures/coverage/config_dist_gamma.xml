@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<beast version="2.0" namespace="beast.base.evolution.alignment:beast.base.evolution.speciation:beast.pkgmgmt:beast.base.core:beast.base.inference:beast.base.evolution.tree.coalescent:beast.base.evolution.tree:beast.base.evolution.likelihood:beast.base.inference.distribution:beast.base.evolution.operator:beast.base.inference.operator:beast.base.evolution.sitemodel:beast.base.evolution.substitutionmodel:beast.base.evolution.branchratemodel:beast.base.inference.parameter:beast.base.math:beast.base.util">
+    <!-- Analysis Fingerprint: B2P-b3ff1bf78756-0.2.0 | Data: ee3d79cfef50e08b -->
+    <data id="alignment" dataType="nucleotide">
+        <sequence taxon="taxonA">ACGTACGTACGTACGTTTTGCAAGGCATCGATCGGG</sequence>
+        <sequence taxon="taxonB">ACGTACGTACGTAAGTTTTGCAAGGCATCGATCGGA</sequence>
+        <sequence taxon="taxonC">ACGAACGTACGTAAGTTTTGCAAGGCATCGATCGGG</sequence>
+        <sequence taxon="taxonD">ACGAACGTACGTAAGTTTTGCAAGGCATCGATCGGA</sequence>
+    </data>
+    <distribution id="posterior" spec="CompoundDistribution">
+        <distribution id="prior" spec="CompoundDistribution">
+            <distribution id="yule" spec="beast.base.evolution.speciation.YuleModel" tree="@tree">
+                <parameter name="birthDiffRate" idref="birthRate"/>
+            </distribution>
+            <distribution id="rootCal" spec="beast.base.evolution.tree.MRCAPrior" tree="@tree" monophyletic="true">
+                <taxonset spec="TaxonSet" id="rootCal.taxonset" alignment="@alignment"/>
+                <distr spec="beast.base.inference.distribution.Gamma" id="rootCal.distr" offset="1.0">
+                    <parameter name="alpha" value="2.0"/>
+                    <parameter name="beta" value="1.0"/>
+                </distr>
+            </distribution>
+            <distribution id="birthRate.prior" spec="beast.base.inference.distribution.Prior" x="@birthRate">
+                <distr spec="beast.base.inference.distribution.LogNormalDistributionModel" id="birthRate.distr">
+                    <parameter name="M" value="0.0"/>
+                    <parameter name="S" value="2.0"/>
+                </distr>
+            </distribution>
+            <distribution id="alignment.hky.kappa.prior" spec="beast.base.inference.distribution.Prior" x="@alignment.hky.kappa">
+                <distr spec="beast.base.inference.distribution.LogNormalDistributionModel" id="alignment.hky.kappa.distr">
+                    <parameter name="M" value="0.693147"/>
+                    <parameter name="S" value="2.0"/>
+                </distr>
+            </distribution>
+            <distribution id="alignment.freqParameter.prior" spec="beast.base.inference.distribution.Prior" x="@alignment.freqParameter">
+                <distr spec="beast.base.inference.distribution.Uniform" id="alignment.freqParameter.distr" lower="0.0" upper="1.0"/>
+            </distribution>
+            <distribution id="alignment.clockRate.prior" spec="beast.base.inference.distribution.Prior" x="@alignment.clockRate">
+                <distr spec="beast.base.inference.distribution.LogNormalDistributionModel" id="alignment.clockRate.distr">
+                    <parameter name="M" value="-4.60517"/>
+                    <parameter name="S" value="2.0"/>
+                </distr>
+            </distribution>
+        </distribution>
+        <distribution id="likelihood" spec="CompoundDistribution">
+            <distribution id="alignment.treeLikelihood" spec="TreeLikelihood" data="@alignment" tree="@tree">
+                <siteModel id="alignment.siteModel" spec="SiteModel" gammaCategoryCount="0">
+                    <substModel spec="HKY" id="alignment.hky" kappa="@alignment.hky.kappa">
+                        <frequencies id="alignment.freqs" spec="Frequencies" frequencies="@alignment.freqParameter"/>
+                    </substModel>
+                </siteModel>
+                <branchRateModel id="alignment.clockModel" spec="beast.base.evolution.branchratemodel.StrictClockModel">
+                    <parameter idref="alignment.clockRate" name="clock.rate"/>
+                </branchRateModel>
+            </distribution>
+        </distribution>
+    </distribution>
+    <run id="mcmc" spec="MCMC" chainLength="10000" preBurnin="0" storeEvery="100">
+        <init spec="beast.base.evolution.tree.coalescent.RandomTree" id="randomTree" initial="@tree" taxa="@alignment" rootHeight="4.5">
+            <populationModel spec="ConstantPopulation">
+                <parameter name="popSize" value="1"/>
+            </populationModel>
+            <constraint idref="rootCal"/>
+        </init>
+        <state id="state" storeEvery="100">
+            <tree id="tree" name="stateNode" estimate="true">
+                <taxonset id="tree.taxonset" spec="TaxonSet" alignment="@alignment"/>
+            </tree>
+            <parameter id="birthRate" name="stateNode" value="1" dimension="1" estimate="true" lower="0"/>
+            <parameter id="alignment.hky.kappa" name="stateNode" value="2" dimension="1" estimate="true" lower="0"/>
+            <parameter id="alignment.freqParameter" name="stateNode" value="0.25 0.25 0.25 0.25" dimension="4" estimate="true" lower="0" upper="1"/>
+            <parameter id="alignment.clockRate" name="stateNode" value="0.01" dimension="1" estimate="true" lower="0"/>
+        </state>
+        <distribution idref="posterior"/>
+        <operator id="treeScaler" spec="ScaleOperator" scaleFactor="0.75" weight="3.0" tree="@tree"/>
+        <operator spec="beast.base.evolution.operator.Uniform" weight="30.0" tree="@tree"/>
+        <operator spec="SubtreeSlide" weight="15.0" gaussian="true" size="1.7" tree="@tree"/>
+        <operator id="narrow" spec="Exchange" isNarrow="true" weight="15.0" tree="@tree"/>
+        <operator id="wide" spec="Exchange" isNarrow="false" weight="3.0" tree="@tree"/>
+        <operator spec="WilsonBalding" weight="1.0" tree="@tree"/>
+        <operator spec="UpDownOperator" scaleFactor="0.75" weight="3.0" down="@tree" up="@alignment.clockRate"/>
+        <operator id="alignment.kappaScaler" spec="ScaleOperator" scaleFactor="0.75" weight="0.1" parameter="@alignment.hky.kappa"/>
+        <operator id="alignment.frequenciesDelta" spec="DeltaExchangeOperator" delta="0.01" weight="0.1" parameter="@alignment.freqParameter"/>
+        <operator id="alignment.clockRateScaler" spec="ScaleOperator" scaleFactor="0.75" weight="1.0" parameter="@alignment.clockRate"/>
+        <operator spec="ScaleOperator" weight="1.0" scaleFactor="0.25">
+            <parameter idref="birthRate"/>
+        </operator>
+        <logger id="tracelog" fileName="config_dist_gamma.$(seed).log" logEvery="100" mode="autodetect" model="@posterior">
+            <log idref="posterior"/>
+            <log idref="prior"/>
+            <log idref="likelihood"/>
+            <log id="treeHeight" spec="beast.base.evolution.tree.TreeHeightLogger" tree="@tree"/>
+            <log spec="beast.base.evolution.tree.MRCAPrior" tree="@tree" id="rootCal.age" taxonset="@rootCal.taxonset"/>
+            <parameter idref="birthRate" name="log"/>
+            <parameter idref="alignment.hky.kappa" name="log"/>
+            <parameter idref="alignment.freqParameter" name="log"/>
+            <parameter idref="alignment.clockRate" name="log"/>
+        </logger>
+        <logger id="treelog" fileName="config_dist_gamma.$(seed).trees" logEvery="100" mode="tree">
+            <log idref="tree"/>
+        </logger>
+        <logger id="screenlog" logEvery="1000" mode="autodetect" model="@posterior">
+            <log idref="posterior"/>
+            <log idref="prior"/>
+            <log idref="likelihood"/>
+        </logger>
+    </run>
+</beast>

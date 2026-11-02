@@ -12,6 +12,7 @@ Each test locks a defect that must not silently return:
   documented commands a reader is told to run.
 """
 
+import argparse
 import json
 import math
 import pathlib
@@ -1032,3 +1033,258 @@ class TestPublicSurface:
             "the protein model must be present in either output, so this comparison cannot "
             "pass by both sides being equally wrong"
         )
+
+
+class TestDocumentedCountsAndProvenance:
+    """Two audit findings that were fixes in one place and stale in another.
+
+    Issue 9.8/11.5: the manuscript and the READMEs had to state the count the
+    frozen tag actually collects — the README still said 395 long after the suite
+    grew. A number nobody recomputes drifts the moment a test is added, so the
+    guard recomputes it here instead of trusting the prose.
+
+    Issue 8.8: the placeholder/DOI check lived only in the submission bundle's
+    own ``verify.py``, so day-to-day development and a new tag never ran it. It
+    belongs in the suite, where CI can fail on it.
+    """
+
+    def _collect(self, *paths):
+        import subprocess
+
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                *paths,
+                "--collect-only",
+                "-q",
+                "-p",
+                "no:cacheprovider",
+            ],
+            cwd=str(REPO),
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        match = re.search(r"(\d+) tests? collected", proc.stdout)
+        assert match, proc.stdout[-2000:]
+        return int(match.group(1))
+
+    def test_readme_test_counts_match_the_collected_suite(self):
+        total = self._collect("tests")
+        integration = self._collect("tests/test_beast2_validation.py")
+        unit = total - integration
+
+        claims = []
+        english = (REPO / "README.md").read_text(encoding="utf-8")
+        claims += [
+            (match.group(0), int(match.group(1)), int(match.group(2)))
+            for match in re.finditer(r"(\d+) collected tests: (\d+) unit", english)
+        ]
+        claims += [
+            (match.group(0), int(match.group(1)), int(match.group(2)))
+            for match in re.finditer(r"comprises (\d+) collected tests \((\d+) unit", english)
+        ]
+        chinese = (REPO / "README_zh.md").read_text(encoding="utf-8")
+        claims += [
+            (match.group(0), int(match.group(1)), int(match.group(2)))
+            for match in re.finditer(r"收集 (\d+) 个测试：(\d+) 个单元", chinese)
+        ]
+        claims += [
+            (match.group(0), int(match.group(1)), int(match.group(2)))
+            for match in re.finditer(r"收集 (\d+) 个测试（(\d+) 个单元", chinese)
+        ]
+        assert claims, "the READMEs no longer state a test count at all"
+        for text, claimed_total, claimed_unit in claims:
+            assert claimed_total == total, (
+                f"README claims {claimed_total} collected tests but the suite "
+                f"collects {total}; said in: {text!r}"
+            )
+            assert claimed_unit == unit, (
+                f"README claims {claimed_unit} non-integration tests but "
+                f"{total} - {integration} = {unit}; said in: {text!r}"
+            )
+
+    def test_no_stale_test_count_number_lingers_in_the_docs(self):
+        # 360/339/395/374 were counts of earlier tags. Naming them again anywhere
+        # in the docs is how a reader gets pointed at a version they are not
+        # looking at.
+        total = self._collect("tests")
+        stale = {360, 339, 395, 374, 447} - {total, total - 21}
+        texts = {
+            "README.md": (REPO / "README.md").read_text(encoding="utf-8"),
+            "README_zh.md": (REPO / "README_zh.md").read_text(encoding="utf-8"),
+            "CHANGELOG.md": (REPO / "CHANGELOG.md").read_text(encoding="utf-8"),
+        }
+        for name, text in texts.items():
+            for match in re.finditer(r"\b(\d{3,4}) (collected tests|个测试|tests\b)", text):
+                count = int(match.group(1))
+                if (
+                    count in stale
+                    and "v0.1" not in text[max(0, match.start() - 120) : match.start()]
+                ):
+                    raise AssertionError(
+                        f"{name} states {count} tests near "
+                        f"{match.group(0)!r}; the suite collects {total}"
+                    )
+
+    def test_formal_examples_are_explicitly_synthetic(self):
+        literature_tokens = (
+            "Lebatard",
+            "Benton",
+            "Kappelman",
+            "de Vries",
+            "Brunet",
+            "Saladin",
+            "dos Reis",
+        )
+        for path in sorted(EXAMPLES.glob("*.yaml")):
+            text = path.read_text(encoding="utf-8")
+            for token in ("TBD", "placeholder", "no source consulted", "TODO"):
+                assert token not in text, f"{path.name} still carries {token!r}"
+            assert "doi:" not in text.lower(), (
+                f"{path.name} still cites a DOI; formal examples must not "
+                "redistribute literature-derived calibration data"
+            )
+            for token in literature_tokens:
+                assert token not in text, (
+                    f"{path.name} still names {token!r}; formal examples must "
+                    "contain only synthetic data"
+                )
+
+    def test_every_formal_example_calibration_carries_a_synthetic_card(self):
+        import yaml
+
+        from beast2py.config import ConfigParser
+
+        required = {"source", "reference", "calibration_type", "notes"}
+        for path in sorted(EXAMPLES.glob("*.yaml")):
+            document = yaml.safe_load(path.read_text(encoding="utf-8"))
+            calibrations = (
+                document
+                if isinstance(document, list)
+                else (document or {}).get("calibrations") or []
+            )
+            for calibration in calibrations:
+                card = calibration.get("provenance")
+                assert isinstance(card, dict), (
+                    f"{path.name}: calibration {calibration.get('name')!r} has "
+                    "no provenance card; an example without a source is a "
+                    "teaching template, not a worked example"
+                )
+                assert required <= set(card), (
+                    f"{path.name}/{calibration.get('name')}: provenance is "
+                    f"missing {sorted(required - set(card))}"
+                )
+                assert card["source"] in ConfigParser.VALID_PROVENANCE_SOURCES
+                assert card["calibration_type"] in ConfigParser.VALID_CALIBRATION_TYPES
+                assert card["source"] == "other", (
+                    f"{path.name}/{calibration.get('name')}: formal examples "
+                    "must declare synthetic provenance with source 'other'"
+                )
+                reference = card["reference"]
+                assert reference.startswith("Synthetic example data"), (
+                    f"{path.name}/{calibration.get('name')}: reference is not "
+                    f"marked synthetic: {reference[:80]!r}"
+                )
+                assert "doi:" not in reference.lower() and "http" not in reference.lower(), (
+                    f"{path.name}/{calibration.get('name')}: synthetic reference "
+                    f"must not cite a real identifier: {reference[:80]!r}"
+                )
+                assert len(card["notes"]) >= 120, (
+                    f"{path.name}/{calibration.get('name')}: notes too short to "
+                    "explain that the boundary is synthetic"
+                )
+
+    def test_the_trace_reader_is_reachable_from_the_cli_it_documents(self):
+        # The command exists so the figure numbers are recomputable; a parser
+        # that lost it would leave the archive script as the only way to read a
+        # trace, which is the state the review called out.
+        parser_help = self._parser_help()
+        assert "prior-summary" in parser_help
+
+    @staticmethod
+    def _parser_help():
+        import io
+
+        from beast2py.main import build_parser
+
+        parser = build_parser()
+        buffer = io.StringIO()
+        parser.print_help(buffer)
+        subparsers = next(
+            action for action in parser._actions if isinstance(action, argparse._SubParsersAction)
+        )
+        for name, sub in subparsers.choices.items():
+            sub.print_help(buffer)
+        return buffer.getvalue()
+
+
+class TestReleaseWorkflowGate:
+    """A tag push may not publish without the suite and Gate 3 having passed.
+
+    The release path used to check only that the four version strings agreed, so
+    a failing test or a skipped BEAST2 gate could not stop a publication. The
+    review made "a CI failure blocks the release" a release condition, and a
+    workflow file is documentation the suite can read: this pins it.
+    """
+
+    RELEASE = REPO / ".github" / "workflows" / "release.yml"
+    CI = REPO / ".github" / "workflows" / "ci.yml"
+    ACTION = REPO / ".github" / "actions" / "setup-beast2" / "action.yml"
+
+    def _jobs(self, text):
+        import yaml
+
+        document = yaml.safe_load(text)
+        # PyYAML reads the bare `on:` key as True; normalise like the workflow
+        # validator does, or the jobs block looks fine and the trigger vanishes.
+        return document["jobs"]
+
+    def test_build_waits_for_a_job_that_runs_the_suite(self):
+        text = self.RELEASE.read_text(encoding="utf-8")
+        jobs = self._jobs(text)
+        needs = jobs["build"].get("needs")
+        needs = [needs] if isinstance(needs, str) else list(needs or [])
+        assert "test" in needs, (
+            "the build job must depend on a job that runs the tests; it needs " f"{needs}"
+        )
+        running = [step for step in jobs["test"]["steps"] if "pytest" in str(step.get("run", ""))]
+        assert running, "the gating job installs nothing it then runs"
+
+    def test_the_release_gate_requires_beast2_rather_than_skipping_it(self):
+        text = self.RELEASE.read_text(encoding="utf-8")
+        assert "setup-beast2" in text, (
+            "the release gate must install a BEAST2 runtime, or Gate 3 is a "
+            "silent skip dressed up as a pass"
+        )
+        assert "Refuse a release whose Gate 3 was skipped" in text
+        jobs = self._jobs(text)
+        gate = jobs["test"]["steps"][-1]["run"]
+        assert "SKIPPED" in gate and "exit 1" in gate
+
+    def test_ci_and_release_share_one_beast2_install(self):
+        """The install is one file, not two copies that can drift apart."""
+        import yaml
+
+        assert self.ACTION.is_file(), "the BEAST2 setup moved out of the workflows; where is it?"
+        action = yaml.safe_load(self.ACTION.read_text(encoding="utf-8"))
+        steps = " ".join(str(step) for step in action["runs"]["steps"])
+        assert "BEAST.v2.7.7.Linux.x86.tgz" in steps
+        for workflow in (self.CI, self.RELEASE):
+            assert "uses: ./.github/actions/setup-beast2" in workflow.read_text(
+                encoding="utf-8"
+            ), workflow.name
+
+    def test_the_action_is_valid_as_a_composite_action(self):
+        import yaml
+
+        action = yaml.safe_load(self.ACTION.read_text(encoding="utf-8"))
+        assert action["runs"]["using"] == "composite"
+        assert {"name", "description", "inputs"} <= set(action)
+        for step in action["runs"]["steps"]:
+            assert ("uses" in step) != ("run" in step), step
+            if "run" in step:
+                assert step.get("shell"), f"composite steps must name a shell: {step['name']}"

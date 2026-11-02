@@ -1,6 +1,6 @@
 # Beast2Py 使用手册
 
-- **版本：** 0.1.2
+- **版本：** 0.2.0
 - **作者：** 曾子超 (Zichao Zeng) · [ORCID: 0000-0001-6553-970X](https://orcid.org/0000-0001-6553-970X)
 - **日期：** 2026 年
 
@@ -48,7 +48,7 @@ Beast2Py 从 YAML 配置生成完整的 BEAST2 XML，支持的模型包括：
 
 该工具支持多 partition 分析（含密码子分区），并可在各 partition 之间链接或解链模型（link/unlink）。
 
-诊断方面，Beast2Py 提供自动化校准冲突检测（时间一致性、分布重叠、单系性冲突）和先验敏感性分析（留一法 XML 生成）。此外，工具还支持校准分布可视化、分析指纹、方法学描述自动生成，以及 Snakemake/Nextflow 管道文件生成。
+诊断方面，Beast2Py 提供结构化的校准诊断（同一节点矛盾、嵌套时间顺序、相交非嵌套单系，并显式报告 unchecked 配对）和先验敏感性分析（留一法 XML 生成）。此外，工具还支持校准分布可视化、分析指纹、方法学描述自动生成，以及 Snakemake/Nextflow 管道文件生成。
 
 以下两条性质贯穿本手册的所有小节。
 
@@ -131,14 +131,14 @@ pip install -e ".[xml]"
 ```bash
 # 检查版本
 beast2py --version
-# 输出: Beast2Py v0.1.2
+# 输出: Beast2Py v0.2.0
 
 # 列出支持的模型
 beast2py list-models
 
 # 验证 Python API
 python3 -c "import beast2py; print(beast2py.__version__)"
-# 输出: 0.1.2
+# 输出: 0.2.0
 ```
 
 未安装时，在克隆出的仓库根目录下，所有命令都可以改用 `python3 -m beast2py.main <子命令>` 运行。两种形式走的是同一个入口（`[project.scripts] beast2py = "beast2py.main:main"`）。
@@ -501,8 +501,8 @@ beast2py quick \
     type: "normal"
     parameters: {mean: 6.0, sigma: 0.5}
   provenance:
-    source: "fossil"
-    reference: "DOI:10.1038/nature12323"
+    source: "other"
+    reference: "Synthetic example data; no publication source"
     calibration_type: "soft"
 
 - name: "rootCalibration"
@@ -630,27 +630,27 @@ beast2py fingerprint \
 | `--output` | `-o` | 否 | 仅输出到终端 | 输出 JSON 文件路径 |
 | `--verbose` | `-v` | 否 | False | 显示详细指纹信息 |
 
-**指纹格式：** `B2P-{配置哈希前 12 位}-{工具版本}`，例如 `B2P-69dba66a3570-0.1.2`。该标识符**不含日期与时区**，因此同一配置在同一比对数据上重跑，总能复现相同的字节与相同的标识符。12 个十六进制字符即 48 位摘要：按生日界估算，出现一次碰撞的概率达到 50% 需要 sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ 个不同分析——即约 2 × 10⁷，而不是开方捷径给出的 2**24 = 1.7 × 10⁷。它是变更检测令牌，不是全局唯一键。
+**指纹格式：** `B2P-{配置哈希前 12 位}-{工具版本}`，例如 `B2P-3f43bfab58c3-0.2.0`。该标识符**不含日期与时区**，因此同一配置在同一比对数据上重跑，总能复现相同的字节与相同的标识符。12 个十六进制字符即 48 位摘要：按生日界估算，出现一次碰撞的概率达到 50% 需要 sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ 个不同分析——即约 2 × 10⁷，而不是开方捷径给出的 2**24 = 1.7 × 10⁷。它是变更检测令牌，不是全局唯一键。
 
 **指纹 JSON 文件内容**（对 `examples/config_basic.yaml` 的实测输出）：
 
 ```json
 {
-  "fingerprint": "B2P-69dba66a3570-0.1.2",
-  "config_hash": "fe47b06592091a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
-  "full_hash": "fe47b06592091a1cececd91be75f2f617e0b151b1fa442aafba7ed6c1208e2ee",
-  "data_hash": "30be5613d3ff6862",
+  "fingerprint": "B2P-3f43bfab58c3-0.2.0",
+  "config_hash": "3f43bfab58c3181b58a4fce3b738a50c2a1e9d10cca476cae01a8177471a5cf8",
+  "full_hash": "3f43bfab58c3181b58a4fce3b738a50c2a1e9d10cca476cae01a8177471a5cf8",
+  "data_hash": "72a8314e0bde0640",
   "hash_bits": 48,
   "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% chance of one collision needs sqrt(2 * 2**48 * ln 2), about 1.98e+07 distinct analyses, so it is a change-detection token rather than a globally unique key.",
-  "tool_version": "0.1.2",
-  "beast2_version": "2.7.8",
-  "generation_time": "2026-09-29T18:01:17.890711",
+  "tool_version": "0.2.0",
+  "beast2_version": "2.7.7",
+  "generation_time": "2026-11-02T15:25:43.301130",
   "analysis_name": "primates_basic_calibration",
-  "xml_digest": "249cbe9b06a720943f5d8d79dca5ba9e5675983bb661449119521a2bcc8dcb2b"
+  "xml_digest": "9f7a2771775f9fcfdf59f419576ea866f048fce879484b9d96fbd95266323bc8"
 }
 ```
 
-上述 `generation_time` 是采集该样本的时刻；标识符本身不含时间成分，同一配置在同一比对数据上重跑总得到 `B2P-69dba66a3570-0.1.2`。
+上述 `generation_time` 是采集该样本的时刻；标识符本身不含时间成分，同一配置在同一比对数据上重跑总得到 `B2P-3f43bfab58c3-0.2.0`。
 
 `data_hash` 由每条比对内容的摘要再汇总而成，取前 16 位，会作为 `| Data: {hash16}` 附在 XML 的指纹注释里。`generation_time` **只**出现在这个侧车文件中；XML 本体带的是无时间戳的注释（见第 15.1 节）。
 
@@ -947,7 +947,7 @@ metadata:
   author: "你的名字"                     # 作者（可选）
   date: "2026-08-01"                    # 日期（可选）
   beast2_version: "2.7.8"              # BEAST2 版本（默认 2.7.8）
-  tool_version: "0.1.2"                # Beast2Py 版本（默认 0.1.2）
+  tool_version: "0.2.0"                # Beast2Py 版本（默认 0.2.0）
 
 # === 序列数据 ===
 alignments:
@@ -1012,12 +1012,12 @@ calibrations:
           parameters: {lower: 0.0, upper: 20.0}
     use_originate: false                # 是否使用 stem 节点（默认 false）
     provenance:                         # 来源元数据（可选）
-      source: "fossil"                  # 来源类型：fossil / biogeographic / secondary / other
-      reference: "DOI:10.1038/xxxxx"    # 参考文献 DOI 或 URL
+      source: "other"                   # 来源类型：fossil / biogeographic / secondary / other
+      reference: "Synthetic example data; no publication source"
       calibration_type: "soft"          # soft / hard
-      original_age_min: 5.5            # 原始最小年龄
-      original_age_max: 7.0            # 原始最大年龄
-      notes: "化石描述"
+      original_age_min: 5.0             # 原始最小年龄
+      original_age_max: 6.0             # 原始最大年龄
+      notes: "虚拟示例描述"
 
 # === 校准方法 ===
 calibration_method: "mrca_prior"        # mrca_prior / calibrated_yule（默认 mrca_prior）
@@ -1068,9 +1068,10 @@ operator_weights:
 
 # === 校准诊断设置（可选，供闸门 2 使用） ===
 diagnostics:
-  overlap_measure: "relative"           # relative（默认，无量纲）/ absolute / both
-  overlap_threshold: 2.0                # 绝对判据：Wasserstein 距离（时间单位）
-  relative_overlap_threshold: 0.15      # 无量纲判据：W / 两先验 95% 区间的平均宽度
+  prior_similarity: false               # 描述性报告；默认关闭
+  similarity_measure: "relative"        # relative / absolute / both
+  similarity_threshold: 0.05            # prior_similarity 为 true 时必填；未经标定，需自行选择并说明依据
+  strict_distributions: false           # true = 无 offset 的 Beta/Poisson/OneOnX 升级为错误
 
 # === 输出设置 ===
 output:
@@ -1448,12 +1449,12 @@ calibrations:
 
 ```yaml
 provenance:
-  source: "fossil"              # 来源类型：fossil / biogeographic / secondary / other
-  reference: "DOI:10.1038/xxx"  # 参考文献 DOI 或 URL
+  source: "other"               # 来源类型：fossil / biogeographic / secondary / other
+  reference: "Synthetic example data; no publication source"
   calibration_type: "soft"      # soft（软边界）/ hard（硬边界）
-  original_age_min: 5.5         # 原始化石最小年龄
-  original_age_max: 7.0         # 原始化石最大年龄
-  notes: "化石描述文字"          # 自由文本备注
+  original_age_min: 5.0         # 原始最小年龄
+  original_age_max: 6.0         # 原始最大年龄
+  notes: "虚拟示例描述"          # 自由文本说明
 ```
 
 **`original_age_min/max` 现在会与所用先验的 95% 区间交叉核对**（区间由工具自带的 `compute_distribution_stats` 计算，`offset` 已计入）：
@@ -1635,17 +1636,71 @@ tip_dates:
 
 ### 14.2 冲突检测
 
-冲突检测器分析校准点对，检测三类问题：
+冲突检测器分析校准点对，只依据拓扑与时间顺序判定三类结构问题：
 
-**时间一致性冲突：** 对于嵌套 clade（分类集合 A ⊂ B），检查父 clade（B）的校准时间是否比子 clade（A）更老。比较 95% HPD 区间：父 clade 的 HPD 上界比子 clade 的 HPD 下界更年轻时，报告错误（`error`）；只有父 clade 的均值比子 clade 的均值更年轻、而 HPD 区间仍有重叠时，报告警告（`warning`）。
+**同一节点冲突（`same_node`）：** 两个校准挂在同一节点上。同一 taxon set 上的相同分布是重复（warning）；同一节点上互不相交的区间是矛盾（error）；同一 taxon set 上的 crown 与 stem 校准是父子关系，因此按嵌套配对比较，而不是当作重复。
 
-**分布重叠警告：** 计算校准分布之间的 1-Wasserstein 距离（Earth Mover's Distance）。对于非嵌套的校准点对，距离过小就报告警告，提示可能存在信息冗余。**默认判据是无量纲的**——Wasserstein 距离除以两个先验 95% 区间的平均宽度，低于 `relative_overlap_threshold`（默认 0.15）时警告。绝对判据（距离低于 `overlap_threshold`，默认 2.0 个时间单位）需显式开启，因为固定距离是尺度相关的：它随节点深度增长，因此在单一阈值下，浅节点几乎一定会触发，深节点则永不触发。如何切换与调参见[第 14.9 节](#149-diagnostics-块)。
+**时间顺序检查（`temporal`）：** 对于严格嵌套的 taxon set（A 是 B 的真子集），先按 crown/stem 解析节点，再比较 95% 区间；父节点区间整体年轻于子节点区间时报告 `error`。区间重叠不构成矛盾，不报告——即便父节点均值更年轻也不报告：长尾的柔性父先验均值更年轻仍可能完全兼容，报告它只会造成误报。父节点为 crown、子节点为 stem 时无法由包含关系判定顺序，报告 `unchecked`。
 
-**单系性冲突：** 检测有交集但不嵌套的分类集合。若两个校准都强制单系约束，这样的拓扑就不可能存在，检测器报告错误。
+**单系性冲突（`topology`）：** 检测有交集但不嵌套的分类集合。若两个校准都强制单系约束，这样的拓扑就不可能存在，检测器报告错误。
+
+**先验相似度是描述性的，不是冲突。** 两个独立支系完全可以有相似的年龄先验；相似密度并不说明化石信息冗余，也不构成合并或删除校准的理由。因此该报告**默认关闭**。只有在显式给出 `similarity_threshold` 时，检测器才把低于阈值的配对列为 `prior_similarity`，严重度为 `info`；它不给出行动建议，也绝不阻断 Gate 2。工具不提供经过标定的默认阈值。见[第 14.9 节](#149-diagnostics-块)。
+
+#### Gate 2 判定什么、不能判定什么
+
+Gate 2 读的是配置而不是样本轨迹。`generate`、`quick`、`diagnose` 的输出与 HTML 报告都会打印这条边界，其唯一来源是 `beast2py/diagnostics.py` 中的 `DETECTABLE_CHECKS`、`NOT_DETECTABLE_CHECKS`、`PRIOR_LAYERS`：
+
+| Gate 2 能判定 | Gate 2 不能判定，因而"通过"并不排除以下各项 |
+| --- | --- |
+| 同一节点上互不相容或重复的一对校准 | 树先验、拓扑约束与其余校准造成的**有效边缘先验扭曲** |
+| 嵌套配对中父先验整体更年轻 | **后验主导**——判定它需要似然与配对的后验轨迹 |
+| 任何有根树都无法同时满足的单系声明集合 | **MCMC 不收敛**、混合不良、ESS 不足 |
+| 语义非法的组合（根 + originate、tipsonly + originate、超支撑集或非有限参数） | **数据不足以约束某节点**——这是比对与模型的性质 |
+
+表格所依据的四种分布彼此不同，各处使用同一名称：
+
+- **指定边缘先验**——YAML 里写下的分布，也是 Gate 2 唯一能看到的；
+- **有效边缘先验**——该节点在树先验、拓扑约束与其余校准共同作用后实际抽样的边缘分布，只能靠运行仅先验链观察（第 14.3 节）；
+- **联合有效先验**——两个及以上节点年龄的联合分布；一条轨迹的一列只是一个边缘，联合分布需要同一轨迹里的联合样本，而不是把各列边缘拼起来；
+- **后验**——似然作用之后的分布；Beast2Py 不带数据运行 MCMC，也不估计它。
+
+无法评估的配对计为 `unchecked`，绝不写成通过：统计量未定义的分布（`OneOnX`）、无法判定的 crown/stem 关系，或仅凭分类集合包含关系无法确定的单系交集。
 
 ### 14.3 敏感性分析
 
-敏感性分析器生成 N+1 个仅先验采样 XML（N 为校准点数量）：一个包含完整校准集的版本，以及 N 个留一法版本（逐个移除每个校准点）。用户用 BEAST2 运行这些短链 XML（100 万代即可），比较树高的后验分布，从而评估每个校准点的边际影响。（提示：仅先验采样本身是 BEAST2 的内置能力，对任意 XML 都可用 `beast -sampleFromPrior` 启用；敏感性分析器自动化的是 N+1 留一法设计。）这些文件落在报告 `diagnostics/` 目录下的 `sensitivity/` 子目录里；指定 `--sensitivity-xml-dir` 时，落在该目录的 `sensitivity/` 子目录里。
+敏感性分析器生成 N+1 个仅先验采样 XML（N 为校准点数量）：一个包含完整校准集的版本，以及 N 个留一法版本（逐个移除每个校准点）。用户用 BEAST2 运行这些 XML，比较完整运行与每个留一法运行的树高和各校准节点年龄分布。由于这些链是从先验采样，该比较衡量的是每个校准对**有效边缘先验**的影响，而不是对后验的影响：其中不涉及似然，因此不能用来证明后验主导。链长、抽样间隔、burn-in 与 ESS 判据需由用户在运行前设定并随结果报告，生成器不代替你决定运行长度。（提示：仅先验采样本身是 BEAST2 的内置能力，对任意 XML 都可用 `beast -sampleFromPrior` 启用；敏感性分析器自动化的是 N+1 留一法设计。）这些文件落在报告 `diagnostics/` 目录下的 `sensitivity/` 子目录里；指定 `--sensitivity-xml-dir` 时，落在该目录的 `sensitivity/` 子目录里。
+
+#### 把运行结果读回来：`prior-summary`
+
+生成的 XML 在运行之前只是一份设计。`prior-summary` 是与之配套的结果读取命令：它按**列名**（而非
+列序）解析 BEAST2 的 `.log` 文件，应用 burn-in，报告树高与各校准节点的位数、95% 最高密度区间与
+有效样本量；加上 `--reference` 后还会报告某个留一法场景相对完整校准集移动了多少，包括区间宽度比。
+
+```bash
+# 一个留一法场景对照完整校准集
+beast2py prior-summary \
+    --trace runs/without_cladeA/cladeA.log \
+    --reference runs/full_calibration/cladeA.log \
+    --column treeHeight --column cladeA \
+    --label without_cladeA \
+    --burn-in-fraction 0.1 --ess-min 200 --out results/without.tsv
+
+# 合并同一场景的两条独立链
+beast2py prior-summary --trace run1.log --trace run2.log --column treeHeight
+```
+
+它会拒绝什么，以及原因：
+
+- **缺失的列是错误，不是零。** 留一法运行不再记录被移除校准所对应节点的列（其 `MRCAPrior` 已从
+  XML 中删除），因此请求该列会以退出码 2 失败，而不是报出一个从未被抽到的数值；
+- **非数值单元格、残缺行、重复 sample id 都会让读取失败。** 重复 id 意味着两条链被串进了同一个
+  文件——请保持分开，并用重复的 `--trace` 传入；只有在列集合相同、长度相等时才会合并；
+- **低于 ESS 判据的行照样打印**，标注 `converged=False` 并给出警告。把难看的场景删掉，只会让
+  留一法图从验证变成挑选结果。
+
+相关算式在 `beast2py/trace.py`（`read_trace`、`effective_sample_size`、`hpd_interval`、
+`prior_shift`），留一法汇总表可以从原始日志重算；`tests/test_trace.py` 用虚拟轨迹验证该算术，
+因此不依赖任何随仓库分发的实证数据。该命令读取的是仅先验边缘分布：它不估计任何后验，输出里也如此声明。
 
 ### 14.4 可视化
 
@@ -1697,24 +1752,25 @@ b2p.plot_calibrations("config.yaml", output_file="calibrations.pdf")
 冲突检测返回 `Conflict` 对象列表，每个对象包含以下属性：`conflict_type`（冲突类型：temporal、distribution_overlap、monophyly）、`severity`（严重程度：error、warning、info）、`calibration_a` 和 `calibration_b`（涉及的校准点名称）、`description`（详细描述）和 `recommendation`（建议操作）。
 
 - **error** 级别表示必须修复的问题（如时间不一致或单系性冲突）。
-- **warning** 级别表示需要关注但非致命的问题（如分布重叠或均值不一致）。
+- **warning** 级别表示需要关注但非致命的问题（如同一节点的重复校准，或同一节点上两个有重叠的不同先验）。
 - **info** 级别表示提示信息。
 
 ### 14.9 `diagnostics:` 块
 
-`diagnostics:` 段可配置分布重叠检查的阈值。该段同样传给 `generate` 的闸门 2：
+`diagnostics:` 段控制描述性的先验相似度报告与分布用途检查。结构性冲突（同一节点、嵌套时间顺序、相交非嵌套的单系约束）始终检查，不可配置。
 
 ```yaml
 diagnostics:
-  overlap_measure: "relative"           # relative（默认）| absolute | both
-  overlap_threshold: 2.0                # 绝对判据：以时间单位计的 Wasserstein 距离
-  relative_overlap_threshold: 0.15      # 无量纲判据：W / 两先验 95% 区间平均宽度
+  prior_similarity: false          # 默认关闭；仅描述性
+  similarity_measure: "relative"   # relative | absolute | both
+  similarity_threshold: 0.05       # prior_similarity 为 true 时必填；未经标定，需自行选择并说明依据
+  strict_distributions: false      # true = 无 offset 的 Beta/Poisson/OneOnX 升级为错误
 ```
 
-- `overlap_measure` 决定启用哪些判据。`relative`（默认）即上文的尺度无关比值；`absolute` 恢复旧有的固定距离测试；`both` 在任一判据越界时告警。解析器会拒绝无法识别的值，并给出 `diagnostics.overlap_measure must be relative, absolute or both, got ...`。
-- `overlap_threshold`（默认 `2.0`）与 `relative_overlap_threshold`（默认 `0.15`）是两个阈值，只有 `overlap_measure` 点名的判据才会生效。
-
-在无量纲判据为默认的口径下，固定的 `2.0` 在同一棵树内节点年龄悬殊时含义并不一致：警告只在两个先验*相对于自身宽度*几乎可以互换时触发，这才是冗余校准信息的尺度无关含义。
+- `prior_similarity` 默认关闭。开启时必须给出正的 `similarity_threshold`；工具不提供经过标定的默认值。
+- `similarity_measure` 选择无量纲比值（W 除以两个 95% 区间的平均宽度）、绝对距离或两者。输出为 `prior_similarity`，严重度 `info`；它不给出合并建议，也绝不阻断 Gate 2。
+- `strict_distributions: true` 把 Beta(无 offset)、Poisson 与 OneOnX 的用途警告升级为配置错误。
+- 旧的 `overlap_measure` / `overlap_threshold` / `relative_overlap_threshold` 键仍可作为别名解析，但只会启用同一份描述性报告。
 
 ---
 
@@ -1722,7 +1778,7 @@ diagnostics:
 
 ### 15.1 分析指纹
 
-分析指纹是基于*科学性*配置 SHA-256 哈希生成的确定性标识符，采用不含日期的格式 `B2P-{hash12}-{version}`，例如 `B2P-69dba66a3570-0.1.2`。它**不含日期与时区**，因此同一配置在同一比对数据上每次重跑都逐字节复现。
+分析指纹是基于*科学性*配置 SHA-256 哈希生成的确定性标识符，采用不含日期的格式 `B2P-{hash12}-{version}`，例如 `B2P-3f43bfab58c3-0.2.0`。它**不含日期与时区**，因此同一配置在同一比对数据上每次重跑都逐字节复现。
 
 以下变化会改变指纹（`models.py::to_dict` 把这些都纳入哈希）：序列内容、树设置（`Partition.tree`）、冠群/茎群（`use_originate`）或 `tipsonly` 标志、超先验、`parameter_priors` 条目、末端日期、算子权重。只改输出文件名**不会**改变指纹。
 
@@ -1842,7 +1898,7 @@ result = b2p.validate_xml("output.xml", beast2_validate=True, beast2_path="/path
 
 全部 **19** 个示例配置文件都通过了对其运行过的每一道检查：闸门 0（解析期的溯源与字符校验）、闸门 1（结构检查）、闸门 2（校准冲突检测）与闸门 3（BEAST2 `parseFile` 与 `initAndValidate` 检查）。闸门 3 使用无头模式下的原生 BEAST2 **v2.7.8** 解析器，无需 JavaFX。其中两份依赖附加包的文件——`config_bd_skyline.yaml` 与 `config_nested_sampling.yaml`——已对照 `~/.beast/2.7/` 下安装的包核实，即 **BDSKY 1.5.1** 与 **NS 1.2.0**。**该环境并未安装 MODEL_SELECTION**，尽管 NS 1.2.0 的 `version.xml` 把它声明为依赖；`config_nested_sampling.yaml` 依然通过了闸门 3，因为 `XMLParser` 只解析文件里点名的类，不在解析期强制附加包依赖（这对意味着什么、不对意味着什么，见 16.2）。
 
-测试套件共收集 **395** 个测试：**374** 个单元/语义/发布完整性测试与 **21** 个 BEAST2 集成测试。集成测试对全部 19 个示例配置、`quick` 路径以及仓库内已提交的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.8 解析器与模型初始化逐一检查。当环境缺少 BEAST2 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败（包括它同样按 best-effort 抓取的 MODEL_SELECTION 依赖）仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。全部通过。
+测试套件共收集 **559** 个测试：**538** 个单元/语义/发布完整性测试与 **21** 个 BEAST2 集成测试。集成测试对全部 19 个示例配置、`quick` 路径以及仓库内已提交的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.8 解析器与模型初始化逐一检查。当环境缺少 BEAST2 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败（包括它同样按 best-effort 抓取的 MODEL_SELECTION 依赖）仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。全部通过。
 
 ---
 
@@ -1886,7 +1942,7 @@ mcmc:
 ```yaml
 mcmc:
   type: "standard"
-  chain_length: 1000000       # 短链即可
+  chain_length: 1000000       # 仅是起点：需自定 ESS 判据并随结果报告
   sample_from_prior: true
 ```
 
@@ -2183,9 +2239,9 @@ java -cp launcher.jar beast.util.PackageManager -add NS
 
 父 clade 的校准时间比子 clade 更年轻。检查嵌套校准点的分布参数，确保父 clade 的 HPD 区间覆盖的时间范围比子 clade 更老。
 
-**分布重叠警告**
+**先验相似度（描述性）**
 
-按默认的（相对）判据，检测器计算两个非嵌套校准之间的 1-Wasserstein 距离，除以它们 95% 区间的平均宽度，该比值低于 `relative_overlap_threshold`（默认 0.15）时报告警告。也就是说，两个先验*相对于自身宽度*几乎可以互换。检查这些校准是否提供了冗余信息，能否合并。若要切换回（或叠加）绝对的 `overlap_threshold` 判据，见[第 14.9 节](#149-diagnostics-块)。
+两个独立支系的相似边缘先验并不说明化石信息冗余，也不构成合并或删除校准的理由。该报告默认关闭；只有在显式给出阈值时才返回 `prior_similarity`，严重度 `info`，不给出建议，也不影响 Gate 2。见[第 14.9 节](#149-diagnostics-块)。
 
 **单系性冲突**
 

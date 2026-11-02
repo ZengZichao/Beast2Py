@@ -26,8 +26,8 @@ metadata:
   analysis_description: "Amino acid alignment under WAG with two MRCA calibrations"
   author: "Beast2Py"
   date: "2026-08-01"
-  beast2_version: "2.7.8"
-  tool_version: "0.1.2"
+  beast2_version: "2.7.7"
+  tool_version: "0.2.0"
 
 alignments:
   - id: "alignment"
@@ -56,41 +56,37 @@ tree_prior:
 
 calibrations:
   # Boreoeutheria (the six mammals of this alignment).  lognormal(M=2.5, S=0.5)
-  # offset 66 -> median 78.2, 95% HPD [69.1, 94.3]: the K-Pg extinction at
-  # 66.0 Ma is the hard floor (nothing in the prior sits below it) and the tail
-  # runs to ~94 Ma, matching published placental timetrees.
+  # Synthetic calibration for crown Boreoeutheria; the prior and age bracket
+  # are invented for this example and are not derived from any publication or
+  # empirical dataset.
   - name: "boreoeutherianMRCA"
     taxa: ["Cow", "Human", "Mouse", "Rat", "Seal", "Whale"]
     monophyletic: true
     distribution:
       type: "lognormal"
       parameters: {M: 2.5, S: 0.5}
-      offset: 66.0
+      offset: 60.0
     provenance:
-      source: "fossil"
-      reference: "placeholder — no source consulted; replace with the reference you used"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
-      original_age_min: 66.0
-      original_age_max: 95.0
-      notes: "K-Pg (66.0 Ma) floor for crown placental mammals; soft maximum ~100 Ma"
-
-  # Muridae (Mouse + Rat).  lognormal(M=1.0, S=0.5) offset 11 -> median 13.7,
-  # 95% HPD [11.7, 17.3]: the murine fossil record starts in the late
-  # Miocene (~11.7 Ma), and the interval stays well below the mammal root.
+      original_age_min: 60.0
+      original_age_max: 150.0
+      notes: "Synthetic calibration card for the boreoeutherianMRCA example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in Ma and exist only to exercise the provenance fields, XML generation and diagnostics."
   - name: "rodentMRCA"
     taxa: ["Mouse", "Rat"]
     monophyletic: true
     distribution:
       type: "lognormal"
-      parameters: {M: 1.0, S: 0.5}
-      offset: 11.0
+      parameters: {M: 0.7, S: 0.25}
+      offset: 10.0
     provenance:
-      source: "fossil"
-      reference: "placeholder — no source consulted; replace with the reference you used"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
-      original_age_min: 11.0
-      original_age_max: 18.0
-      notes: "late-Miocene first occurrence of the murine rodent radiation"
+      original_age_min: 10.0
+      original_age_max: 15.0
+      notes: "Synthetic calibration card for the rodentMRCA example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in Ma and exist only to exercise the provenance fields, XML generation and diagnostics."
 
 mcmc:
   type: "standard"

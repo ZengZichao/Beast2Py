@@ -1,0 +1,52 @@
+metadata:
+  analysis_name: "config_aa_mtrev"
+  analysis_description: "Coverage fixture: amino-acid matrix MTREV; technical test input, not a scientific calibration."
+  author: "Beast2Py coverage suite"
+  date: "2026-10-27"
+  beast2_version: "2.7.7"
+  tool_version: "0.2.0"
+
+alignments:
+  - id: "alignment"
+    file: "aminoacid_10.fasta"
+    format: "auto"
+    data_type: "aminoacid"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model:
+        type: "mtrev"
+      gamma_categories: 4
+      gamma_shape: {value: 1.0, lower: 0.0}
+      proportion_invariant: {value: 0.05, lower: 0.0, upper: 1.0}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 0.001, lower: 0.0}
+    tree: "shared"
+
+tree_prior:
+  type: "yule"
+  birth_rate: {value: 1.0, lower: 0.0}
+
+mcmc:
+  type: "standard"
+  chain_length: 10000
+  store_every: 100
+
+loggers:
+  trace_log:
+    file_name: "config_aa_mtrev.$(seed).log"
+    log_every: 100
+  tree_log:
+    file_name: "config_aa_mtrev.$(seed).trees"
+    log_every: 100
+  screen_log:
+    log_every: 1000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "config_aa_mtrev.xml"
+  embed_fingerprint: true

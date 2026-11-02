@@ -24,4 +24,9 @@ include examples/output_basic.methods.tex
 # import with no known parent package"). .flake8 travels with them because the
 # lint gate is documented as part of what a contributor runs.
 include tests/conftest.py tests/__init__.py
+# The shipped tests read the validation fixture and the coverage fixtures at
+# collection or run time; without them an unpacked sdist cannot collect the
+# suite and CI's packaging gate fails.
+recursive-include tests/fixtures *
+include CHANGELOG.md CONTRIBUTING.md SECURITY.md
 include .flake8

@@ -1,0 +1,56 @@
+metadata:
+  analysis_name: "config_dist_beta_offset"
+  analysis_description: "Coverage fixture: Beta(2, 2) with offset 10; legal Beta+offset case; technical test input, not a scientific calibration."
+  author: "Beast2Py coverage suite"
+  date: "2026-10-27"
+  beast2_version: "2.7.7"
+  tool_version: "0.2.0"
+
+alignments:
+  - id: "alignment"
+    file: "nucleotide_4.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model: {type: "hky"}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 0.01, lower: 0.0}
+    tree: "shared"
+
+tree_prior:
+  type: "yule"
+  birth_rate: {value: 1.0, lower: 0.0}
+
+calibrations:
+  - name: "rootCal"
+    taxa: null
+    monophyletic: true
+    distribution:
+      type: "beta"
+      parameters: {alpha: 2.0, beta: 2.0}
+      offset: 10.0
+mcmc:
+  type: "standard"
+  chain_length: 10000
+  store_every: 100
+
+loggers:
+  trace_log:
+    file_name: "config_dist_beta_offset.$(seed).log"
+    log_every: 100
+  tree_log:
+    file_name: "config_dist_beta_offset.$(seed).trees"
+    log_every: 100
+  screen_log:
+    log_every: 1000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "config_dist_beta_offset.xml"
+  embed_fingerprint: true

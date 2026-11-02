@@ -61,7 +61,8 @@ Beast2Py 采用分层架构设计，注重可扩展性和可维护性。系统�
    ├── 闸门 0 解析期的溯源与字符校验 (config.py) —— 即上文第 2 步的检查
    ├── 闸门 1 结构与语义校验 (validator.py)
    ├── 闸门 2 校准冲突检测 (diagnostics.py) ← 核心创新
-   │     时间一致性、分布重叠、单系性冲突
+   │     同一节点、嵌套时间顺序、相交非嵌套单系；unchecked 单独计数；
+   │     先验相似度为默认关闭的描述性报告
    └── 闸门 3 可选的 BEAST2 解析 + initAndValidate (beast2_validate.sh + tools/)
         │
         ▼
@@ -102,10 +103,12 @@ Beast2Py 采用分层架构设计，注重可扩展性和可维护性。系统�
 
 7. **单一连锁拓扑**：所有 partition 都装配在同一棵共享树上。解析阶段直接拒绝 `tree: separate` 与逐分区的 tree id：若静默退化为连锁基因树，本意为 *BEAST 风格的分析就变成了完全连锁的分析
 
-8. **尺度无关的诊断**：分布重叠判据默认是无量纲的——用 1-Wasserstein 距离除以两个先验 95% 区间的平均宽度，阈值为 0.15。旧有的绝对值判据（2.0 个时间单位）仍可通过 `diagnostics.overlap_measure` 选用。该检查会跳过没有定义统计量的分布（OneOnX）
+8. **描述性相似度而非冗余**：独立支系的相似边缘先验不是冲突。先验相似度报告默认关闭；显式给出阈值时只返回严重度 `info` 的条目，不给出合并建议，也不影响 Gate 2。唯一会阻断的结构性规则是同一节点、嵌套时间顺序与相交非嵌套单系约束。没有定义统计量的分布（OneOnX）会产生 `unchecked` 配对。代码里**不再保留任何相似度阈值默认值**：`diagnostics.py` 刻意不持有此类常量，因为没有参考集标定过它；请求该报告却不给阈值是错误，而不是静默回退
 
-9. **自包含的 BEAST2 闸门**：无头验证器位于包内（`beast2py/beast2_validate.sh`、`beast2py/tools/`），因此 `pip install .` 就自带可用的闸门 3。脚本按一批候选路径搜索 JDK 17 或更新版本（`BEAST2_JAVA_CANDIDATES`、`JAVA_HOME`、`/usr/libexec/java_home`、Homebrew 与系统 JVM 目录，最后才是 `PATH` 上的 `java`），并支持 `BEAST2_JAR`、`BEAST2_SKIP_JAVA_HOME_TOOL`、`BEAST2_SKIP_JDK_PROBES` 与 `BEAST2_VALIDATE_TRACE`
+9. **Gate 2 自陈能力边界**：`diagnostics.DETECTABLE_CHECKS`、`NOT_DETECTABLE_CHECKS`、`NOT_DETECTABLE_LABELS` 与 `PRIOR_LAYERS` 是"静态闸门判定什么、看不见什么"的唯一来源（看不见的是有效边缘先验扭曲、后验主导、MCMC 不收敛、数据不足）。`gate2_scope_lines()` 为命令行渲染，`gate2_scope_html()` 为报告渲染，因此写着"passed"的输出不可能超出代码实际能交付的范围
 
-10. **不含日期的指纹**：分析指纹为 `B2P-{hash12}-{version} | Data: {hash16}`，即配置摘要加上比对序列的摘要。同一配置与同一数据在任何机器、任何日期都得到同一标识符；墙钟生成时间只存在于 JSON 侧车文件
+10. **自包含的 BEAST2 闸门**：无头验证器位于包内（`beast2py/beast2_validate.sh`、`beast2py/tools/`），因此 `pip install .` 就自带可用的闸门 3。脚本按一批候选路径搜索 JDK 17 或更新版本（`BEAST2_JAVA_CANDIDATES`、`JAVA_HOME`、`/usr/libexec/java_home`、Homebrew 与系统 JVM 目录，最后才是 `PATH` 上的 `java`），并支持 `BEAST2_JAR`、`BEAST2_SKIP_JAVA_HOME_TOOL`、`BEAST2_SKIP_JDK_PROBES` 与 `BEAST2_VALIDATE_TRACE`
 
-11. **BEAST2 v2.7.x 命名空间**：使用 `beast.base.*` 包名，已针对 BEAST 2.7.8 核实——该版本的 class 文件在运行时需要 JDK 17 或更新版本
+11. **不含日期的指纹**：分析指纹为 `B2P-{hash12}-{version} | Data: {hash16}`，即配置摘要加上比对序列的摘要。同一配置与同一数据在任何机器、任何日期都得到同一标识符；墙钟生成时间只存在于 JSON 侧车文件
+
+12. **BEAST2 v2.7.x 命名空间**：使用 `beast.base.*` 包名，已针对 BEAST 2.7.8 核实——该版本的 class 文件在运行时需要 JDK 17 或更新版本

@@ -40,15 +40,15 @@ calibrations:
     taxa: ["Homo_sapiens", "Pan"]
     distribution:
       type: "lognormal"
-      parameters: {M: 0.35, S: 0.4}
-      offset: 6.5
+      parameters: {M: 0.2, S: 0.35}
+      offset: 5.0
     provenance:
-      source: "fossil"           # fossil / biogeographic / secondary / other
-      reference: "DOI:10.1038/nature12323"
+      source: "other"            # fossil / biogeographic / secondary / other
+      reference: "Synthetic example data; no publication source"
       calibration_type: "soft"    # soft / hard
-      original_age_min: 7.0
-      original_age_max: 9.5
-      notes: "Sahelanthropus tchadensis, Toros-Menalla 7.24 Ma; soft minimum"
+      original_age_min: 5.0
+      original_age_max: 6.0
+      notes: "Synthetic example calibration; values are illustrative only"
 ```
 
 `provenance` accepts exactly `source`, `reference`, `calibration_type`, `original_age_min`, `original_age_max` and `notes`; the parser refuses any other key at parse time. `original_age_min` must not exceed `original_age_max`.
@@ -57,8 +57,8 @@ calibrations:
 
 Use the `diagnose` command to detect:
 
-- **Temporal inconsistency**: A nested clade whose parent is calibrated younger than its child. The detector reports an error when the parent's HPD upper bound is younger than the child's HPD lower bound, and a warning when only the means disagree. A root calibration (`taxa: null`) takes part as the parent of every other clade
-- **Distribution overlap**: Two non-nested calibrations whose priors are nearly interchangeable. The default criterion is **dimensionless**: the 1-Wasserstein distance between the two priors, divided by the mean width of their 95% intervals, warns below `0.15`. A fixed distance grows with node depth, so it would flag shallow nodes almost always and deep ones almost never. The previous absolute criterion (Wasserstein distance below `2.0` time units) is still available: set `diagnostics.overlap_measure` to `absolute` (or `both`) and adjust `overlap_threshold` / `relative_overlap_threshold` in the same block. `OneOnX` has no defined mean or interval, so the overlap check skips it
+- **Temporal inconsistency**: A nested pair whose parent prior is *wholly* younger than its child prior. The detector reports an error only when the parent's 95% upper bound is younger than the child's 95% lower bound. Overlapping intervals are not reported, including a parent whose mean is younger than its child's: a soft parent prior with a long tail can have a younger mean and still be perfectly compatible. A root calibration (`taxa: null`) takes part as the parent of every other clade
+- **Prior similarity (descriptive, off by default)**: Two independent clades may legitimately have similar age priors. If you enable `diagnostics.prior_similarity` with an explicit `similarity_threshold`, the tool reports `prior_similarity` entries with severity `info`. They carry no merge recommendation and never block Gate 2. `OneOnX` has no defined mean or interval, so a pair involving it is reported as unchecked.
 - **Monophyly conflict**: Overlapping but non-nested taxon sets
 
 The same conflict detection runs automatically as Gate 2 of `generate` and `quick`: when it reports an error-severity conflict, the gate writes nothing and the command exits non-zero.
@@ -71,7 +71,7 @@ Always assess the marginal influence of each calibration point:
 beast2py diagnose --config config.yaml --report report.html --sensitivity
 ```
 
-This generates N+1 prior-only sampling XMLs (N is the number of calibrations): one with the full calibration set, plus N leave-one-out variants. They land in a `sensitivity/` subfolder of `<report dir>/diagnostics`, or of the directory given by `--sensitivity-xml-dir`. Run each XML with BEAST2, then compare the tree-height posteriors. A short chain is enough: 1,000,000 generations, as in `mcmc.chain_length: 1000000`.
+This generates N+1 prior-only sampling XMLs (N is the number of calibrations): one with the full calibration set, plus N leave-one-out variants. They land in a `sensitivity/` subfolder of `<report dir>/diagnostics`, or of the directory given by `--sensitivity-xml-dir`. Run each XML with BEAST2, then compare the tree height and the calibrated node ages between the full run and each leave-one-out run. These chains sample from the prior, so the comparison is about the **effective marginal prior** each calibration set induces; it says nothing about a posterior, because no likelihood is involved. Choose the chain length, sampling interval and burn-in yourself, decide an ESS criterion before running, and report all three with the result — a prior-only run is not automatically cheap or automatically converged.
 
 ## Common Pitfalls
 

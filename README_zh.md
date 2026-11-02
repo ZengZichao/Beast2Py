@@ -23,7 +23,7 @@ Beast2Py 是一个 Python 框架，用于**规范化指定、验证和诊断 BEA
 
 | 功能 | 描述 |
 |------|------|
-| **校准冲突检测** | 自动检测多个校准点之间的时间不一致性、分布重叠和单系性冲突 |
+| **校准冲突检测** | 自动检测同一节点矛盾、嵌套时间顺序错误与相交非嵌套的单系拓扑冲突；区分 crown/stem，并显式报告 `unchecked` 配对。先验相似度是独立的、默认关闭的描述性报告，不是冲突 |
 | **先验敏感性分析** | 自动生成“仅先验采样”XML，评估校准先验对后验的边际影响 |
 | **校准来源元数据** | 每个校准点记录化石来源、参考文献 DOI、校准类型（硬/软边界） |
 | **可重复性框架** | YAML 配置版本化 + 分析指纹 + LaTeX 方法学描述 + Snakemake/Nextflow 管道生成 |
@@ -96,6 +96,9 @@ beast2py generate --config examples/config_basic.yaml --output output_basic.xml 
 
 # 运行校准诊断（冲突检测 + 敏感性分析 + 可视化）
 beast2py diagnose --config examples/config_basic.yaml --report report.html --sensitivity --visualize
+
+# 把仅先验运行读回来：位数、95% HPD、ESS、留一法位移
+beast2py prior-summary --trace full.log --reference loo.log --column treeHeight
 
 # 快速模式：单 partition 简单场景
 beast2py quick \
@@ -208,13 +211,13 @@ print(models["substitution_models"])
 | `config_bd_skyline.yaml` | BD Skyline Serial | BD Skyline Serial | HKY+Γ4 | Strict | 1 | 需 [bdsky](https://github.com/BEAST2-Dev/bdsky) 插件包 |
 | `config_nested_sampling.yaml` | Nested Sampling | Yule | HKY+Γ4 | Strict | 1 | NS MCMC（需 [NS](https://github.com/BEAST2-Dev/nested-sampling) 插件包） |
 
-此外，`calibrations.yaml` 是给 `quick` 子命令使用的独立校准点文件。示例数据包括 `primates.fasta`（12 个分类单元 × 898 bp，由 BEAST2 自带示例比对 `Primates.nex` 转换而来）和 `aminoacid.fasta`（10 个分类单元 × 234 aa）。
+此外，`calibrations.yaml` 是给 `quick` 子命令使用的独立校准点文件。示例数据包括 `primates.fasta`（12 个虚拟分类单元 × 898 bp）和 `aminoacid.fasta`（10 个虚拟分类单元 × 234 aa）。所有序列均为测试随机生成，分类单元标签仅作示意。
 
 ## 仓库结构
 
 - `beast2py/` — Beast2Py Python 包源代码（CLI、API、配置解析、XML 生成、诊断、可重复性、验证等模块）
 - `examples/` — 19 个示例配置文件、示例比对数据（FASTA）和示例输出制品
-- `tests/` — 测试套件（共收集 395 个测试：374 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
+- `tests/` — 测试套件（共收集 559 个测试：538 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
 - `beast2py/tools/` — 随包发布的无头 BEAST2 验证助手（`Beast2Validator.java` 源码，含预编译的 `classes/` 与 `launcher.jar`），由 `pyproject.toml` 以 `package-data` 随 wheel 打包发布；仓库根目录仅保留同名的薄包装 `beast2_validate.sh`
 - `docs/` — 使用手册、架构指南、教程、校准指南和 XML 格式指南（中英文）
 - `beast2_validate.sh` — 无头 BEAST2 验证启动脚本（需要 `BEAST.base.jar` 与 JDK 17+；自动探测 `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`，也可设 `BEAST2_JAR`）
@@ -235,12 +238,31 @@ print(models["substitution_models"])
 0. **输入的解析期校验（闸门 0）** — 读 YAML 与 FASTA 时抛出的校准溯源规则与比对字符校验。它发生在 XML 字符串存在之前，所以打印的闸门分母仍是 `/3`，标签也写成 `Gate 0 (parse-time, before the 3 generation gates)`。这一关失败会以退出码 1 返回一条 `Configuration error`，并且根本不进入生成闸门。
 1. **结构检查（闸门 1）** — XML 格式正确性与必需元素、id/idref 一致性、重复 ID、初值落在边界内、序列数据
    完整性；同时确认每个被估计参数都带 `Prior`、每个被估计状态节点都配有算子、没有算子挂在固定参数上
-2. **校准冲突检测（闸门 2）** — 嵌套支（含根校准）之间的时间一致性、分布重叠、单系性冲突
+2. **校准冲突检测（闸门 2）** — 同一节点矛盾、嵌套支（含根校准）之间的时间顺序、相交非嵌套的单系拓扑冲突；无法判定的配对标记为 unchecked。先验相似度是默认关闭的描述性报告
 3. **BEAST2 检查（闸门 3，可选，`--beast2-validate`）** — 无头 BEAST2 `XMLParser` 在解析之后会对每个
    对象调用 `initAndValidate()`，因此检查的是模型能否**完成初始化**，不只是能否解析
 
 **验证不能证明什么**：四道检查都不能判断模型是否回答了你的生物学问题。BEAST2 能顺利初始化的
 模型，仍然可能是错误的模型。
+
+**闸门 2 的能力边界（逐条列出）。** 闸门 2 只读 YAML，因此它判定的是**指定边缘先验**及其所附
+分类单元集合的结构，仅此而已。它可以检出：同一节点上互不相容或重复的一对校准；嵌套配对中父先验
+**整体**年轻于子先验；一组任何有根树都无法同时满足的单系声明；以及语义非法的组合（根节点 +
+originate、tipsonly + originate、超出支撑集或非有限的分布参数）。它**不能**检出，因而“闸门 2
+通过”也**不排除**以下各项：
+
+1. **有效边缘先验被扭曲**——树先验、拓扑约束与其余校准可以在不存在任何结构矛盾的情况下截断或
+   改变某个指定先验；
+2. **后验主导**——判定它需要似然，也就是配对的后验样本轨迹，而 Beast2Py 既不运行也不读取后验；
+3. **MCMC 不收敛**、混合不良或 ESS 不足；
+4. **数据不足以约束某个节点**——这是比对与模型的性质，不是配置文件的性质。
+
+上述四条所依赖的四种分布彼此不同，手册、命令行提示与 HTML 报告使用同一套名称：*指定边缘先验*是
+YAML 写下的分布；*有效边缘先验*是在树先验与其余校准共同作用后该节点实际抽样的边缘分布，只能靠
+仅先验运行观察；*联合有效先验*是两个及以上节点年龄的联合分布，需要联合样本而非把各列边缘拼起来；
+*后验*是似然作用之后的分布，Beast2Py 不给出任何后验估计。第 1–4 条会随绿色的闸门 2 结果一并由
+`generate`、`quick`、`diagnose` 打印，并写入 HTML 报告，因此这条边界不会因别处改写文字而与输出
+脱节。
 
 闸门 3 只在装有 BEAST2 与 JDK 17 的环境里才会运行。若你显式要求 `--beast2-validate`，而环境中
 找不到 BEAST2，生成会以退出码 2 停止且不写任何文件——只读退出码的 CI 因此不会把“BEAST2 缺失”
@@ -254,7 +276,7 @@ print(models["substitution_models"])
 未实测。`integration` 作业会打印它实际解析到的版本，所以确切的版本组合在运行日志里可见，
 而不是靠假设。
 
-测试套件共收集 395 个测试（374 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
+测试套件共收集 559 个测试（538 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
 示例配置、`quick` 路径以及仓库内的 `output_basic.xml` 生成 XML，并用真实的 BEAST2 解析器
 与模型初始化检查。当环境缺少 BEAST2 jar 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败（也包括它同样按 best-effort 抓取的 MODEL_SELECTION 依赖）仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。
 
@@ -262,7 +284,7 @@ print(models["substitution_models"])
 
 Beast2Py 生成以下可重复性制品：
 
-- **分析指纹** — 确定性标识符 `B2P-{sha256(config)[:12]}-{version}`（例如 `B2P-69dba66a3570-0.1.2`）。其中**不含日期分量**，因此同一配置加同一比对数据，在任何时区、任何时刻重跑都得到相同的字节与相同的标识符。只改输出文件名不会改变指纹；序列内容、树设置、冠群/茎群标志、超先验、参数先验、末端日期、算子权重，任何一项变化都会改变指纹
+- **分析指纹** — 确定性标识符 `B2P-{sha256(config)[:12]}-{version}`（例如 `B2P-3f43bfab58c3-0.2.0`）。其中**不含日期分量**，因此同一配置加同一比对数据，在任何时区、任何时刻重跑都得到相同的字节与相同的标识符。只改输出文件名不会改变指纹；序列内容、树设置、冠群/茎群标志、超先验、参数先验、末端日期、算子权重，任何一项变化都会改变指纹
 - **数据摘要** — XML 注释里除标识符外还带一个独立的摘要：16 位十六进制，覆盖比对的**内容**。生成时刻的墙钟时间只出现在 `.fingerprint.json` 侧车文件里，绝不写进 XML
 - **LaTeX 方法学描述** — 可直接用于论文的方法学段落
 - **Snakemake/Nextflow 管道** — 端到端可重复工作流文件
@@ -304,22 +326,22 @@ BEAST2 生态中与 Beast2Py 相邻的开源工具（便于选型对比；亦见
 | [LPhy](https://github.com/LinguaPhylo/linguaPhylo) / [LPhyBeast](https://github.com/LinguaPhylo/LPhyBeast) | Java | 概率模型规约语言 → BEAST XML（已面向 BEAST 3） |
 | [pybeast](https://github.com/Wytamma/pybeast) / [beastiary](https://github.com/Wytamma/beastiary) | Python | BEAST2 运行封装（独立运行目录/种子/resume）与实时 MCMC trace 监控（ESS/HPD） |
 
-Beast2Py 的差异点在于把以下能力整合为一条配置阶段流水线：YAML 声明式配置、三重校准冲突检测（时间一致性、分布重叠、单系性）、留一法先验敏感性 XML 的自动编排，以及校准来源（DOI）、分析指纹、方法学描述和管道生成。
+Beast2Py 的差异点在于把以下能力整合为一条配置阶段流水线：YAML 声明式配置、区分 crown/stem 的校准冲突检测（同一节点、嵌套时间顺序、相交非嵌套单系、显式 unchecked）、默认关闭的描述性先验相似度报告、留一法 prior-only XML 的自动编排，以及校准溯源卡、分析指纹、方法学描述和管道生成。
 
 ## 引用
 
 如果你在研究中使用 Beast2Py，请引用本软件：
 
-> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.1.2. Zenodo. https://doi.org/10.5281/zenodo.23088756
+> Zeng, Z. (2026). *Beast2Py: A Python framework for reproducible divergence time estimation with automated calibration prior specification, validation, and diagnostics*. Version 0.2.0. Zenodo. https://doi.org/10.5281/zenodo.23088756
 
 机器可读的引用元数据见 [CITATION.cff](CITATION.cff)。
 
 仓库已在 Zenodo 归档。概念 DOI
 [10.5281/zenodo.23088756](https://doi.org/10.5281/zenodo.23088756) 始终指向最新归档版本；
-v0.1.1 的版本 DOI 为
-[10.5281/zenodo.23088757](https://doi.org/10.5281/zenodo.23088757)。此后每个 GitHub release
-都会自动归档并获得各自的版本 DOI——默认引用概念 DOI，需要锁定版本时引用对应版本 DOI。两者均已
-录入 [CITATION.cff](CITATION.cff)。
+v0.1.1 与 v0.1.2 的版本 DOI 分别为
+[10.5281/zenodo.23088757](https://doi.org/10.5281/zenodo.23088757) 与
+[10.5281/zenodo.23452749](https://doi.org/10.5281/zenodo.23452749)；v0.2.0 的版本 DOI 在标签归档时签发。此后每个 GitHub release
+都会自动归档并获得各自的版本 DOI——默认引用概念 DOI，需要锁定版本时引用对应版本 DOI。
 
 ## 开发
 

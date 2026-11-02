@@ -121,7 +121,7 @@ def detect_data_type(sequences) -> str:
         "nucleotide" when every residue is a nucleotide/alphabet placeholder,
         otherwise "aminoacid".
     """
-    residues = set()
+    residues: Set[str] = set()
     for seq in sequences:
         residues.update(str(seq.sequence or ""))
     # The nucleotide alphabet is a proper subset of the amino-acid one, so it
@@ -224,7 +224,7 @@ class SequenceReader:
             # Fallback: simple parser
             return SequenceReader._read_fasta_simple(file_path)
 
-        sequences = []
+        sequences: List[Sequence] = []
         headers = []
         for record in SeqIO.parse(file_path, "fasta"):
             sequences.append(
@@ -298,7 +298,7 @@ class SequenceReader:
         Returns:
             List of Sequence objects.
         """
-        sequences = []
+        sequences: List[Sequence] = []
         # The FASTA id is the first whitespace-delimited token of the header and
         # the remainder is a description; Biopython's own parser does the same,
         # and a taxon name containing spaces cannot be written into Newick

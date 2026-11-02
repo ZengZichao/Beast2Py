@@ -15,10 +15,114 @@ open at https://github.com/ZengZichao/Beast2Py. Version numbers follow SemVer,
 and a change to generated BEAST2 XML or to a validation gate is treated as a
 change to observed behaviour even if no API changes.
 
-## [Unreleased]
+## [0.2.0] - 2026-10-27
+
+### Changed
+
+- Calibration diagnostics are now structural and crown/stem-aware. The three
+  blocking rules are same-node contradictions, nested temporal order and
+  intersecting non-nested monophyly. Root + originate, tipsonly + originate and
+  originate on a whole-ingroup taxon set are parse-time errors.
+- Distribution similarity between independent clades is no longer a conflict.
+  It is an opt-in descriptive report (`diagnostics.prior_similarity`) with an
+  explicit, uncalibrated threshold; it carries no merge recommendation and
+  never blocks Gate 2. Undecidable pairs are reported as `unchecked`.
+- Beta (without offset), Poisson and OneOnX now raise distribution-usage
+  warnings; `diagnostics.strict_distributions: true` turns them into errors.
+  Beta + offset remains legal.
+- All formal examples use explicitly synthetic calibration values and
+  provenance cards. No literature-derived calibration values, DOIs, fossil
+  ages, or third-party sequence data are redistributed with the repository.
+- Sensitivity XMLs use the configured chain length and distinct seeds instead
+  of a 1M-generation cap.
+- Coverage: 36/36 declared capabilities have an external Gate 3 record; fixtures cover
+  the 8 calibration distributions, 4 amino-acid matrices and
+  coalescent_constant; a synthetic non-zero tip-date fixture covers the dated
+  tip operator.
+- The prior-only sensitivity and trace-summary workflow is exercised with
+  synthetic inputs; no empirical dataset or archived run is bundled.
 
 ### Fixed
 
+- ChiSquare `df` is emitted as an integer attribute, as BEAST2's
+  IntegerParameter requires.
+- CalibratedYule CalibrationPoint now writes `forParent` when use_originate is
+  true.
+- Birth-death supports `conditional_on_root`.
+- The distribution-usage warning no longer treats a soft minimum prior as an
+  error when its upper tail extends beyond the fossil's age bracket.
+
+## [Unreleased]
+
+### Added
+
+- `beast2py prior-summary`, and `beast2py/trace.py` behind it: a tested reader for
+  BEAST2 trace logs. It addresses columns by header name (`Sample` or
+  `SampleRate`, and `mrca.age(<taxonset>)` resolved from a calibration name),
+  applies a burn-in by count or fraction, reports median / 95% highest-density
+  interval / initial-positive-sequence ESS / sample count per column, and with
+  `--reference` the shift of a leave-one-out scenario against the full
+  calibration set including the interval width ratio. It refuses a missing
+  column, a non-numeric cell, a ragged row, duplicated sample ids (a
+  concatenated file) and unequal chain lengths when pooling, and it labels a
+  low-ESS row rather than dropping it. The archived leave-one-out table is
+  recomputed from the raw logs by `tests/test_trace.py`, so every figure number
+  is reproducible from the traces. This is prior-only arithmetic: it estimates no
+  posterior, and both its help text and its output say so.
+- Gate 2 now states its own boundary. `DETECTABLE_CHECKS`,
+  `NOT_DETECTABLE_CHECKS`, `NOT_DETECTABLE_LABELS` and `PRIOR_LAYERS` in
+  `diagnostics.py` are the single source for what the static gate decides and
+  what it cannot see (effective-marginal-prior distortion, posterior dominance,
+  MCMC non-convergence, insufficient data), rendered into the `generate`/`quick`
+  Gate 2 line, the full `diagnose` listing and the HTML report, and mirrored in
+  both READMEs and both user manuals with the four-term vocabulary (specified
+  marginal prior / effective marginal prior / joint effective prior / posterior).
+- `tests/test_disclosed_regressions.py`: a registry of every defect disclosed in
+  the release notes, each mapped to the tests that guard it, validated against
+  the collected suite so a renamed or deleted regression case fails the registry.
+- `.github/actions/setup-beast2`: the BEAST2 runtime install the CI integration
+  job had inline, now shared with the release path.
+
+### Changed
+
+- The Release workflow gates a tag on the suite, not on version strings alone:
+  `build` now needs a `test` job that installs BEAST2, runs the whole suite, and
+  fails the release if any Gate 3 test skipped for want of a runtime.
+- Documentation that described behaviour the code does not have: the English
+  manuals promised a warning when only the prior means of a nested pair disagree
+  (the detector reports an error only when the parent's interval is wholly
+  younger, and deliberately not otherwise), and both manuals told readers to run
+  a short chain and compare "tree-height posteriors" for the leave-one-out
+  design. Those chains sample from the prior; the wording now says so and asks
+  for a stated ESS criterion instead of an assumed-adequate chain length.
+- The similarity report ships no threshold at all: the old
+  `OVERLAP_RATIO_THRESHOLD = 0.15` / `OVERLAP_DISTANCE_THRESHOLD = 2.0` class
+  constants are gone rather than kept as "historical names", and the manual and
+  example configuration no longer show 0.15 as if it were a value with meaning.
+
+### Fixed
+
+- The CI lint gate was red before any of this: the tree carried findings that
+  `black --check .` and `flake8 beast2py tests` reject (unused imports, two
+  locals computed and never read, lines over the 100-character limit), and the
+  mypy ratchet sat at `MYPY_BASELINE: 20` while `mypy` reported 32 errors, so
+  every run failed and the ratchet guarded nothing. The backlog is cleared --
+  including `Optional` taxon sets compared with `<` and `&`, a stale `Optional`
+  return on `_parse_calibration` (which always returns or raises), a `str`
+  parameter rebound to `Path`, `plt.cm.tab10` outside the stubs and a
+  heterogeneous parameter-range table -- and the baseline is now 0, with a test
+  that fails if it is raised again.
+- `use_originate` on a `CalibratedYule` point now has tests: `forParent="true"`
+  is asserted in the emitted XML, the crown/stem truth table covers all sixteen
+  combinations of node reading against taxon-set relation, and a stem reading of
+  the root is refused by both builders.
+- The READMEs recomputed their test counts from the collected suite, and a guard
+  now fails if a documented count stops matching `pytest --collect-only`.
+- The provenance placeholder check that lived only in the submission bundle's
+  `verify.py` is now part of the suite: every calibration in `examples/` must
+  carry a card with an allowed `source`, a `calibration_type`, notes long enough
+  to explain how the boundary became the prior, and a DOI-bearing reference; no
+  formal example may contain `TBD`, `placeholder` or `no source consulted`.
 - Zenodo failed to archive v0.1.2 ("Extra metadata load failed"): the audit
   batch had moved `.zenodo.json`'s licence to the compound SPDX expression
   `MIT AND LGPL-2.1-only`, but Zenodo's licence vocabulary lists single

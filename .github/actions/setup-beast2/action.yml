@@ -1,0 +1,100 @@
+name: Set up a BEAST2 runtime for Gate 3
+description: >
+  Installs the BEAST 2.7.7 Linux runtime, bumps BEAST.base to the 2.7.8 package,
+  and fetches the add-ons the example configurations name, so that the package's
+  own Gate 3 (BEAST2 parse + model initialisation) can actually run.
+
+# Why this is an action and not a step in one workflow: the same install is what
+# makes the CI integration job meaningful, and it is also what the Release
+# workflow has to run before it publishes. Duplicated shell blocks drift, and a
+# drifted release gate is exactly the failure mode the pre-submission review
+# flagged ("a CI failure must stop a release"): if the release path silently
+# stopped installing BEAST2, its Gate 3 would report a pass on nothing.
+
+inputs:
+  install-addons:
+    description: Fetch BDSKY / NS / MODEL_SELECTION as well (they only widen coverage)
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Install BEAST runtime (v2.7.7 tarball)
+      # v2.7.8 is a "package-only" release: its assets contain only the
+      # BEAST.base/app .package zips, with no complete runtime, and upstream
+      # states that to install it you install v2.7.7 and then update the
+      # BEAST.base and BEAST.app packages. Downloading BEAST.v2.7.8.Linux.tgz
+      # directly is a permanent 404, which used to fail this job at the
+      # install step on every run.
+      #
+      # So: install the v2.7.7 Linux runtime (its bin/beast launcher and JDK
+      # 17 compatibility are verified), then bump the BEAST.base package.
+      shell: bash
+      run: |
+        set -euo pipefail
+        curl -fsSL -o beast.tgz \
+          https://github.com/CompEvol/beast2/releases/download/v2.7.7/BEAST.v2.7.7.Linux.x86.tgz
+        tar -xzf beast.tgz
+        test -x beast/bin/beast || { echo "::error::tarball structure is wrong, beast/bin/beast is not executable"; ls -la beast/; exit 1; }
+        # The ~/.beast/2.7/BEAST.base/<version>/lib/BEAST.base.jar layout is
+        # load-bearing: beast2py/beast2_validate.sh locates the jar with
+        # exactly that glob. Clear the destination first, because when 2.7.7
+        # already exists `mv beast <dir>` nests the tree as 2.7.7/beast/ and
+        # every later path is wrong.
+        DEST="$HOME/.beast/2.7/BEAST.base/2.7.7"
+        mkdir -p "$HOME/.beast/2.7/BEAST.base"
+        rm -rf "$DEST"
+        mv beast "$DEST"
+        # The jar ships at lib/packages/BEAST.base.jar, but the script globs
+        # lib/BEAST.base.jar, and a miss exits 2 with
+        # "BEAST.base.jar not found.". Symlink the layout into agreement.
+        if [ -f "$DEST/lib/packages/BEAST.base.jar" ] && [ ! -f "$DEST/lib/BEAST.base.jar" ]; then
+          ln -s packages/BEAST.base.jar "$DEST/lib/BEAST.base.jar"
+        fi
+        ls -la "$DEST/lib/BEAST.base.jar"
+        # The bundled JRE can be incomplete, so confirm it runs and print the
+        # real error instead of a bare exit 127.
+        ls -la "$DEST/bin/beast"
+        if ! "$DEST/bin/beast" -version; then
+          echo "::error::the BEAST launcher cannot run; dumping tree and JRE state"
+          ls -la "$DEST"
+          ls -la "$DEST/jre/bin/java" 2>&1 || true
+          exit 1
+        fi
+
+    - name: Verify the BEAST version this job actually validated
+      # The exact version combination is reported, because it is not the same
+      # as the "verified against BEAST2 2.7.8 only" phrasing that used to
+      # appear in the README: the runtime is 2.7.7 and only the BEAST.base
+      # package is bumped.
+      shell: bash
+      run: |
+        set -uo pipefail
+        BEAST="$HOME/.beast/2.7/BEAST.base/2.7.7/bin/beast"
+        "$BEAST" -version || true
+        "$BEAST" -get BEAST.base v2.7.8 \
+          || echo "::warning::could not upgrade BEAST.base to v2.7.8; continuing on the v2.7.7 runtime"
+        "$HOME/.beast/2.7/BEAST.base/2.7.7/bin/beast" -version || true
+
+    - name: Install BEAST2 add-ons used by the examples (non-fatal)
+      # config_bd_skyline.yaml and config_nested_sampling.yaml reference
+      # bdsky.evolution.speciation.BirthDeathSkylineModel and
+      # nestedsampling.gss.NS. Without the jars those two integration cases
+      # SKIP (visible via -rs), which must never be read as a pass: the
+      # add-on-dependent specs are otherwise unverified.
+      #
+      # NS 1.2.0's version.xml declares <depends on='MODEL_SELECTION' atleast='1.6.0'/>,
+      # so fetch the dependency NS advertises. Best-effort like the two fetches
+      # above: BEAST2's XMLParser resolves the classes a file names and does not
+      # enforce add-on package dependencies at parse time, so the
+      # nested_sampling case neither skips nor fails when MODEL_SELECTION is
+      # absent -- it is the parse gate, not the dependency graph.
+      shell: bash
+      if: inputs.install-addons == 'true'
+      run: |
+        BEAST="$HOME/.beast/2.7/BEAST.base/2.7.7/bin/beast"
+        "$BEAST" -get BDSKY v1.5.1 || echo "::warning::BDSKY add-on not installed; bd_skyline example will be skipped"
+        "$BEAST" -get NS || echo "::warning::nested-sampling add-on not installed; nested_sampling example will be skipped"
+        "$BEAST" -get MODEL_SELECTION || echo "::warning::MODEL_SELECTION add-on not installed; NS's declared dependency stays unmet, which the parse gate does not check"
+        ls ~/.beast/2.7 || true

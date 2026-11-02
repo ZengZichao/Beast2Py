@@ -405,11 +405,11 @@ class XMLWriter:
             return CalibrationBuilder.build_distribution(config, dist_id=dist_id)
 
         if role in ("probability", "frequency"):
-            lower = node.get("lower") if node.get("lower") is not None else 0.0
-            upper = node.get("upper") if node.get("upper") is not None else 1.0
-            config = DistributionConfig(
-                type="uniform", parameters={"lower": float(lower), "upper": float(upper)}
-            )
+            lower_raw = node.get("lower")
+            upper_raw = node.get("upper")
+            lower = 0.0 if lower_raw is None else float(lower_raw)
+            upper = 1.0 if upper_raw is None else float(upper_raw)
+            config = DistributionConfig(type="uniform", parameters={"lower": lower, "upper": upper})
         elif role == "signed":
             config = DistributionConfig(type="normal", parameters={"mean": 0.0, "sigma": 10.0})
         else:  # "rate" and anything else that must be positive

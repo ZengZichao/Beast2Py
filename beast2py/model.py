@@ -871,6 +871,11 @@ class ModelBuilder:
                     "id": prior_id,
                     "spec": "beast.base.evolution.speciation.BirthDeathGernhard08Model",
                     "tree": ref(tree_id),
+                    **(
+                        {"conditionalOnRoot": "true"}
+                        if params.get("conditional_on_root", False)
+                        else {}
+                    ),
                 },
             )
 

@@ -221,16 +221,33 @@ def _validate_and_write(
     _success("Gate 1/3 passed: Beast2Py structural checks (ids, idrefs, priors, operators).")
     _verbose(f"Gate 1: {len(result.errors)} errors, {len(result.warnings)} warnings", verbose)
 
-    # --- Gate 2: calibration conflicts ---
-    from .diagnostics import ConflictDetector
+    # --- Gate 2: structural calibration conflicts ---
+    from .diagnostics import ConflictDetector, NOT_DETECTABLE_LABELS
 
-    conflicts = ConflictDetector.detect_conflicts(
-        config.calibrations, settings=getattr(config, "diagnostics", None)
+    all_taxa = sorted(
+        {
+            taxon
+            for alignment in getattr(config, "all_alignments", []) or []
+            for taxon in alignment.taxa_names
+        }
     )
+    assessments = ConflictDetector.assess(
+        config.calibrations,
+        settings=getattr(config, "diagnostics", None),
+        all_taxa=all_taxa or None,
+    )
+    conflicts = [conflict for assessment in assessments for conflict in assessment.conflicts]
+    counts = ConflictDetector.summarize(assessments)
     hard = [c for c in conflicts if c.severity == "error"]
-    soft = [c for c in conflicts if c.severity != "error"]
+    soft = [c for c in conflicts if c.severity == "warning"]
+    informational = [c for c in conflicts if c.severity not in ("error", "warning")]
     for conflict in soft:
         _warn(
+            f"  [{conflict.conflict_type}] {conflict.calibration_a} <-> "
+            f"{conflict.calibration_b}: {conflict.description}"
+        )
+    for conflict in informational:
+        _info(
             f"  [{conflict.conflict_type}] {conflict.calibration_a} <-> "
             f"{conflict.calibration_b}: {conflict.description}"
         )
@@ -244,7 +261,19 @@ def _validate_and_write(
             if conflict.recommendation:
                 _error(f"    -> {conflict.recommendation}")
         return 1
-    _success("Gate 2/3 passed: no contradictory calibration conflicts.")
+    _success(
+        "Gate 2/3 passed: no contradictory structural calibration conflicts "
+        f"({counts['pairs']} pairs assessed: {counts['checked']} checked, "
+        f"{counts['unchecked']} unchecked, {counts['not_applicable']} without an "
+        "applicable relation). Unchecked pairs are not passes; prior similarity "
+        "is descriptive and does not block this gate."
+    )
+    # A green static gate is the easiest thing in the pipeline to over-read, so
+    # its boundary is printed with it rather than left to the manual.
+    _info(
+        "Gate 2 checks the specified marginal priors and their taxon sets only. "
+        "It cannot rule out: " + "; ".join(NOT_DETECTABLE_LABELS) + "."
+    )
 
     add_ons = [
         name
@@ -479,7 +508,7 @@ def _run_diagnostics(
     verbose: bool = False,
 ) -> None:
     """Run the diagnostic workflow and print results."""
-    from .diagnostics import DiagnosticEngine, ReportGenerator
+    from .diagnostics import DiagnosticEngine, ReportGenerator, gate2_scope_lines
 
     _info("Running diagnostic engine...")
     report = DiagnosticEngine.run(
@@ -489,39 +518,63 @@ def _run_diagnostics(
         run_visualization=run_visualization,
     )
 
-    # Print conflicts
-    n_errors = sum(1 for c in report.conflicts if c.severity == "error")
-    n_warnings = sum(1 for c in report.conflicts if c.severity == "warning")
+    # Print conflicts.  Prior similarity is an informational, descriptive
+    # entry; it is not counted as a conflict and never blocks generation.
+    from .diagnostics import ConflictDetector
+
+    counts = ConflictDetector.summarize(report.assessments)
     unchecked = [c for c in report.conflicts if c.conflict_type == "unchecked"]
-    actionable = [c for c in report.conflicts if c.conflict_type != "unchecked"]
-    if actionable:
-        _warn(f"Found {n_errors} error(s) and {n_warnings} warning(s):")
-    for c in actionable:
+    similarity = [c for c in report.conflicts if c.conflict_type == "prior_similarity"]
+    structural = [
+        c
+        for c in report.conflicts
+        if c.severity in ("error", "warning") and c.conflict_type != "unchecked"
+    ]
+    for c in structural:
         icon = "✗" if c.severity == "error" else "⚠"
         print(f"  {icon} [{c.conflict_type}] {c.calibration_a} ↔ {c.calibration_b}")
         print(f"    {c.description}")
         if c.recommendation:
             print(f"    → {c.recommendation}")
-    if not actionable and not unchecked:
-        _success("No calibration conflicts detected.")
+    if not structural and not unchecked:
+        _success(
+            f"No structural calibration conflicts detected "
+            f"({counts['checked']} pairs checked, {counts['not_applicable']} "
+            f"without an applicable relation)."
+        )
     if unchecked:
         # "Nothing found" and "nothing checked" are different statements, and
         # only the first one deserves a green tick.
         _warn(
             f"{len(unchecked)} calibration pair(s) could NOT be checked "
             f"({', '.join(c.calibration_a + '/' + c.calibration_b for c in unchecked)}): "
-            f"a distribution with undefined quantiles has no comparable interval."
+            f"an undefined interval, an undecidable crown/stem relation, or a "
+            f"non-monophyletic intersection has no comparable structural prediction."
         )
         for c in unchecked:
             print(f"  ○ [unchecked] {c.calibration_a} ↔ {c.calibration_b}")
             print(f"    {c.description}")
+    if similarity:
+        _info(
+            f"{len(similarity)} pair(s) have similar specified marginal priors. "
+            "This is descriptive only: independent clades may legitimately share "
+            "a similar age prior; it is not evidence of redundancy, is not a "
+            "conflict, and does not block Gate 2."
+        )
+        for c in similarity:
+            print(f"  · [prior_similarity] {c.calibration_a} ↔ {c.calibration_b}")
+            print(f"    {c.description}")
+
+    # The report is where a reader decides what the green marks mean, so the
+    # gate's boundary is stated in full here, not only in the manual.
+    for line in gate2_scope_lines():
+        print(line)
 
     # Print sensitivity info
     if report.sensitivity_xmls:
         _info(f"Generated {len(report.sensitivity_xmls)} sensitivity analysis XML files:")
         for x in report.sensitivity_xmls:
             print(f"  - {x}")
-
     # Print visualization info
     if report.visualization_file:
         _success(f"Visualization: {report.visualization_file}")
@@ -538,10 +591,181 @@ def _run_diagnostics(
             sensitivity_xmls=report.sensitivity_xmls,
             visualization_file=report.visualization_file,
             output_file=report_path,
+            assessments=report.assessments,
         )
         _success(f"Report written to: {report_path}")
 
     _verbose(f"Summaries: {len(report.summaries)} calibration points", verbose)
+
+
+# ============================================================================
+# Subcommand: prior-summary
+# ============================================================================
+
+
+def cmd_prior_summary(args: argparse.Namespace) -> int:
+    """Summarise what a prior-only BEAST2 run actually sampled.
+
+    Decoupled from XML generation on purpose: this reads output files, and it
+    reports the **effective marginal prior**.  It is not a posterior tool and
+    refuses to describe itself as one -- the columns it prints are prior-only
+    marginals, and relabelling them is exactly the mistake the terminology in
+    the manual is written to prevent.
+    """
+    from .trace import (
+        TraceFormatError,
+        combine_traces,
+        node_age_column,
+        prior_shift,
+        read_trace,
+        summarise_column,
+    )
+
+    def _load(paths):
+        traces = []
+        for raw in paths:
+            try:
+                traces.append(
+                    read_trace(
+                        raw,
+                        burn_in=args.burn_in,
+                        burn_in_fraction=(
+                            None if args.burn_in is not None else args.burn_in_fraction
+                        ),
+                    )
+                )
+            except (TraceFormatError, OSError) as error:
+                _error(f"cannot read trace {raw}: {error}")
+                return None
+        try:
+            return combine_traces(traces) if len(traces) > 1 else traces[0]
+        except TraceFormatError as error:
+            _error(str(error))
+            return None
+
+    trace = _load(args.trace)
+    if trace is None:
+        return 2
+
+    columns = list(args.column or [])
+    resolved: List[tuple] = []
+    for name in columns:
+        if name in trace.numeric_columns:
+            resolved.append((name, name))
+            continue
+        try:
+            resolved.append((name, node_age_column(trace, name)))
+        except TraceFormatError as error:
+            _error(str(error))
+            return 2
+    if not resolved:
+        # Default to the columns a calibration sensitivity plot is drawn from:
+        # tree height plus every logged node age.  Anything else (posterior and
+        # likelihood columns of a prior-only run) would be printed as if it were
+        # an estimate when it is a constant.
+        defaults = [
+            name
+            for name in trace.numeric_columns
+            if name == "treeHeight"
+            or name.startswith("mrca.age(")
+            or name.startswith("median.age(")
+        ]
+        resolved = [(name, name) for name in defaults]
+    if not resolved:
+        _error(
+            "the trace logs no tree height or node-age column, so there is "
+            "nothing to summarise; pass --column explicitly"
+        )
+        return 2
+
+    reference = None
+    if args.reference:
+        reference = _load(args.reference)
+        if reference is None:
+            return 2
+
+    #: One row per (scenario, column).  The shift fields appear only with
+    #: --reference, so the column order is fixed here rather than taken from the
+    #: first row, which would otherwise depend on whether a reference was given.
+    header = [
+        "scenario",
+        "parameter",
+        "median",
+        "hpd_lower",
+        "hpd_upper",
+        "ess",
+        "n",
+        "converged",
+        "reference_median",
+        "median_shift",
+        "reference_hpd_lower",
+        "reference_hpd_upper",
+        "interval_width_ratio",
+    ]
+    rows = []
+    for requested, actual in resolved:
+        summary = summarise_column(trace, actual, ess_minimum=args.ess_min)
+        summary.column = requested
+        summary.scenario = args.label or ""
+        row = {key: value for key, value in summary.as_row().items()}
+        if reference is not None:
+            try:
+                reference_column = (
+                    actual
+                    if actual in reference.numeric_columns
+                    else node_age_column(reference, requested)
+                )
+            except TraceFormatError as error:
+                _error(str(error))
+                return 2
+            shift = prior_shift(
+                reference, trace, [reference_column], scenario_name=args.label or ""
+            )[0]
+            row.update(
+                {
+                    "reference_median": shift.reference_median,
+                    "median_shift": shift.median_shift,
+                    "reference_hpd_lower": shift.reference_lower,
+                    "reference_hpd_upper": shift.reference_upper,
+                    "interval_width_ratio": shift.interval_width_ratio,
+                }
+            )
+        rows.append(row)
+
+    lines = ["\t".join(header)]
+    for row in rows:
+        lines.append(
+            "\t".join(
+                (
+                    ""
+                    if name not in row or row[name] is None
+                    else (f"{row[name]:.6g}" if isinstance(row[name], float) else str(row[name]))
+                )
+                for name in header
+            )
+        )
+    text = "\n".join(lines)
+    if args.out:
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(text + "\n", encoding="utf-8")
+        _success(f"Wrote {len(rows)} row(s) to {args.out}")
+    else:
+        print(text)
+
+    below = [row for row in rows if row.get("converged") is False]
+    if below:
+        _warn(
+            f"{len(below)} column(s) are below the ESS criterion of "
+            f"{args.ess_min:g}: report them as not converged rather than dropping "
+            "them (a leave-one-out set that only shows its easy scenarios is a "
+            "selected result, not a validation)."
+        )
+    _info(
+        "These are prior-only marginals: they describe the effective marginal "
+        "prior the calibration set induces, not a posterior, and they support no "
+        "posterior-dominance claim."
+    )
+    return 0
 
 
 # ============================================================================
@@ -1224,6 +1448,75 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_diag.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     p_diag.set_defaults(func=cmd_diagnose)
+
+    # --- prior-summary ---
+    p_prior = subparsers.add_parser(
+        "prior-summary",
+        help="Summarise prior-only BEAST2 traces: median, 95%% interval, ESS, leave-one-out shift",
+        description=(
+            "Read the .log files of BEAST2 runs that sampled from the prior and "
+            "report each logged node's median, 95% highest-density interval and "
+            "effective sample size; with --reference, also report how far a "
+            "leave-one-out scenario moved the effective marginal prior relative "
+            "to the full calibration set.\n\n"
+            "This is the arithmetic behind the calibration-sensitivity figure, "
+            "kept in the package so that a reported number can be recomputed. It "
+            "reads traces only: it runs no MCMC, and it reports the effective "
+            "marginal prior, never a posterior or posterior dominance.\n\n"
+            "Example:\n"
+            "  beast2py prior-summary --trace full.log --column treeHeight \\\n"
+            "      --column cladeA --burn-in-fraction 0.1 --ess-min 200\n"
+            "  beast2py prior-summary --trace loo.log --reference full.log \\\n"
+            "      --label without_cladeA --out loo.tsv"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_prior.add_argument(
+        "--trace",
+        action="append",
+        required=True,
+        metavar="LOG",
+        help="BEAST2 trace log; pass it more than once to pool independent runs "
+        "of the same scenario (equal column sets and equal lengths are required)",
+    )
+    p_prior.add_argument(
+        "--reference",
+        action="append",
+        metavar="LOG",
+        help="Trace of the full-calibration run to compare against",
+    )
+    p_prior.add_argument(
+        "--column",
+        action="append",
+        default=[],
+        metavar="NAME",
+        help="Column to summarise, by header name or calibration name "
+        "(cladeA resolves to mrca.age(cladeA.taxonset)); repeatable. "
+        "Default: tree height plus every logged node age",
+    )
+    p_prior.add_argument("--label", default="", help="Scenario label written into the output rows")
+    burn = p_prior.add_mutually_exclusive_group()
+    burn.add_argument(
+        "--burn-in",
+        type=int,
+        default=None,
+        help="Number of leading samples to discard",
+    )
+    burn.add_argument(
+        "--burn-in-fraction",
+        type=float,
+        default=0.1,
+        help="Fraction of logged samples to discard (default 0.1)",
+    )
+    p_prior.add_argument(
+        "--ess-min",
+        type=float,
+        default=200.0,
+        dest="ess_min",
+        help="ESS criterion used only to label a row as not converged (default 200)",
+    )
+    p_prior.add_argument("--out", default=None, help="Write TSV here instead of stdout")
+    p_prior.set_defaults(func=cmd_prior_summary)
 
     # --- quick ---
     p_quick = subparsers.add_parser(

@@ -1,0 +1,131 @@
+{
+  "description": "Diagnostic validation set with synthetic standard answers. All boundary ages and priors are virtual values chosen to exercise the ordering rules; they are not taken from any publication or empirical dataset.",
+  "scenarios": [
+    {
+      "id": "independent_similar",
+      "description": "Two independent (disjoint) clades with nearly identical priors must NOT be reported as a conflict or redundancy.",
+      "calibrations": [
+        {"name": "cladeA", "taxa": ["A", "B"], "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}},
+        {"name": "cladeB", "taxa": ["C", "D"], "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}}
+      ],
+      "expected": {"errors": 0, "warnings": 0, "topology": 0, "temporal": 0, "same_node": 0, "unchecked": 0, "status": "not_applicable"}
+    },
+    {
+      "id": "independent_different",
+      "description": "Two independent clades with very different priors must NOT be a conflict either.",
+      "calibrations": [
+        {"name": "cladeA", "taxa": ["A", "B"], "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}},
+        {"name": "cladeB", "taxa": ["C", "D"], "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}}
+      ],
+      "expected": {"errors": 0, "warnings": 0, "topology": 0, "temporal": 0, "same_node": 0, "unchecked": 0, "status": "not_applicable"}
+    },
+    {
+      "id": "same_node_mutually_exclusive",
+      "description": "The same node constrained by two disjoint priors: a same-node error, not a similarity between independent clades.",
+      "calibrations": [
+        {"name": "hominidae_v1", "taxa": ["A", "B"], "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}},
+        {"name": "hominidae_v2", "taxa": ["A", "B"], "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}}
+      ],
+      "expected": {"errors": 1, "warnings": 0, "topology": 0, "temporal": 0, "same_node": 1, "unchecked": 0, "status": "checked"}
+    },
+    {
+      "id": "duplicate_same_node",
+      "description": "The same node and the same distribution: a duplicate warning, because the prior is counted twice.",
+      "calibrations": [
+        {"name": "dup1", "taxa": ["A", "B"], "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}},
+        {"name": "dup2", "taxa": ["A", "B"], "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}}
+      ],
+      "expected": {"errors": 0, "warnings": 1, "topology": 0, "temporal": 0, "same_node": 0, "unchecked": 0, "status": "checked"}
+    },
+    {
+      "id": "parent_younger_than_child",
+      "description": "A nested parent whose entire 95% interval is younger than its child's: a temporal error.",
+      "calibrations": [
+        {"name": "parent", "taxa": ["A", "B", "C"], "distribution": {"type": "normal", "parameters": {"mean": 6.0, "sigma": 0.3}}},
+        {"name": "child", "taxa": ["A", "B"], "distribution": {"type": "normal", "parameters": {"mean": 15.0, "sigma": 0.5}}}
+      ],
+      "expected": {"errors": 1, "warnings": 0, "topology": 0, "temporal": 1, "same_node": 0, "unchecked": 0, "status": "checked"}
+    },
+    {
+      "id": "nested_consistent",
+      "description": "A nested parent older than its child: no conflict.",
+      "calibrations": [
+        {"name": "parent", "taxa": ["A", "B", "C"], "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}},
+        {"name": "child", "taxa": ["A", "B"], "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}}
+      ],
+      "expected": {"errors": 0, "warnings": 0, "topology": 0, "temporal": 0, "same_node": 0, "unchecked": 0, "status": "checked"}
+    },
+    {
+      "id": "intersecting_non_nested_monophyletic",
+      "description": "Two intersecting, non-nested taxon sets both declared monophyletic: no rooted tree can satisfy both, so a topology error.",
+      "calibrations": [
+        {"name": "cladeABC", "taxa": ["A", "B", "C"], "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}},
+        {"name": "cladeBCD", "taxa": ["B", "C", "D"], "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}}
+      ],
+      "expected": {"errors": 1, "warnings": 0, "topology": 1, "temporal": 0, "same_node": 0, "unchecked": 0, "status": "checked"}
+    },
+    {
+      "id": "intersecting_non_monophyletic",
+      "description": "The same intersecting sets, but one calibration does not assert monophyly: the topology rule does not apply, so the pair is unchecked rather than falsely passed.",
+      "calibrations": [
+        {"name": "cladeABC", "taxa": ["A", "B", "C"], "monophyletic": true, "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}},
+        {"name": "cladeBCD", "taxa": ["B", "C", "D"], "monophyletic": false, "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}}
+      ],
+      "expected": {"errors": 0, "warnings": 0, "topology": 0, "temporal": 0, "same_node": 0, "unchecked": 1, "status": "unchecked"}
+    },
+    {
+      "id": "crown_stem_same_set_violation",
+      "description": "Crown and stem of the same taxon set are parent and child. A stem prior younger than the crown prior is a temporal error.",
+      "calibrations": [
+        {"name": "crown", "taxa": ["A", "B", "C"], "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}},
+        {"name": "stem", "taxa": ["A", "B", "C"], "use_originate": true, "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}}
+      ],
+      "expected": {"errors": 1, "warnings": 0, "topology": 0, "temporal": 1, "same_node": 0, "unchecked": 0, "status": "checked"}
+    },
+    {
+      "id": "nested_parent_crown_child_stem",
+      "description": "A nested child calibrated on its stem: taxon containment does not determine whether S(child) is above or below C(parent), so the pair is unchecked.",
+      "calibrations": [
+        {"name": "parent", "taxa": ["A", "B", "C"], "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}},
+        {"name": "child_stem", "taxa": ["A", "B"], "use_originate": true, "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}}
+      ],
+      "expected": {"errors": 0, "warnings": 0, "topology": 0, "temporal": 0, "same_node": 0, "unchecked": 1, "status": "unchecked"}
+    },
+    {
+      "id": "stem_stem_nested",
+      "description": "Both nested clades calibrated on their stems: the parent stem is necessarily older, so the pair is checked and consistent.",
+      "calibrations": [
+        {"name": "parent_stem", "taxa": ["A", "B", "C"], "use_originate": true, "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}},
+        {"name": "child_stem", "taxa": ["A", "B"], "use_originate": true, "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}}
+      ],
+      "expected": {"errors": 0, "warnings": 0, "topology": 0, "temporal": 0, "same_node": 0, "unchecked": 0, "status": "checked"}
+    },
+    {
+      "id": "root_vs_clade",
+      "description": "A root calibration is older than every non-root node; the pair is checked and consistent.",
+      "calibrations": [
+        {"name": "root", "taxa": null, "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}},
+        {"name": "clade", "taxa": ["A", "B"], "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}}
+      ],
+      "expected": {"errors": 0, "warnings": 0, "topology": 0, "temporal": 0, "same_node": 0, "unchecked": 0, "status": "checked"}
+    },
+    {
+      "id": "one_on_x_unchecked",
+      "description": "OneOnX has no finite mean or quantiles; a nested comparison involving it must be unchecked, not silently passed.",
+      "calibrations": [
+        {"name": "improper", "taxa": ["A", "B"], "distribution": {"type": "one_on_x", "parameters": {}}},
+        {"name": "parent", "taxa": ["A", "B", "C"], "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}}
+      ],
+      "expected": {"errors": 0, "warnings": 0, "topology": 0, "temporal": 0, "same_node": 0, "unchecked": 1, "status": "unchecked"}
+    },
+    {
+      "id": "tipsonly_not_a_clade_age",
+      "description": "A tip date is not a clade age; no structural ordering rule applies, and the pair is not applicable rather than checked.",
+      "calibrations": [
+        {"name": "tip_date", "taxa": ["A"], "tipsonly": true, "distribution": {"type": "normal", "parameters": {"mean": 0.0, "sigma": 0.1}}},
+        {"name": "clade", "taxa": ["A", "B"], "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}}
+      ],
+      "expected": {"errors": 0, "warnings": 0, "topology": 0, "temporal": 0, "same_node": 0, "unchecked": 0, "status": "not_applicable"}
+    }
+  ]
+}

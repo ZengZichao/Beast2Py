@@ -1,0 +1,54 @@
+metadata:
+  analysis_name: "config_coalescent_constant"
+  analysis_description: "Coverage fixture: Coalescent constant population size; technical test input."
+  author: "Beast2Py coverage suite"
+  date: "2026-10-27"
+  beast2_version: "2.7.7"
+  tool_version: "0.2.0"
+
+alignments:
+  - id: "alignment"
+    file: "nucleotide_4.fasta"
+    format: "auto"
+    data_type: "nucleotide"
+
+partitions:
+  - id: "alignment"
+    site_model:
+      substitution_model: {type: "hky"}
+    clock_model:
+      type: "strict"
+      clock_rate: {value: 0.01, lower: 0.0}
+    tree: "shared"
+
+tree_prior:
+  type: "coalescent_constant"
+  pop_size: {value: 0.01, lower: 0.0}
+
+parameter_priors:
+  - parameter: "popSize"
+    distribution:
+      type: "lognormal"
+      parameters: {M: -4.6, S: 1.0}
+
+mcmc:
+  type: "standard"
+  chain_length: 10000
+  store_every: 100
+
+loggers:
+  trace_log:
+    file_name: "config_coalescent_constant.$(seed).log"
+    log_every: 100
+  tree_log:
+    file_name: "config_coalescent_constant.$(seed).trees"
+    log_every: 100
+  screen_log:
+    log_every: 1000
+
+initialization:
+  tree_type: "random"
+
+output:
+  file: "config_coalescent_constant.xml"
+  embed_fingerprint: true

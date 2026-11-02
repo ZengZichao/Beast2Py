@@ -19,8 +19,8 @@ metadata:
   analysis_description: "Relaxed clock analysis with the UCLN model"
   author: "Beast2Py"
   date: "2026-08-01"
-  beast2_version: "2.7.8"
-  tool_version: "0.1.2"
+  beast2_version: "2.7.7"
+  tool_version: "0.2.0"
 
 alignments:
   - id: "alignment"
@@ -70,25 +70,21 @@ tree_prior:
   sample_probability: {value: 1.0, lower: 0.0, upper: 1.0}
 
 calibrations:
-  # lognormal(M=0.35, S=0.4) offset 6.5 -> median 7.92, 95% HPD [7.02, 9.31]
+  # Synthetic lognormal(M=0.2, S=0.35) offset 5.0; illustrative only.
   - name: "homininaMRCA"
     taxa: ["Homo_sapiens", "Pan"]
     monophyletic: true
     distribution:
       type: "lognormal"
-      parameters: {M: 0.35, S: 0.4}
-      offset: 6.5
+      parameters: {M: 0.2, S: 0.35}
+      offset: 5.0
     provenance:
-      source: "fossil"
-      reference: "placeholder — no source consulted; replace with the reference you used"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
-      original_age_min: 7.0
-      original_age_max: 9.5
-      notes: "illustrative input, not a published age: Sahelanthropus tchadensis soft; soft minimum"
-
-  # Homineoid/cercopithecoid split (crown Catarrhini = the 9 catarrhine taxa;
-  # Saimiri, Tarsius and Lemur fall outside it).
-  # lognormal(M=3.35, S=0.1) -> median 28.5, 95% HPD [23.2, 34.5]
+      original_age_min: 5.0
+      original_age_max: 6.0
+      notes: "Synthetic calibration card for the homininaMRCA example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in Ma and exist only to exercise the provenance fields, XML generation and diagnostics."
   - name: "catarrhiniMRCA"
     taxa:
       - "Homo_sapiens"
@@ -102,15 +98,15 @@ calibrations:
       - "M_sylvanus"
     monophyletic: true
     distribution:
-      type: "lognormal"
-      parameters: {M: 3.35, S: 0.1}
+      type: "uniform"
+      parameters: {lower: 25.0, upper: 35.0}
     provenance:
-      source: "secondary"
-      reference: "TimeTree of Life, Homo/Macaca estimates (https://www.timetree.org)"
+      source: "other"
+      reference: "Synthetic example data generated for Beast2Py documentation and testing; not derived from any publication or empirical dataset."
       calibration_type: "soft"
       original_age_min: 25.0
-      original_age_max: 33.0
-      notes: "Secondary calibration; Oligocene catarrhines give a ~28 Ma floor"
+      original_age_max: 35.0
+      notes: "Synthetic calibration card for the catarrhiniMRCA example node. The distribution, offset and age bracket are invented for demonstration and testing; they are not derived from any fossil, publication, or empirical dataset. The values are expressed in Ma and exist only to exercise the provenance fields, XML generation and diagnostics."
 
 mcmc:
   type: "standard"

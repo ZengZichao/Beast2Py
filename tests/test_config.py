@@ -134,7 +134,7 @@ calibrations:
       parameters: {mean: 10.0, sigma: 1.0}
     provenance:
       source: fossil
-      reference: DOI:10.1038/xxx
+      reference: doi:10.0000/example.synthetic
       calibration_type: soft
       notes: Test fossil
 
@@ -279,7 +279,11 @@ class TestProvenanceValueWhitelist:
     def test_calibration_type_accepts_the_documented_values(self, spelling):
         """Case and padding fold onto the two documented values."""
         config = self._parse_with_provenance(
-            {"source": "fossil", "calibration_type": spelling, "reference": "DOI:10.1038/x"}
+            {
+                "source": "fossil",
+                "calibration_type": spelling,
+                "reference": "doi:10.0000/example.synthetic",
+            }
         )
         assert config.calibrations[0].provenance.calibration_type == spelling.strip().lower()
 
@@ -290,7 +294,11 @@ class TestProvenanceValueWhitelist:
         """The value is refused, and the message lists what is allowed."""
         with pytest.raises(ConfigError) as exc:
             self._parse_with_provenance(
-                {"source": "fossil", "calibration_type": spelling, "reference": "DOI:10.1038/x"}
+                {
+                    "source": "fossil",
+                    "calibration_type": spelling,
+                    "reference": "doi:10.0000/example.synthetic",
+                }
             )
         message = str(exc.value)
         assert "calibration_type" in message
@@ -300,7 +308,11 @@ class TestProvenanceValueWhitelist:
     def test_source_accepts_the_documented_values(self, spelling):
         """The four values Supplementary Table S6 documents all parse."""
         config = self._parse_with_provenance(
-            {"source": spelling, "calibration_type": "soft", "reference": "DOI:10.1038/x"}
+            {
+                "source": spelling,
+                "calibration_type": "soft",
+                "reference": "doi:10.0000/example.synthetic",
+            }
         )
         assert config.calibrations[0].provenance.source == spelling
 
@@ -309,7 +321,11 @@ class TestProvenanceValueWhitelist:
         """A misspelt or invented source is named, not quietly kept."""
         with pytest.raises(ConfigError) as exc:
             self._parse_with_provenance(
-                {"source": spelling, "calibration_type": "soft", "reference": "DOI:10.1038/x"}
+                {
+                    "source": spelling,
+                    "calibration_type": "soft",
+                    "reference": "doi:10.0000/example.synthetic",
+                }
             )
         message = str(exc.value)
         assert "source" in message
@@ -318,7 +334,7 @@ class TestProvenanceValueWhitelist:
     def test_an_omitted_source_stays_legal(self):
         """``source`` is optional; only a *given* value is whitelisted."""
         config = self._parse_with_provenance(
-            {"calibration_type": "soft", "reference": "DOI:10.1038/x"}
+            {"calibration_type": "soft", "reference": "doi:10.0000/example.synthetic"}
         )
         assert config.calibrations[0].provenance.source == ""
 
@@ -329,7 +345,7 @@ class TestProvenanceValueWhitelist:
                 {
                     "source": "fossil",
                     "calibration_type": "hard",
-                    "reference": "DOI:10.1038/x",
+                    "reference": "doi:10.0000/example.synthetic",
                     "original_age_min": 7.0,
                     "original_age_max": 9.0,
                 }
@@ -350,7 +366,7 @@ class TestProvenanceValueWhitelist:
                 {
                     "source": "fossil",
                     "calibration_type": "hardbound",
-                    "reference": "DOI:10.1038/x",
+                    "reference": "doi:10.0000/example.synthetic",
                     "original_age_min": 7.0,
                     "original_age_max": 9.0,
                 }
@@ -367,7 +383,7 @@ class TestProvenanceValueWhitelist:
                 {
                     "source": "fossil",
                     "calibration_type": "soft",
-                    "reference": "DOI:10.1038/x",
+                    "reference": "doi:10.0000/example.synthetic",
                     "original_age_min": 7.0,
                     "original_age_max": 9.0,
                 }

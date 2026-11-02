@@ -425,6 +425,7 @@ class Beast2Py:
                 sensitivity_xmls=report.sensitivity_xmls,
                 visualization_file=report.visualization_file,
                 output_file=report_path,
+                assessments=report.assessments,
             )
             report.report_path = report_path
 
@@ -454,8 +455,17 @@ class Beast2Py:
 
         from .diagnostics import ConflictDetector
 
+        all_taxa = sorted(
+            {
+                taxon
+                for alignment in getattr(beast_config, "all_alignments", []) or []
+                for taxon in alignment.taxa_names
+            }
+        )
         return ConflictDetector.detect_conflicts(
-            beast_config.calibrations, settings=getattr(beast_config, "diagnostics", None)
+            beast_config.calibrations,
+            settings=getattr(beast_config, "diagnostics", None),
+            all_taxa=all_taxa or None,
         )
 
     def generate_sensitivity_xmls(
@@ -1244,6 +1254,17 @@ def _parse_calibration_yaml_file(yaml_path: str) -> List[CalibrationPoint]:
         monophyletic = ConfigParser._as_bool(cal_raw, "monophyletic", True, where)
         use_originate = ConfigParser._as_bool(cal_raw, "use_originate", False, where)
         tipsonly = ConfigParser._as_bool(cal_raw, "tipsonly", False, where)
+        if taxa is None and use_originate:
+            raise ValueError(
+                f"Calibration '{name}': use_originate: true requires a taxon set; "
+                f"the root has no parent (stem) node."
+            )
+        if tipsonly and use_originate:
+            raise ValueError(
+                f"Calibration '{name}': use_originate cannot be combined with " f"tipsonly: true."
+            )
+        if tipsonly and taxa is None:
+            raise ValueError(f"Calibration '{name}': tipsonly: true requires a taxon list of tips.")
 
         dist = None
         dist_raw = cal_raw.get("distribution")
