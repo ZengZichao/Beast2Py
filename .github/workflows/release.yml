@@ -117,7 +117,11 @@ jobs:
       - name: Refuse a release whose Gate 3 was skipped
         run: |
           set -uo pipefail
-          if grep -Eiq "SKIPPED.*(beast|jar|jdk|java|runtime)" suite.log; then
+          # Match the runtime-unavailable reason, not the test file name. The
+          # old broad "beast" pattern also matched optional BDSKY/NS add-on
+          # skips (their line starts with "tests/test_beast2_validation.py"),
+          # turning a missing optional package into a failed release.
+          if grep -Eiq "SKIPPED.*BEAST2 integration check unavailable" suite.log; then
             echo "::error::a BEAST2-dependent test skipped because the runtime was not found."
             echo "::error::Publishing on a skipped gate is exactly what the review called"
             echo "  "a silent skip read as full coverage". Fix the install, do not ship it."
