@@ -47,12 +47,12 @@ dependencies = [
 # are the versions the current tree is verified against, and every one of them
 # declares `Requires-Python >= 3.10`, so the 3.10-3.12 CI matrix is unaffected.
 dev = [
-    "pytest==9.1.1",
+    "pytest==9.2.0",
     "pytest-cov==7.1.0",
     "flake8==7.4.1",
-    "black==26.5.1",
-    "mypy==2.3.1",
-    "types-PyYAML==6.0.12.20260906",
+    "black==26.10.1",
+    "mypy==2.4.1",
+    "types-PyYAML==6.0.12.20261030",
 ]
 xml = ["lxml>=4.9"]
 
