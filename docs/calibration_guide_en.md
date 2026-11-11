@@ -1,5 +1,7 @@
 # Calibration Prior Best Practices Guide
 
+English | [中文](calibration_guide_zh.md)
+
 ## Introduction
 
 Node calibration is a critical step in divergence time estimation. Poorly chosen calibrations can lead to biased posterior estimates or "prior dominance" where the prior overwhelms the data. This guide provides best practices for specifying calibration priors in Beast2Py.

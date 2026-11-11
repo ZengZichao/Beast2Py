@@ -4,6 +4,8 @@
 - **作者：** 曾子超 (Zichao Zeng) · [ORCID: 0000-0001-6553-970X](https://orcid.org/0000-0001-6553-970X)
 - **日期：** 2026 年
 
+[English](user_manual_en.md) | 中文
+
 ---
 
 ## 目录
@@ -19,7 +21,7 @@
 9. [时钟模型](#9-时钟模型)
 10. [树先验](#10-树先验)
 11. [校准分布](#11-校准分布)
-12. [多 Partition 分析](#12-多-partition-分析)
+12. [多分区分析](#12-多分区分析)
 13. [末端日期](#13-末端日期)
 14. [校准诊断](#14-校准诊断)
 15. [可重复性工具](#15-可重复性工具)
@@ -27,7 +29,7 @@
 17. [MCMC 设置](#17-mcmc-设置)
 18. [日志器配置](#18-日志器配置)
 19. [初始化策略](#19-初始化策略)
-20. [操作器权重](#20-操作器权重)
+20. [算子权重](#20-算子权重)
 21. [示例配置文件](#21-示例配置文件)
 22. [故障排除](#22-故障排除)
 23. [附录：模型完整列表](#23-附录模型完整列表)
@@ -46,7 +48,7 @@ Beast2Py 从 YAML 配置生成完整的 BEAST2 XML，支持的模型包括：
 - 4 种时钟模型：严格时钟、UCLN、UCE、RLC
 - 8 种树先验：Yule、CalibratedYule、Birth-Death、Coalescent 常量/指数、Bayesian Skyline、EBSP、BD Skyline Serial
 
-该工具支持多 partition 分析（含密码子分区），并可在各 partition 之间链接或解链模型（link/unlink）。
+该工具支持多分区分析（含密码子分区），可在各分区之间链接或断开模型；所有分区都装配在同一棵链接拓扑上（见[第 12 节](#12-多分区分析)）。
 
 诊断方面，Beast2Py 提供结构化的校准诊断（同一节点矛盾、嵌套时间顺序、相交非嵌套单系，并显式报告 unchecked 配对）和先验敏感性分析（留一法 XML 生成）。此外，工具还支持校准分布可视化、分析指纹、方法学描述自动生成，以及 Snakemake/Nextflow 管道文件生成。
 
@@ -69,7 +71,7 @@ Beast2Py 采用分层架构设计，分离为 CLI/API 入口层、配置管理�
 | LPhy + LPhyBeast | Java | 概率模型规约语言 → BEAST XML（已面向 BEAST 3） |
 | Beast2Py | Python | 声明式 YAML + 校准冲突检测 + 留一法先验敏感性 XML + 校准来源/指纹/方法学/管道制品 |
 
-注意：仅先验采样并非 Beast2Py 独有——对任意既有 XML 可直接运行 `beast -sampleFromPrior output.xml`。Beast2Py 的贡献在于自动完成 N+1 留一法编排，并将冲突检测与可重复性制品整合到同一配置阶段工作流中。
+注意：仅先验采样并非 Beast2Py 独有——对任意既有 XML 可直接运行 `beast -sampleFromPrior your.xml`。Beast2Py 的贡献在于自动完成 N+1 留一法编排，并将冲突检测与可重复性制品整合到同一配置阶段工作流中。
 
 ---
 
@@ -77,7 +79,7 @@ Beast2Py 采用分层架构设计，分离为 CLI/API 入口层、配置管理�
 
 ### 2.1 前提条件
 
-Beast2Py 需要 Python 3.10 或更高版本以及 pip 包管理器。生成、诊断与结构验证器均为纯 Python 实现。可选的 BEAST2 验证闸门还需要安装 BEAST2，以及 **JDK 17 或更新版本**的运行时，因为 BEAST 2.7.x 的 class 文件无法在更旧的 JDK 上加载。本文所有内容均已针对 **BEAST2 v2.7.8** 核实；其他 2.7.x 版本预期可用，但未经测试。
+Beast2Py 需要 Python 3.10 或更高版本以及 pip 包管理器。生成、诊断与结构验证器均为纯 Python 实现。可选的 BEAST2 验证闸门还需要安装 BEAST2，以及 **JDK 17 或更新版本**的运行时，因为 BEAST 2.7.x 的 class 文件无法在更旧的 JDK 上加载。本文所有内容均已针对 **BEAST2 v2.7.7** 及其自带的 JDK 17 核实；其他 2.7.x 版本预期可用，但未经测试。
 
 ### 2.2 从源码安装
 
@@ -290,7 +292,7 @@ $ beast2py generate -c examples/config_basic.yaml -o /tmp/output.xml -v
 
 四道编号检查依次是：闸门 0（对**输入**做解析期校验——校准溯源规则与比对字符校验）、闸门 1（结构检查）、闸门 2（校准冲突检测）与闸门 3（BEAST2 解析并初始化）。闸门 0 不在 `/3` 这个分母里，因为它在任何 XML 字符串存在之前就已运行；它的标签本身就把这一点写了出来，所以进度行仍然只数到 3。
 
-加 `--beast2-validate` 会多出一行 `[OK] Gate 3/3 passed: BEAST2 parsed and initialised the model.`。缺 BEAST2 时输出改为 `[ERROR] Gate 3/3 unavailable: …`，退出码为 **2**，并且不写任何文件。加上 `--allow-unvalidated` 会把该结果降级为 `[WARN]` 并照样写出，此时不应把该 XML 称为已通过 BEAST2 验证。闸门 0 失败会打印 `[ERROR] Gate 0 (parse-time, before the 3 generation gates) failed: Configuration error: …`，退出码为 **1**，同样不写任何文件——三道生成闸门根本不会运行，因为此时还没有可供判定的 XML。
+加 `--beast2-validate` 会多出一行 `[OK] Gate 3/3 passed: BEAST2 parsed and initialised the model.`。缺 BEAST2 时输出改为 `[ERROR] Gate 3/3 unavailable: no BEAST2 installation was found, …`，退出码为 **2**，并且不写任何文件。加上 `--allow-unvalidated` 会把该结果降级为 `[WARN]` 并照样写出，此时不应把该 XML 称为已通过 BEAST2 验证。闸门 0 失败会打印 `[ERROR] Gate 0 (parse-time, before the 3 generation gates) failed: Configuration error: …`，退出码为 **1**，同样不写任何文件——三道生成闸门根本不会运行，因为此时还没有可供判定的 XML。
 
 ### 4.3 API 快速开始
 
@@ -393,7 +395,7 @@ beast2py generate \
 | `--force` | | 否 | False | `--output` 已存在时覆盖（默认：拒绝并退出码 1） |
 | `--verbose` | `-v` | 否 | False | 显示详细输出信息 |
 
-**闸门与退出码。** 四道编号检查按此顺序运行：闸门 0（配置的解析期校验——校准溯源规则与比对字符校验，在读 YAML 与 FASTA 时由 `ConfigParser.parse` 抛出），随后是闸门 1（Beast2Py 结构与语义自检）、闸门 2（校准冲突检测），以及按需开启的闸门 3（BEAST2 解析与初始化）。三道生成闸门全部在写文件**之前**运行，而闸门 0 在 XML 字符串存在之前就已运行，这正是打印的分母保持 `/3` 的原因。任一生成闸门失败都会打印 `[ERROR] Gate n/3 failed: …`，以退出码 1 返回，并且不写出文件；闸门 0 失败则打印 `[ERROR] Gate 0 (parse-time, before the 3 generation gates) failed: Configuration error: …`，同样以退出码 1 返回、不写文件，因为此时还没有可供生成闸门判定的东西；Python API 此时抛出 `ValueError`。若输出旁残留早先的 `.fingerprint.json` 或 `.methods.tex`，而本次调用省略了 `--fingerprint`/`--methods`，CLI 会警告这些文件正在变陈旧。各道检查能证明什么、不能证明什么，见[第 16 节](#16-验证)。
+**闸门与退出码。** 四道编号检查按此顺序运行：闸门 0（配置的解析期校验——校准溯源规则与比对字符校验，在读 YAML 与 FASTA 时抛出），随后是闸门 1（Beast2Py 结构检查）、闸门 2（校准冲突检测），以及按需开启的闸门 3（BEAST2 解析与初始化）。三道生成闸门全部在写文件**之前**运行，而闸门 0 在 XML 字符串存在之前就已运行，这正是打印的分母保持 `/3` 的原因。任一生成闸门失败都会打印 `[ERROR] Gate n/3 failed: …`，以退出码 1 返回，并且不写出文件；闸门 0 失败则打印 `[ERROR] Gate 0 (parse-time, before the 3 generation gates) failed: Configuration error: …`，同样以退出码 1 返回、不写文件，因为此时还没有可供生成闸门判定的东西；Python API 此时抛出 `ValueError`。若输出旁残留早先的 `.fingerprint.json` 或 `.methods.tex`，而本次调用省略了 `--fingerprint`/`--methods`，CLI 会警告这些文件正在变陈旧。各道检查能证明什么、不能证明什么，见[第 16 节](#16-验证)。
 
 **示例：**
 
@@ -442,17 +444,17 @@ beast2py diagnose \
 
 ```bash
 # 完整诊断
-beast2py diagnose -c config.yaml --report report.html --sensitivity --visualize
+beast2py diagnose -c examples/config_basic.yaml --report /tmp/report.html --sensitivity --visualize
 
 # 仅冲突检测
-beast2py diagnose -c config.yaml --report report.html
+beast2py diagnose -c examples/config_basic.yaml --report /tmp/report.html
 ```
 
 需要注意，`generate` 已经把冲突检测器作为它的闸门 2 运行过了；`diagnose` 提供的是独立而更完整的报告（敏感性 XML、密度图、HTML）。
 
 ### 5.3 `quick` — 快速模式
 
-用户无需编写完整 YAML 配置，直接用命令行参数即可生成单 partition XML。`quick` 适用于简单分析和快速测试。
+用户无需编写完整 YAML 配置，直接用命令行参数即可生成单分区 XML。`quick` 适用于简单分析和快速测试。
 
 ```bash
 beast2py quick \
@@ -518,16 +520,16 @@ beast2py quick \
 
 ```bash
 # 最简单的快速生成
-beast2py quick -a primates.fasta -o quick_output.xml
+beast2py quick -a examples/primates.fasta -o /tmp/output_quick.xml
 
 # 带校准和 Gamma
-beast2py quick -a primates.fasta -o quick_full_output.xml \
+beast2py quick -a examples/primates.fasta -o /tmp/output_quick_full.xml \
     --tree-prior birth_death \
     --subst-model gtr \
     --clock-model ucln \
     --gamma-categories 4 \
-    --calibration-yaml cals.yaml \
-    --chain-length 50000000 \
+    --calibration-yaml examples/calibrations.yaml \
+    --chain-length 1000000 \
     --name "my_analysis"
 ```
 
@@ -553,9 +555,9 @@ beast2py validate \
 | `--beast2-path` | 否 | `beast` | BEAST2 可执行文件或 `beast2_validate.sh` 路径 |
 | `--allow-unvalidated` | 否 | False | 与 `--beast2` 同用：BEAST2 不可达时仍把仅结构检查通过报告为成功；不加则该情形退出码为 **2**。与 `generate --beast2-validate --allow-unvalidated` 是同名、同豁免、同拒绝方式的同一选项 |
 
-**两级检查与闸门编号的对应关系。** `validate` 读的是 XML 文件而不是 YAML 配置，所以它没有闸门 0 可运行——解析期校验里属于格式合法性的那一半就在 Level 1 内；它也重跑不了闸门 2（校准冲突），因为那需要当初生成这份 XML 的配置。于是每一行都把自己对应的闸门写进标签里：Level 1/2 就是闸门 1（结构检查），Level 2/2 就是闸门 3（BEAST2 解析 + 模型初始化）。
+**两级检查与闸门编号的对应关系。** `validate` 读的是 XML 文件而不是 YAML 配置，所以它没有闸门 0 可运行——解析期校验里属于良构（well-formed）检查的那一半就在 Level 1 内；它也重跑不了闸门 2（校准冲突），因为那需要当初生成这份 XML 的配置。于是每一行都把自己对应的闸门写进标签里：Level 1/2 就是闸门 1（结构检查），Level 2/2 就是闸门 3（BEAST2 解析 + 模型初始化）。
 
-**第 1 级（始终运行）。** 检查 XML 格式正确性与下列各项：
+**第 1 级（始终运行）。** 检查 XML 是否良构（well-formed），并检查下列各项：
 
 - 根元素必须为 `<beast>`
 - 必需元素（`<data>` 与 `<run>`）存在
@@ -563,7 +565,7 @@ beast2py validate \
 - `<state>` 元素存在，后验引用与日志器存在
 - 序列数据非空且等长，分类单元名唯一
 
-语义检查包括：每个被估计参数都带有 `Prior`，状态节点上下界未反向，初值落在自身界内且与声明维度匹配。`storeEvery` 关闭续算时，该级给出警告。
+语义检查包括：每个被估计参数都带有 `Prior`，状态节点上下界未反向，初值落在自身界内且与声明维度匹配。`storeEvery` 关闭续算时，该级给出警告而非错误。
 
 **第 2 级（`--beast2`）。** 无头 BEAST2 `XMLParser` 解析文件，**并对每个对象调用 `initAndValidate()`**。两级用不同措辞分别报告通过信息，并各自带上闸门映射（`Level 1/2 passed (Gate 1, structural checks): ids, idrefs, priors, bounds and XML well-formedness.` 与 `Level 2/2 passed (Gate 3): BEAST2 parsed and initialised the model.`）。
 
@@ -611,11 +613,11 @@ beast2py pipeline \
 | `--output-dir` | 否 | `.` | 输出目录 |
 | `--threads` | 否 | `mcmc.threads`（4） | 写入流程的 BEAST2 线程数（`beast -threads N`），必须是正整数 |
 
-管道包含以下规则或进程：XML 生成（调用 `beast2py generate`）、BEAST2 执行（调用 `beast -overwrite`）、校准诊断（调用 `beast2py diagnose`）、方法学描述生成（调用 `beast2py methods`）。BEAST2 执行一步的线程数取自 `mcmc.threads`（默认 4），或由 `--threads` 覆盖；笔记本与受限的 HPC 分区可设为 1。
+管道包含以下规则或进程：XML 生成（调用 `beast2py generate`）、BEAST2 执行（调用 `beast -overwrite`）、校准诊断（调用 `beast2py diagnose`）、方法学描述生成（调用 `beast2py methods`）。BEAST2 执行一步的线程数取自 `mcmc.threads`（默认 4），也可在每次调用时用 `--threads` 覆盖，因此一台**双核**笔记本或资源受限的 HPC 分区都可以要求 `-threads 1`。
 
 ### 5.7 `fingerprint` — 生成分析指纹
 
-`fingerprint` 生成基于配置 SHA-256 哈希的唯一分析标识符。
+`fingerprint` 生成确定性的分析标识符：基于科学配置的 SHA-256 摘要，再加上每条比对的内容摘要。
 
 ```bash
 beast2py fingerprint \
@@ -652,7 +654,7 @@ beast2py fingerprint \
 
 上述 `generation_time` 是采集该样本的时刻；标识符本身不含时间成分，同一配置在同一比对数据上重跑总得到 `B2P-3f43bfab58c3-0.2.0`。
 
-`data_hash` 由每条比对内容的摘要再汇总而成，取前 16 位，会作为 `| Data: {hash16}` 附在 XML 的指纹注释里。`generation_time` **只**出现在这个侧车文件中；XML 本体带的是无时间戳的注释（见第 15.1 节）。
+`data_hash` 由每条比对内容的摘要再汇总而成，取前 16 位，会作为 `| Data: {hash16}` 附在 XML 的指纹注释里。`generation_time` **只**出现在这个侧车文件中；XML 本体带的是无时间戳的注释（见[第 15.1 节](#151-分析指纹)）。
 
 ### 5.8 `list-models` — 列出支持的模型
 
@@ -710,13 +712,13 @@ xml_str = b2p.generate_xml(
 
 ```python
 xml_str = b2p.quick_generate(
-    alignment="primates.fasta",
+    alignment="examples/primates.fasta",
     output="output.xml",
     tree_prior="yule",
     subst_model="hky",
     clock_model="strict",
     gamma_categories=0,
-    calibration_yaml="cals.yaml",  # 可选
+    calibration_yaml="examples/calibrations.yaml",  # 可选
     chain_length=10_000_000,
     pre_burnin=0,
     name="my_analysis",
@@ -724,7 +726,7 @@ xml_str = b2p.quick_generate(
 )
 ```
 
-它运行同样的三道闸门，`force` 的语义也与 `generate_xml()` 一致。
+它运行与 `generate_xml` 相同的闸门（闸门 1 与闸门 2），`force` 的语义也一致。
 
 ### 6.4 `diagnose` — 运行诊断
 
@@ -753,7 +755,7 @@ print(f"可视化文件: {report.visualization_file}")
 ```python
 conflicts = b2p.detect_conflicts(config)
 for c in conflicts:
-    print(f"[{c.severity}] {c.calibration_a} ↔ {c.calibration_b}: {c.description}")
+    print(f"[{c.severity}] {c.calibration_a} <-> {c.calibration_b}: {c.description}")
 ```
 
 ### 6.6 `generate_sensitivity_xmls` — 生成敏感性 XML
@@ -828,6 +830,7 @@ result = b2p.generate(
     methods=True,
     beast2_validate=False,
     beast2_path="beast",
+    force=False,
 )
 
 # 返回字典包含：
@@ -939,25 +942,34 @@ clock_model = ClockModelConfig(type=ClockModelType.UCLN)
 
 ### 7.1 完整配置模板
 
+下列每个键都属于 schema；某节未列出的键会被拒绝（见[第 22.1 节](#221-严格校验被拒绝的输入及其错误信息)）。
+
 ```yaml
 # === 元数据 ===
 metadata:
-  analysis_name: "my_analysis"          # 分析名称（必填）
+  analysis_name: "my_analysis"          # 分析名称（默认 `"unnamed_analysis"`）
   analysis_description: "分析描述"       # 分析描述（可选）
   author: "你的名字"                     # 作者（可选）
-  date: "2026-08-01"                    # 日期（可选）
+  date: "2026-08-01"                    # 自由文本日期（可选）
   beast2_version: "2.7.8"              # BEAST2 版本（默认 2.7.8）
   tool_version: "0.2.0"                # Beast2Py 版本（默认 0.2.0）
+  embed_fingerprint: true              # 此处与 `output` 中均可写；`output` 中的同名键优先
 
 # === 序列数据 ===
 alignments:
   - id: "gene1"                         # 比对 ID（必填）
-    file: "gene1.fasta"                 # 序列文件路径（必填，除非使用 filter）
+    file: "gene1.fasta"                 # 序列文件路径（相对 YAML 文件）
     format: "auto"                      # 格式：fasta / nexus / auto（默认 auto）
     data_type: "nucleotide"             # 数据类型：nucleotide / aminoacid（默认 nucleotide）
-    # 以下用于 FilteredAlignment（密码子分区）：
-    filter: "3::3"                      # 过滤表达式（可选）
-    data_id: "alignment"                # 基础比对 ID（使用 filter 时必填）
+
+  # FilteredAlignment（密码子分区）。既可以像示例那样先单独声明源比对、再用
+  # data_id 指向它（此处就是这种写法），也可以把 `file` 与 `filter` 一起给出、
+  # 并用 `data_id` 指明源。filter 不得指向自身所在 alignment 的 id，
+  # 且被引用的源必须先于过滤器声明。
+  - id: "codon3"
+    data_id: "gene1"                    # 源比对 ID（使用 filter 时必填）
+    filter: "3::3"                      # BEAST2 filter 语法，位点编号从 1 开始
+    data_type: "nucleotide"
 
 # === Partition 配置 ===
 partitions:
@@ -967,7 +979,7 @@ partitions:
         type: "hky"                     # 模型类型（见第 8 节）
         # 模型特定参数（见第 8 节）
       gamma_categories: 4               # Gamma 速率类别数（0=无，默认 0）
-      gamma_shape:                      # Gamma 形状参数（gamma_categories>0 时）
+      gamma_shape:                      # Gamma 形状参数；仅当 `gamma_categories > 1` 时允许
         value: 0.5
         lower: 0.0
         estimate: true                  # 是否估计（默认 true）
@@ -976,21 +988,22 @@ partitions:
         lower: 0.0
         upper: 1.0
         estimate: true
+      linked_to: null                   # 与另一个分区共享位点模型（可选）
     clock_model:
       type: "strict"                    # 时钟类型（见第 9 节）
       # 时钟特定参数（见第 9 节）
       linked_to: null                   # 链接到另一个 partition 的时钟（可选）
-    tree: "shared"                      # "shared"=共享树（默认）
+    tree: "shared"                      # 仅接受 "shared"，其他取值一律拒绝
 
 # === 末端日期（可选） ===
 tip_dates:
   enabled: false                        # 是否启用（默认 false）
-  trait_name: "date-forward"            # date-forward / date-backward
-  units: "year"                         # year / month / day
-  dates:                                # 分类单元到日期的映射
+  trait_name: "date-forward"            # date-forward / date-backward（不接受其他取值）
+  units: "year"                         # year / month / day / coordinate
+  dates:                                # 必须覆盖每个分区的每一个分类单元
     taxonA: 2000
     taxonB: 2005
-  # file: "tip_dates.csv"              # 替代：从 CSV 文件加载
+  # file: "tip_dates.csv"              # 替代/额外来源：两列 CSV 文件
 
 # === 树先验 ===
 tree_prior:
@@ -1004,13 +1017,14 @@ calibrations:
     monophyletic: true                  # 是否强制单系（默认 true）
     distribution:
       type: "normal"                    # 分布类型（见第 11 节）
-      parameters: {mean: 6.0, sigma: 0.5}  # 分布参数
+      parameters: {mean: 6.0, sigma: 0.5}  # 分布参数（会做值域校验）
       offset: 0.0                       # 偏移量（默认 0.0）
-      hyperpriors:                      # 超参数先验（可选）
-        mean:
+      hyperpriors:                      # 超先验（可选）；键必须是
+        mean:                           # 上面那个分布的参数
           type: "uniform"
           parameters: {lower: 0.0, upper: 20.0}
     use_originate: false                # 是否使用 stem 节点（默认 false）
+    tipsonly: false                     # 仅末端校准（默认 false）
     provenance:                         # 来源元数据（可选）
       source: "other"                   # 来源类型：fossil / biogeographic / secondary / other
       reference: "Synthetic example data; no publication source"
@@ -1022,9 +1036,9 @@ calibrations:
 # === 校准方法 ===
 calibration_method: "mrca_prior"        # mrca_prior / calibrated_yule（默认 mrca_prior）
 
-# === 参数先验（可选） ===
+# === 参数先验（可选；`priors:` 作为同义键同样接受） ===
 parameter_priors:
-  - parameter: "birthRate"              # 参数名
+  - parameter: "birthRate"              # 参数名或别名（见第 10 节）
     distribution:
       type: "uniform"
       parameters: {lower: 0.0, upper: 1000.0}
@@ -1032,13 +1046,18 @@ parameter_priors:
 # === MCMC 设置 ===
 mcmc:
   type: "standard"                      # standard / nested_sampling（默认 standard）
-  chain_length: 10000000                # 链长度（默认 10000000）
+  chain_length: 10000000                # 链长度，必须 > 0（默认 10000000）
   pre_burnin: 0                         # 预烧入（默认 0，须 < chain_length）
-  store_every: 10000                    # 检查点间隔，按"已记录样本数"计（缺省随链长伸缩 max(1, chain_length//10000)；-1 关闭）
+  store_every: 10000                    # 检查点间隔，按"已记录样本数"计；
+                                        # 缺省随链长伸缩 max(1, chain_length//10000)；-1 关闭
   sample_from_prior: false              # 是否仅从先验采样（默认 false）
-  seed: 1                               # 供 `beast -seed` 使用；**不写入 XML**（BEAST2 的 MCMC 无 seed 输入）
-  threads: 4                            # 生成的 Snakemake/Nextflow 流程中的 `beast -threads N`；
-                                        # 正整数，默认 4，可用 `pipeline --threads` 覆盖；
+  seed: 1                               # 会被接受并做值域校验，但**不**写入 XML：
+                                        # BEAST2 的 MCMC 没有 `seed` 输入，
+                                        # 种子由 `beast -seed N` 指定
+  threads: 4                            # 生成的 Snakemake/Nextflow
+                                        # 流程中的 `beast -threads N`；
+                                        # 正整数，默认 4；
+                                        # 可用 `pipeline --threads` 覆盖；
                                         # 不进入指纹（只调度，不改变分析）
   # Nested Sampling 参数（type=nested_sampling 时）：
   particle_count: 1                     # 粒子数（默认 1）
@@ -1060,11 +1079,11 @@ initialization:
   tree_type: "random"                   # random / upgma / newick（默认 random）
   newick_file: null                     # newick 类型时指定树文件
 
-# === 操作器权重（可选覆盖） ===
+# === 算子权重（可选覆盖） ===
 operator_weights:
   tree_scaler: 3.0
   uniform: 30.0
-  # ... 其他操作器
+  # ... 其他算子（自由映射；键名不做 schema 检查）
 
 # === 校准诊断设置（可选，供闸门 2 使用） ===
 diagnostics:
@@ -1075,7 +1094,7 @@ diagnostics:
 
 # === 输出设置 ===
 output:
-  file: "output.xml"                    # 输出 XML 文件路径
+  file: "output.xml"                    # 输出 XML 文件路径（默认 output.xml）
   embed_fingerprint: true               # 是否在 XML 中嵌入指纹注释（默认 true）
 ```
 
@@ -1129,18 +1148,18 @@ substitution_model:
 **`rates:` 仅是 GTR/SYM 的便捷写法。** `rates:` 必须按 `rateAC rateAG rateAT rateCG rateCT rateGT` 的顺序列出**恰好六个**值，且不能与显式命名的 `rate*` 键混用，否则展开时会静默覆盖其中一项。长度不是六的向量一律报错，既不会补 1.0，也不会被截断。TIM 与 TVM 施加的是速率**等式约束**，六个自由速率向量无法表达，因此在这两个模型上写 `rates` 时，解析器会报错，并给出应改用的参数名。
 
 ```yaml
-# GTR via the vector
+# 用向量写法指定 GTR
 substitution_model:
   type: "gtr"
   rates: {value: "1.0 4.0 1.0 1.0 4.0 1.0", lower: 0.0}
   frequencies: {mode: "estimated", value: 0.25, dimension: 4}
 
-# SYM via the vector
+# 用向量写法指定 SYM
 substitution_model:
   type: "sym"
   rates: {value: "1.0 4.0 1.0 1.0 4.0 1.0", dimension: 6, lower: 0.0}
 
-# TIM with its own parameters (see examples/config_subst_tim.yaml)
+# 用 TIM 自身的参数（见 examples/config_subst_tim.yaml）
 substitution_model:
   type: "tim"
   rateAG: {value: 4.0, lower: 0.0}
@@ -1149,7 +1168,7 @@ substitution_model:
   rateTransversions2: {value: 1.0, lower: 0.0}
   frequencies: {mode: "empirical"}
 
-# TVM with its own parameters (see examples/config_subst_models.yaml)
+# 用 TVM 自身的参数（见 examples/config_subst_models.yaml）
 substitution_model:
   type: "tvm"
   rateAC: {value: 1.0, lower: 0.0}
@@ -1190,10 +1209,10 @@ substitution_model: {type: "wag"}
 这些都是自带经验平衡频率的 `EmpiricalSubstitutionModel` 实例，因此既不生成 `<frequencies>` 元素，也不接受任何 `frequencies:` 块。每个模型在解析阶段都做三方交叉校验：声明的 `data_type`、模型所属家族，以及比对中*实际观察到*的字符表。因此在核苷酸数据上写 `wag`、在氨基酸数据上写 `hky`、或对一份只含 `A C G T` 的文件声明 `data_type: aminoacid`，解析器都会报错。错误信息直指问题本身，而不是在离病因很远的地方抛出一个 BEAST2 解析错误。
 
 ```yaml
-# Amino-acid data: the alignment must say so, and only amino-acid models are allowed
+# 氨基酸数据：比对必须如此声明，且只允许氨基酸模型
 alignments:
   - id: "protein"
-    file: "examples/aminoacid.fasta"     # 10 taxa x 234 aa
+    file: "examples/aminoacid.fasta"     # 10 个分类单元 × 234 个氨基酸
     data_type: "aminoacid"
 partitions:
   - id: "protein"
@@ -1211,7 +1230,7 @@ partitions:
 site_model:
   substitution_model: {type: "hky"}
   gamma_categories: 4          # Gamma 速率类别数（0 = 无 Gamma）
-  gamma_shape:                 # Gamma 形状参数
+  gamma_shape:                 # Gamma 形状参数（需 `gamma_categories > 1`）
     value: 0.5
     lower: 0.0
     estimate: true             # 估计或固定（默认 true）
@@ -1224,7 +1243,7 @@ site_model:
 
 **Gamma+I 组合：** 同时设置 `gamma_categories > 0` 和 `proportion_invariant` 即可实现 Gamma+I 模型。
 
-**`gamma_shape` 需要两个以上类别。** BEAST2 的 `SiteModel` 把形状输入注明为 `Ignored if gammaCategoryCount 1 or less`，因此在 `gamma_categories <= 1` 时给出 `gamma_shape`，解析器会拒绝。此时被估计的形状参数只是一条纯先验随机游走，对似然毫无贡献，却仍然在轨迹里占一列，容易被误读成“γ 形状参数”。
+**`gamma_shape` 的类别数必须大于 1（至少 2 个）。** BEAST2 的 `SiteModel` 把形状输入注明为 `Ignored if gammaCategoryCount 1 or less`，因此在 `gamma_categories <= 1` 时给出 `gamma_shape`，解析器会拒绝。此时被估计的形状参数只是一条纯先验随机游走，对似然毫无贡献，却仍然在轨迹里占一列，容易被误读成“γ 形状参数”。
 
 ---
 
@@ -1258,7 +1277,7 @@ clock_model:
   type: "uce"
   ucld_mean: {value: 1.0, lower: 0.0}
 
-# 随机局部时钟
+# 随机局部时钟（速率与指示符状态节点会自动创建）
 clock_model:
   type: "rlc"
 
@@ -1281,7 +1300,7 @@ clock_model:
 |---|---|---|---|
 | Yule | `yule` | `birth_rate` | 纯生过程 |
 | CalibratedYule | `calibrated_yule` | `birth_rate` | 集成校准的 Yule 模型 |
-| Birth-Death | `birth_death` | `birth_rate`、`death_rate`、`sampling_rate` | 生灭过程 |
+| Birth-Death | `birth_death` | `birth_rate`、`death_rate`、`sample_probability`（或 `sampling_rate`） | 生灭过程 |
 | Coalescent 常量 | `coalescent_constant` | `pop_size` | 常量群体溯祖 |
 | Coalescent 指数 | `coalescent_exponential` | `pop_size`、`growth_rate` | 指数增长溯祖 |
 | Bayesian Skyline | `bayesian_skyline` | （自动计算） | 贝叶斯天际线图 |
@@ -1305,19 +1324,19 @@ tree_prior:
   type: "yule"
   birth_rate: {value: 1.0, lower: 0.0}
 
-# Birth-Death 模型
+# Birth-Death 模型 —— death_rate 必须严格小于 birth_rate
 tree_prior:
   type: "birth_death"
   birth_rate: {value: 1.0, lower: 0.0}
   death_rate: {value: 0.5, lower: 0.0}
-  sampling_rate: {value: 0.1, lower: 0.0}
+  sample_probability: {value: 0.1}
 
 # Coalescent 常量群体
 tree_prior:
   type: "coalescent_constant"
   pop_size: {value: 10.0, lower: 0.0}
 
-# Coalescent 指数增长
+# Coalescent 指数增长（`growth_rate` 可为负）
 tree_prior:
   type: "coalescent_exponential"
   pop_size: {value: 10.0, lower: 0.0}
@@ -1347,7 +1366,7 @@ tree_prior:
 | `clock_rate` | `clockRate` |
 | `ucld_mean` / `ucld_stdev` | `ucld.mean` / `ucld.stdev` |
 | `gamma_shape` / `proportion_invariant` | `gammaShape` / `proportionInvariant` |
-| `kappa` | `kappa`（任意 partition 的 `…hky.kappa`） |
+| `kappa` | `kappa`（任意分区的 `…hky.kappa`） |
 
 无法解析出目标状态节点的先验是**硬错误**，错误信息会列出当前被估计的状态节点，因为这样的先验会静默地永不参与求值。反之亦然：为 `estimate: false` 固定的参数指定先验同样是错误，固定参数时应删掉对应先验。
 
@@ -1457,7 +1476,7 @@ provenance:
   notes: "虚拟示例描述"          # 自由文本说明
 ```
 
-**`original_age_min/max` 现在会与所用先验的 95% 区间交叉核对**（区间由工具自带的 `compute_distribution_stats` 计算，`offset` 已计入）：
+**记录与先验不得互相矛盾。** 解析器会把 `original_age_min` / `original_age_max` 与所用先验的 95% 区间交叉核对（区间由工具自带的 `compute_distribution_stats` 计算，`offset` 已计入）：
 
 | 情形 | 结果 |
 |---|---|
@@ -1486,15 +1505,15 @@ calibrations:
 ### 11.6 延伸阅读
 
 - [CladeAge](https://github.com/BEAST2-Dev/cladeage)（BEAST2 插件）：基于 Birth-Death 速率与化石首现年龄，通过模拟生成校准密度。它是手工挑选 Normal/LogNormal 参数之外的另一种校准先验来源。
-- [FossilCalibrations](https://fossilcalibrations.org)：经过同行评审的化石校准数据库；其 DOI 与年龄范围字段可直接对应上文的 `provenance` 元数据块。
+- [FossilCalibrations](https://fossilcalibrations.org)：精心整理的化石校准数据库；其 DOI 与年龄范围字段可直接对应上文的 `provenance` 元数据块。
 
 ---
 
-## 12. 多 Partition 分析
+## 12. 多分区分析
 
 ### 12.1 多个序列文件
 
-使用多个独立的序列文件作为不同 partition：
+使用多个独立的序列文件作为不同分区：
 
 ```yaml
 alignments:
@@ -1532,7 +1551,7 @@ alignments:
     file: "coding.fasta"
     data_type: "nucleotide"
   - id: "codon12"
-    data_id: "alignment"       # 引用基础比对
+    data_id: "alignment"       # 引用基础比对（必填）
     filter: "1::3,2::3"        # 第1+2位密码子
     data_type: "nucleotide"
   - id: "codon3"
@@ -1576,11 +1595,11 @@ partitions:
 
 ### 12.3 模型链接规则
 
-- **`clock_model.linked_to: "partition_id"`**：该 partition 共享另一个 partition 的时钟模型。
-- **`site_model.linked_to: "partition_id"`**：该 partition 共享另一个 partition 的位点模型（见 `config_advanced.yaml` 示例）。未指定时每个 partition 拥有独立的位点模型。
-- `linked_to` 的值必须指向另一个已存在的 partition——自链接与未知 id 都是错误。
+- **`clock_model.linked_to: "partition_id"`**：该分区共享另一个分区的时钟模型。
+- **`site_model.linked_to: "partition_id"`**：该分区共享另一个分区的位点模型（见 `config_advanced.yaml` 示例）。未指定时每个分区拥有独立的位点模型。
+- `linked_to` 的值必须指向另一个已存在的分区——自链接与未知 id 都是错误。
 
-### 12.4 拓扑：只组装一棵连锁树
+### 12.4 拓扑：只组装一棵链接树
 
 **`tree: "shared"` 是唯一合法取值。** 逐分区或独立拓扑尚未实现，因此解析阶段会直接拒绝该设置，而不是解析、存储之后再静默忽略：
 
@@ -1593,7 +1612,7 @@ is an error. Remove the 'tree' key to analyse the shared topology, or run one
 analysis per independent partition.
 ```
 
-`tree: <某个 partition id>` 同样会遭到拒绝，错误信息一致。需要注意的后果是：本版本的多基因座分析假定单棵共享的物种树/基因树，每个 partition 的松弛时钟也索引同一棵树。独立基因树（`*BEAST`、StarDivergence 用例）在路线图上，本版本尚未实现。
+`tree: <某个 partition id>` 同样会遭到拒绝，错误信息一致。需要注意的后果是：本版本的多基因座分析假定单棵共享的物种树/基因树，每个分区的松弛时钟也索引同一棵树。独立基因树（`*BEAST`、StarDivergence 用例）在路线图上，本版本尚未实现。
 
 ---
 
@@ -1616,7 +1635,7 @@ tip_dates:
 
 **现已在解析阶段强制的规则**
 
-- **完整覆盖。** `dates` 必须覆盖每个 partition 的每个分类单元。BEAST2 会把未定年的末端视为在时刻 0 采样，因此只给出部分映射时，缺失的支系就变成了同时刻采样的样本。解析器如今会准确报出缺失的分类单元（`tip_dates.dates covers 9 of 12 taxa; these are missing: …`），也会拒绝比对中不存在的分类单元。
+- **完整覆盖。** `dates` 必须覆盖每个分区的每个分类单元。BEAST2 会把未定年的末端视为在时刻 0 采样，因此只给出部分映射时，缺失的支系就变成了同时刻采样的样本。解析器如今会准确报出缺失的分类单元（`tip_dates.dates covers 9 of 12 taxa; these are missing: …`），也会拒绝比对中不存在的分类单元。
 - **`trait_name` ∈ {`date-forward`、`date-backward`}。** `date-forward` 表示从最早采样点向前计数（0 表示最古老样本），`date-backward` 从最晚采样点向后计数（0 表示最新样本，这也是 BEAUti 的 Tip dating 标签页产出的形式）。其他取值虽然也能产出合法 XML，但 BEAST2 不会把它们当作日期读取，分析就按同时刻采样运行。解析器会拒绝 `date_backward`（下划线写法），并在错误信息里列出合法名。
 - **`units` ∈ {`year`, `month`, `day`, `coordinate`}。**
 - **日期必须为数值。** CSV 中第二列若非数值，解析器会报错（表头行除外）。
@@ -1624,7 +1643,7 @@ tip_dates:
 
 **会产出什么。** 启用末端日期后，生成器把 `TraitSet` 挂到树上，*并*为已定年的末端产出一个 `TipDatesRandomWalker` 算子，无需任何 `tipsonly` 校准。该算子之所以不受 `tipsonly` 校准门控，是因为一旦那样门控，常见的 BEAUti 式“日期是性状而非校准”配置就会产出一个没有任何算子会移动的 `TraitSet`，运行返回一棵看起来已定年、实际未定年的树。
 
-该算子只覆盖日期非零的末端。若全部末端都在同一时刻采样，就没有可移动的日期，也就不会产出 `TipDatesRandomWalker`——`examples/config_tip_dates.yaml` 正是这种情况，它的 12 个灵长类皆为现生样本。该行为已对 BEAST 2.7.8 验证：把其中一个末端改为早 1.5 Ma 的变体仍可解析并初始化。
+该算子只覆盖日期非零的末端。若全部末端都在同一时刻采样，就没有可移动的日期，也就不会产出 `TipDatesRandomWalker`——`examples/config_tip_dates.yaml` 正是这种情况，它的 12 个灵长类皆为现生样本。该行为已针对 BEAST 2.7.7 验证：把其中一个末端改为早 1.5 Ma 的变体仍可解析并初始化。
 
 ---
 
@@ -1638,19 +1657,19 @@ tip_dates:
 
 冲突检测器分析校准点对，只依据拓扑与时间顺序判定三类结构问题：
 
-**同一节点冲突（`same_node`）：** 两个校准挂在同一节点上。同一 taxon set 上的相同分布是重复（warning）；同一节点上互不相交的区间是矛盾（error）；同一 taxon set 上的 crown 与 stem 校准是父子关系，因此按嵌套配对比较，而不是当作重复。
+**同一节点冲突（`same_node`）：** 两个校准挂在同一节点上。同一分类单元集合上的相同分布是重复（warning）；同一节点上互不相交的区间是矛盾（error）；同一分类单元集合上的 crown 与 stem 校准是父子关系，因此按嵌套配对比较，而不是当作重复。
 
-**时间顺序检查（`temporal`）：** 对于严格嵌套的 taxon set（A 是 B 的真子集），先按 crown/stem 解析节点，再比较 95% 区间；父节点区间整体年轻于子节点区间时报告 `error`。区间重叠不构成矛盾，不报告——即便父节点均值更年轻也不报告：长尾的柔性父先验均值更年轻仍可能完全兼容，报告它只会造成误报。父节点为 crown、子节点为 stem 时无法由包含关系判定顺序，报告 `unchecked`。
+**时间一致性冲突（`temporal`）：** 对于严格嵌套的分类单元集合（A 是 B 的真子集），先按 crown/stem 解析节点，再比较 95% 最高后验密度（HPD）区间；父节点区间整体年轻于子节点区间时报告 `error`。区间重叠不构成矛盾，不报告——即便父节点均值更年轻也不报告：长尾的柔性父先验均值更年轻仍可能完全兼容，报告它只会造成误报。父节点为 crown、子节点为 stem 时无法由包含关系判定顺序，报告 `unchecked`。
 
-**单系性冲突（`topology`）：** 检测有交集但不嵌套的分类集合。若两个校准都强制单系约束，这样的拓扑就不可能存在，检测器报告错误。
+**单系性冲突（`topology`）：** 检测有交集但不嵌套的分类单元集合。若两个校准都强制单系约束，这样的拓扑就不可能存在，检测器报告错误。
 
-**先验相似度是描述性的，不是冲突。** 两个独立支系完全可以有相似的年龄先验；相似密度并不说明化石信息冗余，也不构成合并或删除校准的理由。因此该报告**默认关闭**。只有在显式给出 `similarity_threshold` 时，检测器才把低于阈值的配对列为 `prior_similarity`，严重度为 `info`；它不给出行动建议，也绝不阻断 Gate 2。工具不提供经过标定的默认阈值。见[第 14.9 节](#149-diagnostics-块)。
+**先验相似度是描述性的，不是冲突。** 两个独立支系完全可以有相似的年龄先验；相似密度并不说明化石信息冗余，也不构成合并或删除校准的理由。因此该报告**默认关闭**。只有在显式给出 `similarity_threshold` 时，检测器才把低于阈值的配对列为 `prior_similarity`，严重度为 `info`；它不给出行动建议，也绝不阻断闸门 2。工具不提供经过标定的默认阈值。见[第 14.9 节](#149-diagnostics-块)。
 
-#### Gate 2 判定什么、不能判定什么
+#### 闸门 2 判定什么、不能判定什么
 
-Gate 2 读的是配置而不是样本轨迹。`generate`、`quick`、`diagnose` 的输出与 HTML 报告都会打印这条边界，其唯一来源是 `beast2py/diagnostics.py` 中的 `DETECTABLE_CHECKS`、`NOT_DETECTABLE_CHECKS`、`PRIOR_LAYERS`：
+闸门 2 读的是配置而不是样本轨迹。`generate`、`quick`、`diagnose` 的输出与 HTML 报告都会打印这条边界，其唯一来源是 `beast2py/diagnostics.py` 中的 `DETECTABLE_CHECKS`、`NOT_DETECTABLE_CHECKS`、`PRIOR_LAYERS`：
 
-| Gate 2 能判定 | Gate 2 不能判定，因而"通过"并不排除以下各项 |
+| 闸门 2 能判定 | 闸门 2 不能判定，因而"通过"并不排除以下各项 |
 | --- | --- |
 | 同一节点上互不相容或重复的一对校准 | 树先验、拓扑约束与其余校准造成的**有效边缘先验扭曲** |
 | 嵌套配对中父先验整体更年轻 | **后验主导**——判定它需要似然与配对的后验轨迹 |
@@ -1659,12 +1678,12 @@ Gate 2 读的是配置而不是样本轨迹。`generate`、`quick`、`diagnose` 
 
 表格所依据的四种分布彼此不同，各处使用同一名称：
 
-- **指定边缘先验**——YAML 里写下的分布，也是 Gate 2 唯一能看到的；
+- **指定边缘先验**——YAML 里写下的分布，也是闸门 2 唯一能看到的；
 - **有效边缘先验**——该节点在树先验、拓扑约束与其余校准共同作用后实际抽样的边缘分布，只能靠运行仅先验链观察（第 14.3 节）；
 - **联合有效先验**——两个及以上节点年龄的联合分布；一条轨迹的一列只是一个边缘，联合分布需要同一轨迹里的联合样本，而不是把各列边缘拼起来；
 - **后验**——似然作用之后的分布；Beast2Py 不带数据运行 MCMC，也不估计它。
 
-无法评估的配对计为 `unchecked`，绝不写成通过：统计量未定义的分布（`OneOnX`）、无法判定的 crown/stem 关系，或仅凭分类集合包含关系无法确定的单系交集。
+无法评估的配对计为 `unchecked`，绝不写成通过：均值或分位数未定义的分布（`OneOnX`）、无法判定的 crown/stem 关系，或仅凭分类单元集合的包含关系无法确定的单系交集。
 
 ### 14.3 敏感性分析
 
@@ -1673,7 +1692,7 @@ Gate 2 读的是配置而不是样本轨迹。`generate`、`quick`、`diagnose` 
 #### 把运行结果读回来：`prior-summary`
 
 生成的 XML 在运行之前只是一份设计。`prior-summary` 是与之配套的结果读取命令：它按**列名**（而非
-列序）解析 BEAST2 的 `.log` 文件，应用 burn-in，报告树高与各校准节点的位数、95% 最高密度区间与
+列序）解析 BEAST2 的 `.log` 文件，应用 burn-in，报告树高与各校准节点的中位数、95% HPD 区间与
 有效样本量；加上 `--reference` 后还会报告某个留一法场景相对完整校准集移动了多少，包括区间宽度比。
 
 ```bash
@@ -1749,11 +1768,11 @@ b2p.plot_calibrations("config.yaml", output_file="calibrations.pdf")
 
 ### 14.8 冲突检测结果的解读
 
-冲突检测返回 `Conflict` 对象列表，每个对象包含以下属性：`conflict_type`（冲突类型：temporal、distribution_overlap、monophyly）、`severity`（严重程度：error、warning、info）、`calibration_a` 和 `calibration_b`（涉及的校准点名称）、`description`（详细描述）和 `recommendation`（建议操作）。
+冲突检测返回 `Conflict` 对象列表，每个对象包含以下属性：`conflict_type`（冲突类型：temporal、same_node、duplicate、topology、unchecked、prior_similarity）、`severity`（严重程度：error、warning、info）、`calibration_a` 和 `calibration_b`（涉及的校准点名称）、`description`（详细描述）和 `recommendation`（建议操作）。
 
-- **error** 级别表示必须修复的问题（如时间不一致或单系性冲突）。
+- **error** 级别表示必须修复的问题（同一节点上互不相交的先验、嵌套配对的时间矛盾，或相交但非嵌套的单系冲突）。
 - **warning** 级别表示需要关注但非致命的问题（如同一节点的重复校准，或同一节点上两个有重叠的不同先验）。
-- **info** 级别表示提示信息。
+- **info** 级别表示提示信息，包括 `unchecked` 配对与需显式开启的 `prior_similarity` 报告。
 
 ### 14.9 `diagnostics:` 块
 
@@ -1768,7 +1787,7 @@ diagnostics:
 ```
 
 - `prior_similarity` 默认关闭。开启时必须给出正的 `similarity_threshold`；工具不提供经过标定的默认值。
-- `similarity_measure` 选择无量纲比值（W 除以两个 95% 区间的平均宽度）、绝对距离或两者。输出为 `prior_similarity`，严重度 `info`；它不给出合并建议，也绝不阻断 Gate 2。
+- `similarity_measure` 选择无量纲比值（W 除以两个 95% 区间的平均宽度）、绝对距离或两者。输出为 `prior_similarity`，严重度 `info`；它不给出合并建议，也绝不阻断闸门 2。
 - `strict_distributions: true` 把 Beta(无 offset)、Poisson 与 OneOnX 的用途警告升级为配置错误。
 - 旧的 `overlap_measure` / `overlap_threshold` / `relative_overlap_threshold` 键仍可作为别名解析，但只会启用同一份描述性报告。
 
@@ -1892,13 +1911,13 @@ result = b2p.validate_xml("output.xml", beast2_validate=True, beast2_path="/path
 
 `validate --beast2` 对独立验证套用同一条规则：BEAST2 不可达时退出码为 2 并打印 `Level 2/2 not run (Gate 3, …)`，而不是悄悄通过，也不是退出码 1——后者只留给 BEAST2 真正拒绝的模型。退出码约定，以及不带 `--beast2` 的 `validate` 为何可以合理地退出 0，见[第 5.4 节](#54-validate--验证-xml)。
 
-**解析闸门不会校验附加包之间的依赖声明。** 用到附加包的 XML 只在 `spec=` 属性里写出类名，`XMLParser` 按名字加载它当下需要的类，从不查阅已安装附加包 `version.xml` 里的 `<depends>` 条目。因此引用 `nestedsampling.gss.NS` 的文件，在一个装了 NS 却没有 NS 1.2.0 所声明的 MODEL_SELECTION 依赖的环境里，照样能解析并初始化——闸门 3 通过，`validate --beast2` 打印 `Level 2/2 passed (Gate 3)`。[16.3](#163-验证状态) 记录的核实环境正是如此：`~/.beast/2.7/` 下只有 BEAST 2.7.8、BDSKY 1.5.1 与 NS 1.2.0，**并未安装 MODEL_SELECTION**，而 21 个 BEAST2 集成用例全部越过了这道闸门。这句话只关于解析器，别读成别的保证：闸门 3 变绿并不说明附加包集合是完整的，未满足的依赖会在别处显形——包管理器或图形界面检查包元数据时，或是运行时真的需要缺失包里某个类时。运行嵌套抽样分析之前请先安装 MODEL_SELECTION；CI 的 integration 作业按 best-effort 取该包，只为让解析出的附加包集合与 NS 自己声明的一致。
+**解析闸门不会校验附加包之间的依赖声明。** 用到附加包的 XML 只在 `spec=` 属性里写出类名，`XMLParser` 按名字加载它当下需要的类，从不查阅已安装附加包 `version.xml` 里的 `<depends>` 条目。因此引用 `nestedsampling.gss.NS` 的文件，即便装了 NS 却没装 NS 所声明的 MODEL_SELECTION 依赖，照样能解析并初始化——闸门 3 通过，`validate --beast2` 打印 `Level 2/2 passed (Gate 3)`。这是解析器本身的性质，而不是某个环境的性质：发布覆盖矩阵所用的项目本地附加包集合里确实装了 MODEL_SELECTION 1.6.2（见 [16.3](#163-验证状态)），而 CI 作业只是尽力抓取该包，因此有可能缺失。这句话只关于解析器，别读成别的保证：闸门 3 变绿并不说明附加包集合是完整的，未满足的依赖会在别处显形——包管理器或图形界面检查包元数据时，或是运行时真的需要缺失包里某个类时。运行嵌套抽样分析之前请先安装 MODEL_SELECTION；CI 的 integration 作业尽力取该包，只为让解析出的附加包集合与 NS 自己声明的一致。
 
 ### 16.3 验证状态
 
-全部 **19** 个示例配置文件都通过了对其运行过的每一道检查：闸门 0（解析期的溯源与字符校验）、闸门 1（结构检查）、闸门 2（校准冲突检测）与闸门 3（BEAST2 `parseFile` 与 `initAndValidate` 检查）。闸门 3 使用无头模式下的原生 BEAST2 **v2.7.8** 解析器，无需 JavaFX。其中两份依赖附加包的文件——`config_bd_skyline.yaml` 与 `config_nested_sampling.yaml`——已对照 `~/.beast/2.7/` 下安装的包核实，即 **BDSKY 1.5.1** 与 **NS 1.2.0**。**该环境并未安装 MODEL_SELECTION**，尽管 NS 1.2.0 的 `version.xml` 把它声明为依赖；`config_nested_sampling.yaml` 依然通过了闸门 3，因为 `XMLParser` 只解析文件里点名的类，不在解析期强制附加包依赖（这对意味着什么、不对意味着什么，见 16.2）。
+全部 **19** 个示例配置文件都通过了对其运行过的每一道检查：闸门 0（解析期的溯源与字符校验）、闸门 1（结构检查）、闸门 2（校准冲突检测）与闸门 3（BEAST2 `parseFile` 与 `initAndValidate` 检查）。闸门 3 使用无头模式下的原生 BEAST2 **v2.7.7** 解析器，无需 JavaFX。其中两份依赖附加包的文件——`config_bd_skyline.yaml` 与 `config_nested_sampling.yaml`——已对照项目本地 BEAST home（`tools/beast_home/.beast/2.7/`）下安装的附加包核实，即 **BDSKY 1.5.1**、**NS 1.2.2** 与 **MODEL_SELECTION 1.6.2**。NS 自己的 `version.xml` 把 MODEL_SELECTION 声明为依赖，而它当时确实装着；至于它缺失时闸门 3 依然会过，那是 16.2 所述解析器行为的推论，而不是这个环境给出的证据。
 
-测试套件共收集 **559** 个测试：**538** 个单元/语义/发布完整性测试与 **21** 个 BEAST2 集成测试。集成测试对全部 19 个示例配置、`quick` 路径以及仓库内已提交的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.8 解析器与模型初始化逐一检查。当环境缺少 BEAST2 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败（包括它同样按 best-effort 抓取的 MODEL_SELECTION 依赖）仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。全部通过。
+测试套件共收集 **559** 个测试：**538** 个单元/语义/发布完整性测试与 **21** 个 BEAST2 集成测试。集成测试对全部 19 个示例配置、`quick` 路径以及仓库内已提交的 `output_basic.xml` 生成 XML，并用真实的 BEAST 2.7.7 解析器与模型初始化逐一检查。当环境缺少 BEAST2 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败（包括它同样尽力抓取的 MODEL_SELECTION 依赖）仅记为警告而非错误，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。全部通过。
 
 ---
 
@@ -1923,9 +1942,9 @@ mcmc:
 
 **生成器刻意不把 `mcmc.seed` 写进 XML。** BEAST2 的 `MCMC` 没有 `seed` *输入*，写出一个会让模型无法解析（`has no input with name seed`）。随机数种子是命令行参数（`beast -seed N`）。Beast2Py 把 `mcmc.seed` 保留在配置里，供 CLI 与启动器消费。日志文件名中仍可携带 `$(seed)` 变量，由 BEAST2 在运行时展开（见[第 18 节](#18-日志器配置)）。
 
-### 17.2 Nested Sampling MCMC
+### 17.2 嵌套抽样（Nested Sampling）MCMC
 
-Nested Sampling 用于模型比较和边缘似然估计，需要 BEAST2 NS add-on 包。
+Nested Sampling 用于模型比较和边缘似然估计，需要 BEAST2 的 NS 附加包。
 
 ```yaml
 mcmc:
@@ -1988,19 +2007,19 @@ initialization:
 
 ---
 
-## 20. 操作器权重
+## 20. 算子权重
 
-用户可以选择性地覆盖默认的 MCMC 操作器权重。树操作器的默认权重为：`tree_scaler` 3.0、`uniform` 30.0、`subtree_slide` 15.0、`exchange_narrow` 15.0、`exchange_wide` 3.0、`wilson_balding` 1.0、`up_down` 3.0。
+用户可以选择性地覆盖默认的 MCMC 算子权重。树算子的默认权重为：`tree_scaler` 3.0、`uniform` 30.0、`subtree_slide` 15.0、`exchange_narrow` 15.0、`exchange_wide` 3.0、`wilson_balding` 1.0、`up_down` 3.0。
 
 ```yaml
 operator_weights:
   tree_scaler: 3.0        # 树缩放操作（默认 3.0）
-  uniform: 30.0           # 均匀操作（默认 30.0）
+  uniform: 30.0           # 均匀算子（默认 30.0）
   subtree_slide: 15.0     # 子树滑动（默认 15.0）
   exchange_narrow: 15.0   # 窄交换（默认 15.0）
   exchange_wide: 3.0      # 宽交换（默认 3.0）
-  wilson_balding: 1.0     # Wilson-Balding 操作（默认 1.0）
-  # ... 其他操作器
+  wilson_balding: 1.0     # Wilson-Balding 算子（默认 1.0）
+  # ... 其他算子
 ```
 
 该功能面向高级用户，通常无需修改默认权重。
@@ -2023,7 +2042,7 @@ operator_weights:
 | `config_aa_jtt.yaml` | 氨基酸模型（JTT） | Yule | JTT+Γ4+I | Strict | 2 | 蛋白数据上的 Gamma+I |
 | `config_tip_dates.yaml` | 末端日期 | Birth-Death | HKY | UCLN | 1 | `TraitSet` 末端日期（12 个分类单元全部给日期） |
 | `config_calibrated_yule.yaml` | CalibratedYule | CalibratedYule | HKY+Γ4 | Strict | 3 | `calibration_method` 切换 + stem 校准 |
-| `config_multi_partition.yaml` | 多 partition | Birth-Death | HKY+Γ4 / GTR+Γ4 | UCLN + 链接 | 2 | `FilteredAlignment` 密码子分区 + 时钟链接，单棵连锁拓扑 |
+| `config_multi_partition.yaml` | 多分区 | Birth-Death | HKY+Γ4 / GTR+Γ4 | UCLN + 链接 | 2 | `FilteredAlignment` 密码子分区 + 时钟链接，单棵链接拓扑 |
 | `config_relaxed_clock.yaml` | 松弛对数正态时钟 | Birth-Death | GTR+Γ4 | UCLN | 2 | 有界的 `ucld_mean` / `ucld_stdev` |
 | `config_relaxed_exponential.yaml` | 松弛指数时钟 | Yule | GTR+Γ4 | UCE | 2 | UCE 松弛时钟 |
 | `config_rlc.yaml` | 随机局部时钟 | Yule | HKY+Γ4 | RLC | 1 | 指示变量与速率状态节点 |
@@ -2117,7 +2136,7 @@ units. Either estimate the clock rate or add at least one absolute (e.g. fossil)
 calibration.
 ```
 
-**独立树与逐分区的树**（`tree: separate` 或一个 partition id）：
+**独立树与逐分区的树**（`tree: separate` 或一个分区 id）：
 
 ```text
 Partition 'alignment': tree: 'separate' requests a tree other than the shared one, but
@@ -2204,11 +2223,11 @@ evaluated.
 
 **`Partition ID not matching alignment`**
 
-确保 partition ID 与比对 ID 匹配。如果使用 `FilteredAlignment`（密码子分区），partition ID 应与过滤后比对的 ID 匹配，而不是基础比对的 ID。
+确保分区 ID 与比对 ID 匹配。如果使用 `FilteredAlignment`（密码子分区），分区 ID 应与过滤后比对的 ID 匹配，而不是基础比对的 ID。
 
 **`Duplicate partition ID`**
 
-每个 partition 必须有唯一 ID。检查 YAML 配置中是否有重复的 partition ID。
+每个分区必须有唯一 ID。检查 YAML 配置中是否有重复的分区 ID。
 
 **`Invalid substitution model`、`Invalid clock model`、`Invalid tree prior type`**
 
@@ -2241,7 +2260,7 @@ java -cp launcher.jar beast.util.PackageManager -add NS
 
 **先验相似度（描述性）**
 
-两个独立支系的相似边缘先验并不说明化石信息冗余，也不构成合并或删除校准的理由。该报告默认关闭；只有在显式给出阈值时才返回 `prior_similarity`，严重度 `info`，不给出建议，也不影响 Gate 2。见[第 14.9 节](#149-diagnostics-块)。
+两个独立支系的相似边缘先验并不说明化石信息冗余，也不构成合并或删除校准的理由。该报告默认关闭；只有在显式给出阈值时才返回 `prior_similarity`，严重度 `info`，不给出建议，也不影响闸门 2。见[第 14.9 节](#149-diagnostics-块)。
 
 **单系性冲突**
 

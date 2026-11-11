@@ -4,6 +4,8 @@
 - **Authors:** Zichao Zeng (曾子超) · [ORCID: 0000-0001-6553-970X](https://orcid.org/0000-0001-6553-970X)
 - **Date:** 2026
 
+English | [中文](user_manual_zh.md)
+
 ---
 
 ## Table of Contents
@@ -1137,7 +1139,7 @@ calibration_method: "mrca_prior"        # mrca_prior / calibrated_yule (default 
 
 # === Parameter priors (optional; `priors:` is accepted as a synonym) ===
 parameter_priors:
-  - parameter: "birthRate"              # Parameter name or alias (see Section 10.5)
+  - parameter: "birthRate"              # Parameter name or alias (see Section 10)
     distribution:
       type: "uniform"
       parameters: {lower: 0.0, upper: 1000.0}
@@ -1888,7 +1890,7 @@ not.
 The operator covers only tips whose date is non-zero. A fully contemporaneous sample
 therefore emits no `TipDatesRandomWalker`, because there is no date to move — that is the
 case of `examples/config_tip_dates.yaml`, whose 12 primates are all extant. The behaviour is
-verified against BEAST 2.7.8: a variant of that configuration with one tip dated 1.5 Ma
+verified against BEAST 2.7.7: a variant of that configuration with one tip dated 1.5 Ma
 earlier parses and initialises.
 
 **`trait_name` semantics:** `date-forward` means dates increase with sample age from the
@@ -2204,37 +2206,37 @@ stays reserved for a model BEAST2 actually rejected. See
 without `--beast2` legitimately exits 0.
 
 **Add-on package dependencies are not enforced by the parse gate.** An XML that uses an add-on
-names its classes in `spec=` attributes, and `XMLParser` resolves such a name by loading the class
-it needs. It never consults the `<depends>` entries of an installed add-on's `version.xml`, so a
-file that references `nestedsampling.gss.NS` parses and initialises — Gate 3 passes, `validate
---beast2` prints `Level 2/2 passed (Gate 3)` — on an installation that has NS but not the
-MODEL_SELECTION package NS 1.2.0 declares as a dependency. That is precisely the release
-environment recorded in [16.3](#163-validation-status): BEAST 2.7.8 with BDSKY 1.5.1 and
-NS 1.2.0 under `~/.beast/2.7/`, **no MODEL_SELECTION installed**, and all 21 BEAST2 integration
-cases clearing the gate. Read that as a statement about the parser and nothing more: a green Gate
-3 does not show the add-on set is complete, and an unmet dependency surfaces elsewhere — when the
-add-on manager or a GUI checks package metadata, or when a class from the missing package is
-actually asked for at run time. Install MODEL_SELECTION before running a nested-sampling analysis;
-the CI integration job fetches it best-effort so the resolved add-on set matches what NS
-advertises.
+names its classes in `spec=` attributes, and `XMLParser` resolves such a name by loading the
+class it needs. It never consults the `<depends>` entries of an installed add-on's
+`version.xml`, so a file that references `nestedsampling.gss.NS` parses and initialises — Gate 3
+passes, `validate --beast2` prints `Level 2/2 passed (Gate 3)` — even on an installation that
+has NS but not the MODEL_SELECTION package NS declares as a dependency. That is a property of
+the parser rather than of any one environment: the project-local add-on set used for the release
+coverage runs does include MODEL_SELECTION 1.6.2 (see [16.3](#163-validation-status)), while the
+CI job fetches MODEL_SELECTION best-effort and may therefore lack it. Read this as a statement
+about the parser and nothing more: a green Gate 3 does not show the add-on set is complete, and
+an unmet dependency surfaces elsewhere — when the add-on manager or a GUI checks package
+metadata, or when a class from the missing package is actually asked for at run time. Install
+MODEL_SELECTION before running a nested-sampling analysis; the CI integration job fetches it
+best-effort so the resolved add-on set matches what NS advertises.
 
 ### 16.3 Validation status
 
 All **19** example configuration files pass every check that was run on them: Gate 0 (the
-parse-time provenance and character validation), Gate 1 (structural), Gate 2 (calibration-conflict
-detection) and Gate 3 (the BEAST2 `parseFile` and `initAndValidate` check). Gate 3 uses the native
-BEAST2 **v2.7.8** parser in headless mode, so no JavaFX is required. Two of the files depend on
-add-on packages — `config_bd_skyline.yaml` and `config_nested_sampling.yaml` — and were verified
-against the packages installed under `~/.beast/2.7/`, namely **BDSKY 1.5.1** and **NS 1.2.0**.
-**MODEL_SELECTION was not installed in that environment**, although NS 1.2.0's `version.xml`
-declares it as a dependency; `config_nested_sampling.yaml` still cleared Gate 3, because
-`XMLParser` resolves the classes a file names and does not enforce add-on package dependencies at
-parse time (see 16.2 for what that does and does not show).
+parse-time provenance and character validation), Gate 1 (structural), Gate 2
+(calibration-conflict detection) and Gate 3 (the BEAST2 `parseFile` and `initAndValidate`
+check). Gate 3 uses the native BEAST2 **v2.7.7** parser in headless mode, so no JavaFX is
+required. Two of the files depend on add-on packages — `config_bd_skyline.yaml` and
+`config_nested_sampling.yaml` — and were verified against the add-ons installed in the
+project-local BEAST home under `tools/beast_home/.beast/2.7/`, namely **BDSKY 1.5.1**, **NS
+1.2.2** and **MODEL_SELECTION 1.6.2**. NS's own `version.xml` declares MODEL_SELECTION as a
+dependency, and it was present; that Gate 3 would still have passed without it follows from the
+parser behaviour described in 16.2, not from this environment.
 
 The test suite comprises **559** collected tests: **538** unit, semantic and release-integrity
 tests and **21** BEAST2 integration tests. The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and check each with the
-real BEAST 2.7.8 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests
+real BEAST 2.7.7 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests
 simply skip instead of failing. Two of those cases additionally require the BDSKY and
 nested-sampling add-ons, and the CI workflow treats a failed `beast -get` of either — or of the
 MODEL_SELECTION dependency it also fetches best-effort — as a warning rather than an error, so

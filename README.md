@@ -180,6 +180,7 @@ Comprehensive documentation is available in the `docs/` directory:
 - **[Tutorial](docs/tutorial_en.md)** — Step-by-step tutorial with example configurations
 - **[Calibration Guide](docs/calibration_guide_en.md)** — Guide to specifying calibration priors with provenance metadata
 - **[XML Format Guide](docs/xml_format_en.md)** — Description of the generated BEAST2 XML format
+- **[Capability Coverage Matrix](docs/capability_coverage.md)** — Row-by-row Gate 3 evidence for the 36 declared model capabilities (English only)
 
 Each manual also carries a **strict validation** section listing every input the parser now rejects and the error message it produces.
 
@@ -225,7 +226,7 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 - `examples/` — 19 example configurations, example alignments (FASTA), and example output artifacts
 - `tests/` — Test suite (559 collected tests: 538 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
 - `beast2py/tools/` — Headless BEAST2 validation helper bundled *inside* the package (`Beast2Validator.java` source plus the precompiled `classes/` and `launcher.jar`), shipped as `package-data` by `pyproject.toml`; the repository root keeps only a thin `beast2_validate.sh` wrapper
-- `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English)
+- `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English), plus the capability coverage matrix (English only)
 - `beast2_validate.sh` — Launcher script for headless BEAST2 validation (needs `BEAST.base.jar` and JDK 17 or newer; it auto-detects `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`, or set `BEAST2_JAR`)
 - `pyproject.toml` — Package build and dependency configuration
 - `.flake8` — Lint settings shared by local runs and CI, so `flake8 beast2py tests` behaves identically in both
@@ -304,9 +305,11 @@ Gate 1 (structural) and Level 2/2 is Gate 3 (BEAST2 parse + model initialisation
 Gate 3 also does not police add-on package dependencies. `XMLParser` resolves the classes a
 file names and never consults an installed add-on's `version.xml`, so an XML that references
 `nestedsampling.gss.NS` parses and initialises even when the MODEL_SELECTION package that NS
-1.2.0 declares as a dependency is not installed — which is exactly the environment these
-results were verified on (BEAST 2.7.7 with its bundled JDK 17.0.3, BDSKY 1.5.1, and NS 1.2.2 with MODEL_SELECTION 1.6.2, all in a project-local runtime, no
-MODEL_SELECTION). A green Gate 3 therefore does not show the add-on set is complete; install
+declares as a dependency is absent. That is a property of the parser rather than of any one
+environment: the project-local runtime these results were verified on — BEAST 2.7.7 with its
+bundled OpenJDK 17.0.3, BDSKY 1.5.1, NS 1.2.2 and MODEL_SELECTION 1.6.2, all under `tools/` —
+does have MODEL_SELECTION installed, while CI fetches it best-effort and may therefore lack it.
+A green Gate 3 therefore does not show the add-on set is complete; install
 MODEL_SELECTION before running a nested-sampling analysis.
 
 Continuous integration validates gate 3 against a BEAST2 **2.7.7** runtime whose

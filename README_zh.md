@@ -7,8 +7,9 @@
 [![CI](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ZengZichao/Beast2Py/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/beast2py)](https://pypi.org/project/beast2py/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23088756.svg)](https://doi.org/10.5281/zenodo.23088756)
-[![许可证: MIT AND LGPL-2.1-only](https://img.shields.io/badge/许可证-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
+[![许可证: MIT AND LGPL-2.1-only](https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-MIT%20AND%20LGPL--2.1--only-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![ORCID](https://img.shields.io/badge/ORCID-0000--0001--6553--970X-a6ce39?logo=orcid&logoColor=white)](https://orcid.org/0000-0001-6553-970X)
 [![BEAST2 2.7.x](https://img.shields.io/badge/BEAST2-2.7.x-orange.svg)](https://www.beast2.org/)
 
 ---
@@ -24,8 +25,8 @@ Beast2Py 是一个 Python 框架，用于**规范化指定、验证和诊断 BEA
 | 功能 | 描述 |
 |------|------|
 | **校准冲突检测** | 自动检测同一节点矛盾、嵌套时间顺序错误与相交非嵌套的单系拓扑冲突；区分 crown/stem，并显式报告 `unchecked` 配对。先验相似度是独立的、默认关闭的描述性报告，不是冲突 |
-| **先验敏感性分析** | 自动生成“仅先验采样”XML，评估校准先验对后验的边际影响 |
-| **校准来源元数据** | 每个校准点记录化石来源、参考文献 DOI、校准类型（硬/软边界） |
+| **先验敏感性分析** | 自动生成“仅先验采样”XML，评估校准先验自身的边际影响（仅先验层面，不涉及后验） |
+| **校准溯源元数据** | 每个校准点记录化石来源、参考文献 DOI、校准类型（硬/软边界） |
 | **可重复性框架** | YAML 配置版本化 + 分析指纹 + LaTeX 方法学描述 + Snakemake/Nextflow 管道生成 |
 
 ### 三层功能集
@@ -42,12 +43,12 @@ Beast2Py 是一个 Python 框架，用于**规范化指定、验证和诊断 BEA
 - **时钟模型：** 严格时钟、UC 松弛对数正态（UCLN）、UC 松弛指数（UCE）、随机局部时钟（RLC）
 - **树先验：** Yule、CalibratedYule、Birth-Death、Coalescent（常量/指数）、Bayesian Skyline、EBSP；BD Skyline Serial（需要 [bdsky](https://github.com/BEAST2-Dev/bdsky) 插件包）
 - **校准分布：** Normal、LogNormal、Uniform、Exponential、Gamma、Beta、Laplace、InverseGamma、OneOnX、Poisson、ChiSquare
-- **多 Partition：** 多条比对（或同一比对的 `FilteredAlignment` 密码子位点子集），位点模型与时钟可独立或共享（`linked_to`）。所有 partition 都装配在**同一棵连锁拓扑**上：解析阶段会直接拒绝 `tree: separate` 与任何 partition 专属树 id，并给出解释，因为不连锁基因树（`*BEAST`、StarDivergence 一类的分析）尚未实现
+- **多分区：** 多条比对（或同一比对的 `FilteredAlignment` 密码子位点子集），位点模型与时钟可独立或共享（`linked_to`）。所有分区都装配在**同一棵链接拓扑**上：解析阶段会直接拒绝 `tree: separate` 与任何分区专属树 id，并给出解释，因为不链接的基因树（`*BEAST`、StarDivergence 一类的分析）尚未实现
 - **多 MRCA 先验：** 无限校准点
 - **末端日期：** 用 `TraitSet` 支持时序采样数据（`TipDatesRandomWalker` 在启用末端日期时即产出，无需 `tipsonly` 校准）
 - **MCMC：** 标准 MCMC + Nested Sampling MCMC（嵌套抽样需要 [NS](https://github.com/BEAST2-Dev/nested-sampling) 插件包）
 - **初始化：** RandomTree、UPGMA、User Newick
-- **超参数先验：** 为校准分布的参数设置先验
+- **超先验：** 为校准分布的参数设置先验
 - **严格配置校验：** 解析阶段会拒绝未知键、加引号的布尔值、不等长或重名比对、标错的数据类型、定义域外的先验以及不可辨识的时间轴，而不是静默地采用默认值
 
 ## 安装
@@ -55,7 +56,7 @@ Beast2Py 是一个 Python 框架，用于**规范化指定、验证和诊断 BEA
 ### 前置要求
 
 - Python 3.10 或更高版本
-- BEAST2 2.7.x。生成的 XML 面向 BEAST 2.7 的 `beast.base.*` 命名空间。持续集成使用 **2.7.7** 运行时，并将 `BEAST.base` 包升级到 **2.7.8**；其他 2.7.x 预期可用但未实测。BEAST 2.7.x 的 class 文件要求 **JDK 17 或更新版本**
+- BEAST2 2.7.x。生成的 XML 面向 BEAST 2.7 的 `beast.base.*` 命名空间。持续集成在 **2.7.7** 运行时上校验，另有一个尽力而为（best-effort）的作业可能把 `BEAST.base` 包升级到 **2.7.8**（取包失败则仍留在 2.7.7，所以全绿并不能证明用的就是 2.7.8）；其他 2.7.x 预期可用但未实测。BEAST 2.7.x 的 class 文件要求 **JDK 17 或更新版本**
 - JDK 17 或更新版本，仅在使用可选的 BEAST2 验证闸门（`--beast2-validate` / `validate --beast2`）时需要；其余功能为纯 Python
 
 ### 从 PyPI 安装
@@ -97,7 +98,7 @@ beast2py generate --config examples/config_basic.yaml --output output_basic.xml 
 # 运行校准诊断（冲突检测 + 敏感性分析 + 可视化）
 beast2py diagnose --config examples/config_basic.yaml --report report.html --sensitivity --visualize
 
-# 把仅先验运行读回来：位数、95% HPD、ESS、留一法位移
+# 把仅先验运行读回来：中位数、95% HPD、ESS、留一法位移
 beast2py prior-summary --trace full.log --reference loo.log --column treeHeight
 
 # 快速模式：单 partition 简单场景
@@ -173,15 +174,16 @@ print(models["substitution_models"])
 - **[使用手册](docs/user_manual_zh.md)** — 完整的安装、CLI/API、配置参考、诊断和故障排除手册
 - **[架构指南](docs/architecture_zh.md)** — 分层架构和模块设计的详细描述
 - **[教程](docs/tutorial_zh.md)** — 带有示例配置的分步教程
-- **[校准指南](docs/calibration_guide_zh.md)** — 指定校准先验和来源元数据的指南
+- **[校准指南](docs/calibration_guide_zh.md)** — 指定校准先验与溯源元数据的指南
 - **[XML 格式指南](docs/xml_format_zh.md)** — 生成的 BEAST2 XML 格式描述
+- **[能力覆盖矩阵](docs/capability_coverage.md)** — 36 项声明能力逐条的闸门 3 证据（仅英文版）
 
 每份手册还各有一节**严格校验**，逐条列出解析器拒绝的输入以及对应的报错原文。
 
 ## 示例配置
 
 `examples/` 目录中共有 **19** 个完整配置。`tests/test_beast2_validation.py` 会为全部 19 个配置
-生成 XML，并交给真实的 BEAST 2.7.8 `XMLParser` 检查（既解析，也调用 `initAndValidate` 初始化
+生成 XML，并交给真实的 BEAST 2.7.7 `XMLParser` 检查（既解析，也调用 `initAndValidate` 初始化
 模型）。它们实际覆盖的模型范围为：
 
 - **替换模型：** 13 个支持模型中 9 个有示例——7 个核苷酸模型全部覆盖（JC69、HKY、TN93、GTR、SYM、TIM、TVM），氨基酸矩阵覆盖 WAG、JTT 两个；`dayhoff`、`blosum62`、`cprev`、`mtrev` 支持但无示例
@@ -191,7 +193,7 @@ print(models["substitution_models"])
 
 | 文件 | 场景 | 树先验 | 替换模型 | 时钟模型 | 校准数 | 特殊功能 |
 |---|---|---|---|---|---|---|
-| `config_basic.yaml` | 基础分析 | Yule | HKY+Γ4 | Strict | 1 | 显式 `parameter_priors` + 来源元数据；`output_basic.*` 的来源 |
+| `config_basic.yaml` | 基础分析 | Yule | HKY+Γ4 | Strict | 1 | 显式 `parameter_priors` + 溯源元数据；`output_basic.*` 的来源 |
 | `config_advanced.yaml` | 高级多校准 | Birth-Death | GTR+Γ4+I / HKY | UCLN + 链接 | 3 | 密码子分区 + 位点/时钟链接 + 超先验 + `diagnostics` 块 + 茎群校准 |
 | `config_subst_jc69.yaml` | 模型比较 JC69 | Yule | JC69+Γ4 | Strict | 1 | 每个候选模型单独一次运行 |
 | `config_subst_sym.yaml` | 模型比较 SYM | Birth-Death | SYM+Γ4 | UCLN | 2 | `rates` 向量 + `frequencies.mode: uniform` |
@@ -201,12 +203,12 @@ print(models["substitution_models"])
 | `config_aa_jtt.yaml` | 氨基酸模型 | Yule | JTT+Γ4+I | Strict | 2 | 蛋白数据上的 Gamma+I |
 | `config_tip_dates.yaml` | 末端日期 | Birth-Death | HKY | UCLN | 1 | `TraitSet`、`date-backward`、每个分类单元都有日期 |
 | `config_calibrated_yule.yaml` | CalibratedYule | CalibratedYule | HKY+Γ4 | Strict | 3 | `calibration_method` 切换 + 茎群校准 |
-| `config_multi_partition.yaml` | 多 partition | Birth-Death | HKY+Γ4 / GTR+Γ4 | UCLN + 链接 | 2 | `FilteredAlignment` 密码子分区、时钟链接、单一连锁拓扑 |
+| `config_multi_partition.yaml` | 多分区 | Birth-Death | HKY+Γ4 / GTR+Γ4 | UCLN + 链接 | 2 | `FilteredAlignment` 密码子分区、时钟链接、单一链接拓扑 |
 | `config_relaxed_clock.yaml` | 松弛对数正态时钟 | Birth-Death | GTR+Γ4 | UCLN | 2 | 带上下界的 `ucld_mean` / `ucld_stdev` |
 | `config_relaxed_exponential.yaml` | 松弛指数时钟 | Yule | GTR+Γ4 | UCE | 2 | UCE 松弛时钟 |
 | `config_rlc.yaml` | 随机局部时钟 | Yule | HKY+Γ4 | RLC | 1 | 指示变量与速率状态节点 |
 | `config_skyline.yaml` | 贝叶斯天际线 | Bayesian Skyline | TN93+Γ4 | Strict | 1 | 天际线群体函数 |
-| `config_coalescent_exponential.yaml` | 指数增长协方差 | Coalescent（指数） | HKY+Γ4 | Strict | 1 | 可正可负的 `growth_rate` |
+| `config_coalescent_exponential.yaml` | 溯祖，指数增长 | Coalescent（指数） | HKY+Γ4 | Strict | 1 | 可正可负的 `growth_rate` |
 | `config_ebsp.yaml` | EBSP | EBSP | HKY+Γ4 | Strict | 1 | 扩展贝叶斯天际线（BEAST 2.7 核心包内置） |
 | `config_bd_skyline.yaml` | BD Skyline Serial | BD Skyline Serial | HKY+Γ4 | Strict | 1 | 需 [bdsky](https://github.com/BEAST2-Dev/bdsky) 插件包 |
 | `config_nested_sampling.yaml` | Nested Sampling | Yule | HKY+Γ4 | Strict | 1 | NS MCMC（需 [NS](https://github.com/BEAST2-Dev/nested-sampling) 插件包） |
@@ -219,7 +221,7 @@ print(models["substitution_models"])
 - `examples/` — 19 个示例配置文件、示例比对数据（FASTA）和示例输出制品
 - `tests/` — 测试套件（共收集 559 个测试：538 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成验证测试）
 - `beast2py/tools/` — 随包发布的无头 BEAST2 验证助手（`Beast2Validator.java` 源码，含预编译的 `classes/` 与 `launcher.jar`），由 `pyproject.toml` 以 `package-data` 随 wheel 打包发布；仓库根目录仅保留同名的薄包装 `beast2_validate.sh`
-- `docs/` — 使用手册、架构指南、教程、校准指南和 XML 格式指南（中英文）
+- `docs/` — 使用手册、架构指南、教程、校准指南和 XML 格式指南（中英文），以及能力覆盖矩阵（仅英文版）
 - `beast2_validate.sh` — 无头 BEAST2 验证启动脚本（需要 `BEAST.base.jar` 与 JDK 17+；自动探测 `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`，也可设 `BEAST2_JAR`）
 - `pyproject.toml` — 包构建与依赖配置
 - `.flake8` — 本地与 CI 共用的 lint 配置，使 `flake8 beast2py tests` 在两处行为一致
@@ -270,15 +272,15 @@ YAML 写下的分布；*有效边缘先验*是在树先验与其余校准共同�
 验证”。独立的 `validate --beast2` 现在按同一种方式拒绝：退出码 2 并打印
 `Level 2/2 not run (Gate 3, …)`，同样接受同名的 `--allow-unvalidated` 豁免，因此同一个缺失的运行时不可能在一个命令里是绿的、在另一个命令里是红的。`validate` 保留自己的两级措辞并打印映射关系：Level 1/2 对应闸门 1（结构检查），Level 2/2 对应闸门 3（BEAST2 解析 + 模型初始化）。
 
-闸门 3 也不校验附加包之间的依赖。`XMLParser` 只解析文件里点名的类，从不查阅已安装附加包的 `version.xml`，所以引用 `nestedsampling.gss.NS` 的 XML，在缺少 NS 1.2.0 声明的 MODEL_SELECTION 依赖时照样能解析并初始化——上述结果就是在这样的环境里核实出来的（`~/.beast/2.7/` 下为 BEAST 2.7.8、BDSKY 1.5.1 与 NS 1.2.0，**未安装 MODEL_SELECTION**）。因此闸门 3 变绿并不说明附加包集合是完整的；运行嵌套抽样分析前请先安装 MODEL_SELECTION。持续集成用 BEAST2 **2.7.7** 运行时执行闸门 3，随后把 `BEAST.base` 包升级到 **2.7.8**。
-该升级是尽力而为的：若取包失败，工作流只记一条 warning 并继续在 2.7.7 上运行，因此一次全绿
+闸门 3 也不校验附加包之间的依赖。`XMLParser` 只解析文件里点名的类，从不查阅已安装附加包的 `version.xml`，所以引用 `nestedsampling.gss.NS` 的 XML，即便缺少 NS 声明的 MODEL_SELECTION 依赖照样能解析并初始化。这是解析器本身的性质，而不是某个环境的性质：上述结果核实所用的项目本地运行时——`tools/` 下的 BEAST 2.7.7 及其自带 OpenJDK 17.0.3、BDSKY 1.5.1、NS 1.2.2 与 MODEL_SELECTION 1.6.2——确实装着 MODEL_SELECTION，而 CI 只是尽力抓取该包，因此有可能缺失。因此闸门 3 变绿并不说明附加包集合是完整的；运行嵌套抽样分析前请先安装 MODEL_SELECTION。持续集成用 BEAST2 **2.7.7** 运行时执行闸门 3，随后尽力把 `BEAST.base` 包升级到 **2.7.8**。
+该升级是尽力而为的：若取包失败，工作流只记录一条警告并继续在 2.7.7 上运行，因此一次全绿
 并不能证明当时用的就是 2.7.8。真正核实过的范围是 BEAST 2.7.7 / 2.7.8 这一区间；其他 2.7.x
 未实测。`integration` 作业会打印它实际解析到的版本，所以确切的版本组合在运行日志里可见，
 而不是靠假设。
 
 测试套件共收集 559 个测试（538 个单元/语义/发布完整性测试 + 21 个 BEAST2 集成测试）。集成测试对全部 19 个
 示例配置、`quick` 路径以及仓库内的 `output_basic.xml` 生成 XML，并用真实的 BEAST2 解析器
-与模型初始化检查。当环境缺少 BEAST2 jar 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败（也包括它同样按 best-effort 抓取的 MODEL_SELECTION 依赖）仅记为 warning 而非 error，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。
+与模型初始化检查。当环境缺少 BEAST2 jar 或 JDK 17 时，这些测试直接跳过，不算失败。 其中两个用例还依赖 BDSKY 与 nested-sampling 两个 BEAST2 附加包，而 CI 工作流把 `beast -get` 取包失败（也包括它同样尽力抓取的 MODEL_SELECTION 依赖）仅记为警告而非错误，因此这两个用例在一条全绿的 CI 上可能是被跳过的。也就是说，CI 徽章变绿本身并不能证明 `config_bd_skyline.yaml` 与 `config_nested_sampling.yaml` 真的通过了闸门 3；请运行 `pytest tests -rs` 查看究竟是哪些集成测试真正执行、哪些被跳过。
 
 ## 可重复性
 
@@ -288,7 +290,7 @@ Beast2Py 生成以下可重复性制品：
 - **数据摘要** — XML 注释里除标识符外还带一个独立的摘要：16 位十六进制，覆盖比对的**内容**。生成时刻的墙钟时间只出现在 `.fingerprint.json` 侧车文件里，绝不写进 XML
 - **LaTeX 方法学描述** — 可直接用于论文的方法学段落
 - **Snakemake/Nextflow 管道** — 端到端可重复工作流文件
-- **校准来源** — 每个校准点的化石来源、参考文献 DOI 和校准类型
+- **校准溯源** — 每个校准点的化石来源、参考文献 DOI 和校准类型
 
 ## 路线图
 
@@ -299,18 +301,6 @@ Beast2Py 生成以下可重复性制品：
 - BEAST2 v2.6.x 命名空间兼容
 - pirouette 式端到端实证测试（已知真树 → 模拟序列 → 注入冲突校准 → 检验冲突检测器灵敏度）
 - 关注 BEAST 3 / LPhy 生态演进并适时适配
-
-## 第三方许可
-
-`beast2py/tools/classes/beast/pkgmgmt/` 下随包分发的编译类来自
-[BEAST 2](https://github.com/CompEvol/beast2) v2.7.8，以 **GNU LGPL v2.1** 许可；
-本包其余部分为 MIT。许可正文见 `beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt`，
-来源、版本、是否修改以及获取完整对应源码的方式见 `beast2py/tools/NOTICE`。
-`beast2py/tools/Beast2Validator.java` 随包分发其源码，以满足 LGPL-2.1 对该编译单元的要求。
-
-## 许可证
-
-本包为 MIT；随包捆绑的 BEAST2 包管理类为 LGPL-2.1（见 `beast2py/tools/NOTICE`）。SPDX 标识为 `MIT AND LGPL-2.1-only`。详见 [LICENSE](LICENSE)。
 
 ## 相关工具
 
@@ -327,6 +317,18 @@ BEAST2 生态中与 Beast2Py 相邻的开源工具（便于选型对比；亦见
 | [pybeast](https://github.com/Wytamma/pybeast) / [beastiary](https://github.com/Wytamma/beastiary) | Python | BEAST2 运行封装（独立运行目录/种子/resume）与实时 MCMC trace 监控（ESS/HPD） |
 
 Beast2Py 的差异点在于把以下能力整合为一条配置阶段流水线：YAML 声明式配置、区分 crown/stem 的校准冲突检测（同一节点、嵌套时间顺序、相交非嵌套单系、显式 unchecked）、默认关闭的描述性先验相似度报告、留一法 prior-only XML 的自动编排，以及校准溯源卡、分析指纹、方法学描述和管道生成。
+
+## 第三方许可
+
+`beast2py/tools/classes/beast/pkgmgmt/` 下随包分发的编译类来自
+[BEAST 2](https://github.com/CompEvol/beast2) v2.7.8，以 **GNU LGPL v2.1** 许可；
+本包其余部分为 MIT。许可正文见 `beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt`，
+溯源、版本、是否修改以及获取完整对应源码的方式见 `beast2py/tools/NOTICE`。
+`beast2py/tools/Beast2Validator.java` 随包分发其源码，以满足 LGPL-2.1 对该编译单元的要求。
+
+## 许可证
+
+本包为 MIT；随包捆绑的 BEAST2 包管理类为 LGPL-2.1（见 `beast2py/tools/NOTICE`）。SPDX 标识为 `MIT AND LGPL-2.1-only`。详见 [LICENSE](LICENSE)。
 
 ## 引用
 

@@ -38,7 +38,7 @@ bundled.
 | 9 | Coalescent, exponential growth | `examples/config_coalescent_exponential.yaml` | `Coalescent` + `ExponentialGrowth` | `logs/examples/config_coalescent_exponential.log` | `test_every_shipped_example_generates_and_validates` |
 | 10 | Bayesian skyline | `examples/config_skyline.yaml` | `BayesianSkyline` | `logs/examples/config_skyline.log` | same |
 | 11 | Extended Bayesian skyline (EBSP) | `examples/config_ebsp.yaml` | `Coalescent` + `CompoundPopulationFunction` | `logs/examples/config_ebsp.log` | same |
-| 12 | Birth-death skyline, serial (BDSKY add-on 1.5.1) | `examples/config_bd_skyline.yaml` | `bdsky.evolution.speciation.BirthDeathSkylineModel` | `logs/examples/config_bd_skyline.log` | same; add-on version recorded in `coverage/README.md` |
+| 12 | Birth-death skyline, serial (BDSKY add-on 1.5.1) | `examples/config_bd_skyline.yaml` | `bdsky.evolution.speciation.BirthDeathSkylineModel` | `logs/examples/config_bd_skyline.log` | same; add-on version recorded in the archived `coverage/README.md`, which lives outside this repository like the rest of the Gate 3 evidence |
 
 ## Substitution models (13)
 
@@ -79,7 +79,7 @@ bundled.
 
 * **Beta and Beta+offset are separate rows** because they have different
   support and different diagnostic behaviour. The 11 *distribution families*
-  are rows 26-37; Beta and Beta+offset share one family but are two use cases.
+  are rows 26-36; Beta and Beta+offset share one family but are two use cases.
   Counting families gives 11, counting fixtures gives 12.
 * **OneOnX** is parsed and initialised by BEAST2, but its mean and quantiles
   are undefined. The diagnostics report such pairs as `unchecked`, never as

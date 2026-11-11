@@ -1,9 +1,11 @@
 # BEAST2 XML 格式指南
 
+[English](xml_format_en.md) | 中文
+
 ## 概述
 
 Beast2Py 生成兼容 BEAST2 v2.7.x 的 XML 文件，使用 `xml.etree.ElementTree` 构建，并已针对
-BEAST 2.7.8 核实。本文档描述工具生成的 XML 结构。工具在内存中组装 XML，验证闸门（结构与语义
+BEAST 2.7.7 核实。本文档描述工具生成的 XML 结构。工具在内存中组装 XML，验证闸门（结构与语义
 检查、校准冲突检测，以及按需开启的 BEAST2 解析 + `initAndValidate()`）全部通过后，才把结果
 写到磁盘。因此磁盘上的文件一定具有下述结构。
 
@@ -24,7 +26,7 @@ BEAST 2.7.8 核实。本文档描述工具生成的 XML 结构。工具在内存
 
     <!-- 2. 校准用的分类子集 -->
     <!-- 实现约定：首次出现的分类单元用 id= 定义，之后引用用 idref=。
-         全部用 idref 会在缺少顶层分类定义时导致 BEAST2 报
+         全部用 idref，当不存在顶层的分类单元定义（<taxon> 的 id=）时会导致 BEAST2 报
          "Could not find object associated with idref ..." -->
     <taxonset spec='TaxonSet' id='humanChimpMRCA.taxonset'>
         <taxon spec='Taxon' id='human'/><taxon spec='Taxon' idref='chimp'/>
@@ -38,7 +40,7 @@ BEAST 2.7.8 核实。本文档描述工具生成的 XML 结构。工具在内存
             <!-- 参数先验 -->
         </distribution>
         <distribution id="likelihood" spec="CompoundDistribution">
-            <!-- 每个 partition 的 TreeLikelihood -->
+            <!-- 每个分区的 TreeLikelihood -->
         </distribution>
     </distribution>
 
@@ -58,7 +60,7 @@ BEAST 2.7.8 核实。本文档描述工具生成的 XML 结构。工具在内存
 
 ### `<state>` 元素只容纳被估计的参数
 
-用户标注 `estimate: false` 的参数永远不进入 `<state>`。生成器把这类参数*内联*写成引用方元素的
+用户标注 `estimate: false` 的参数永远不进入 `<state>`。生成器把这类参数*内联*写成引用它的元素的
 子元素，因此它不获得算子，也不产生轨迹列：
 
 ```xml
@@ -101,9 +103,9 @@ BEAST 2.7.8 核实。本文档描述工具生成的 XML 结构。工具在内存
 beast.base.evolution.alignment:beast.base.evolution.speciation:beast.pkgmgmt:beast.base.core:...
 ```
 
-## 多 Partition 支持
+## 多分区支持
 
-生成器为每个 partition 写出独立的 `<data>` 元素和 `<TreeLikelihood>` 元素：
+生成器为每个分区写出独立的 `<data>` 元素和 `<TreeLikelihood>` 元素：
 
 ```xml
 <data id='gene1' dataType='nucleotide'>...</data>
@@ -123,9 +125,9 @@ beast.base.evolution.alignment:beast.base.evolution.speciation:beast.pkgmgmt:bea
 </distribution>
 ```
 
-共享的时钟只写出一次，并带上自己的 `id`，其余 partition 用 `idref` 指向它（共享位点模型同理）。
-所有 partition 都装配在**同一棵** `tree='@tree'` 上：逐分区拓扑尚未实现，解析器会直接拒绝
-`tree: separate`，而不是静默地把各分区的树连锁起来，因此产出文件里绝不会出现多个 `<tree>`
+共享的时钟只写出一次，并带上自己的 `id`，其余分区用 `idref` 指向它（共享位点模型同理）。
+所有分区都装配在**同一棵** `tree='@tree'` 上：逐分区拓扑尚未实现，解析器会直接拒绝
+`tree: separate`，而不是静默地把各分区的树链接起来，因此产出文件里绝不会出现多个 `<tree>`
 状态节点。
 
 ## 校准分布
@@ -185,6 +187,12 @@ UCLN 与 UCE 共用 `UCRelaxedClockModel` 这个 spec，区别只在分支速率
 <!-- Analysis Fingerprint: B2P-3f43bfab58c3-0.2.0 | Data: 72a8314e0bde0640 -->
 ```
 
-格式：`B2P-{配置哈希 12 位}-{工具版本} | Data: {数据哈希 16 位}`
+格式：`B2P-{config_hash_12chars}-{tool_version} | Data: {data_hash_16chars}`，
+其中 `{config_hash_12chars}` 是 12 位配置哈希、`{tool_version}` 是工具版本、
+`{data_hash_16chars}` 是 16 位数据哈希。
 
-`config_hash` 是序列化配置的 SHA-256 摘要前 12 位十六进制字符，`data_hash` 是比对**序列内容**的 SHA-256 摘要前 16 位。该标识符刻意不含日历日期、时区，也不含输出文件名，因此同一配置与同一比对在任何机器、任何日期都得到同一指纹。改动任何模型组件、校准、MCMC 设置或序列数据，指纹都会随之改变。生成时间只单独记录在 JSON 侧车文件里，绝不进入标识符。
+`config_hash` 是序列化配置的 SHA-256 摘要前 12 位十六进制字符，`data_hash` 是比对*序列内容*的 SHA-256 摘要前 16 位十六进制字符。
+
+该标识符刻意不含日历日期、时区，也不含输出文件名，因此同一配置与同一比对在任何机器、任何日期都得到同一指纹。改动任何模型组件、校准、MCMC 设置或序列数据，指纹都会随之改变。
+
+生成时间只单独记录在 JSON 侧车文件里，绝不进入标识符。

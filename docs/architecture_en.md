@@ -1,5 +1,7 @@
 # Architecture
 
+English | [中文](architecture_zh.md)
+
 ## Overview
 
 Beast2Py follows a layered architecture designed for extensibility and maintainability. The system is divided into five layers: CLI entry, configuration management, domain modules, data models, and utility support.
@@ -18,6 +20,7 @@ Beast2Py follows a layered architecture designed for extensibility and maintaina
 | Model Assembly | `model.py` | Tree prior, substitution model, clock model, operators, state, init XML building |
 | XML Generation | `xml_writer.py` | Complete XML assembly using ElementTree, operator/state-node invariants |
 | Calibration Diagnostics | `diagnostics.py` | Conflict detection, sensitivity analysis, visualization (core innovation) |
+| Trace Summary | `trace.py` | Reads BEAST2 `.log` files by column name, applies burn-in, and reports the median, 95% interval and ESS of each effective marginal prior plus its leave-one-out shift (backs `prior-summary`) |
 | Reproducibility | `reproducibility.py` | Analysis fingerprint, methods description, pipeline generation (core innovation) |
 | Validator | `validator.py` | XML structural and semantic validation, id/idref consistency, BEAST2 gate |
 | Utility Functions | `utils.py` | ID generation, XML serialization, distribution calculations |
@@ -113,4 +116,4 @@ The `ModelRegistry` class in `registry.py` implements the Registry Pattern, mapp
 
 11. **Date-Free Fingerprint**: The analysis fingerprint is `B2P-{hash12}-{version} | Data: {hash16}`, that is, the configuration digest plus a digest over the alignment sequences. The same configuration and the same data therefore produce the same identifier on every machine and on every day; the wall-clock generation time lives only in the JSON sidecar file
 
-12. **BEAST2 v2.7.x Namespace**: Uses `beast.base.*` package names, verified against BEAST 2.7.8 — whose class files require a JDK 17 or newer at run time
+12. **BEAST2 v2.7.x Namespace**: Uses `beast.base.*` package names, verified against BEAST 2.7.7 — whose class files require a JDK 17 or newer at run time

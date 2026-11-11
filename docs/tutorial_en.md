@@ -1,5 +1,7 @@
 # Tutorial
 
+English | [中文](tutorial_zh.md)
+
 ## 1. Installation
 
 ```bash

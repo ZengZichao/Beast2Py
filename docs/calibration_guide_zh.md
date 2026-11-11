@@ -1,8 +1,10 @@
 # 校准先验最佳实践指南
 
+[English](calibration_guide_en.md) | 中文
+
 ## 引言
 
-节点校准是分歧时间估计的关键步骤。不当的校准设定会让后验估计产生偏差，甚至出现“先验支配”。本指南给出在 Beast2Py 中指定校准先验的最佳实践。
+节点校准是分歧时间估计的关键步骤。不当的校准设定会让后验估计产生偏差，甚至出现“先验支配”——即先验压过序列数据的现象。本指南给出在 Beast2Py 中指定校准先验的最佳实践。
 
 ## 关键原则
 
@@ -13,14 +15,14 @@
 - **均匀分布**：仅适用于硬边界约束
 - **指数分布**：适用于只有最小年龄约束的情况
 
-Beast2Py 共接受 11 种分布类型。上述四种用来描述节点年龄，在生物学上通常说得通。其余为 `gamma`、`beta`、`laplace`、`inverse_gamma`、`poisson`、`chi_square`（可参数化的形状），以及 `one_on_x`（`f(x) = 1/x`）。后者是**非正常密度**（improper）：既没有均值，也没有 95% 区间，因此 Beast2Py 把它的统计量报为“未定义”，并把它排除在重叠检查之外。只有当参数的范围由别的东西界定时，才适合用 `one_on_x` 作为刻意平坦的先验。
+Beast2Py 共接受 11 种分布类型。上述四种用来描述节点年龄，在生物学上通常说得通。其余为 `gamma`、`beta`、`laplace`、`inverse_gamma`、`poisson`、`chi_square`（可参数化的形状），以及 `one_on_x`（`f(x) = 1/x`）。后者是**非正常密度**（improper）：既没有均值，也没有 95% 区间（工具内部按最短概率区间 HPD 计算），因此 Beast2Py 把它的统计量报为“未定义”，并把它排除在重叠检查之外。只有当参数的范围由别的东西界定时，才适合用 `one_on_x` 作为刻意平坦的先验。
 
 ### 2. 软边界与硬边界
 
 - **软边界**（推荐）：允许后验超出先验范围，让数据参与估计
 - **硬边界**：严格约束后验；仅在化石证据确定时使用
 
-每个校准点用 `provenance.calibration_type` 记录这一选择（自由字符串；除 `"hard"` 之外的任何值都按软边界处理，省略时默认为**软边界**）。Beast2Py 还会*兑现*你记录的声明：解析阶段把先验的 95% 区间与 `provenance.original_age_min` / `original_age_max` 比较，于是
+每个校准点用 `provenance.calibration_type` 记录这一选择（自由字符串；除 `"hard"` 之外的任何值都按软边界处理，省略时默认为**软边界**）。Beast2Py 还会**校验并落实**你记录的声明：解析阶段把先验的 95% 区间与 `provenance.original_age_min` / `original_age_max` 比较，于是
 
 - 校准声明为**硬边界**，而先验整体落在所记录的化石范围之外，即为**错误**——流程在写出任何文件之前终止；
 - 同样情形下，**软边界**的校准只给出**警告**，因为软边界本就把大部分质量放在化石最小值之上（让 lognormal 的 2.5% 分位数落在硬最小值处，正是 BEAST2 的惯例）。
@@ -52,8 +54,8 @@ calibrations:
 
 使用 `diagnose` 命令检测：
 
-- **时间不一致**：嵌套配对中父节点先验**整体**比子节点先验更年轻。只有当父 clade 的 HPD 上界比子 clade 的 HPD 下界更年轻时才判为错误；区间重叠时不报告，包括父节点均值比子节点更年轻的场合——长尾的柔性父先验均值更年轻仍可能完全兼容。根校准（`taxa: null`）充当其余每个 clade 的父节点参与比较
-- **先验相似度（描述性，默认关闭）**：两个独立支系完全可以有相似的年龄先验。若显式开启 `diagnostics.prior_similarity` 并给出 `similarity_threshold`，工具会返回严重度 `info` 的 `prior_similarity` 条目；它不给出合并建议，也不阻断 Gate 2。`OneOnX` 没有定义的均值与区间，涉及它的配对报告为 unchecked。
+- **时间不一致**：嵌套配对中父节点先验**整体**比子节点先验更年轻。只有当父支系（clade）的 95% 区间上界比子支系的 95% 区间下界更年轻时才判为错误；区间重叠时不报告，包括父节点均值比子节点更年轻的场合——长尾且软边界的父先验均值更年轻仍可能完全兼容。根校准（`taxa: null`）充当其余每个支系的父节点参与比较
+- **先验相似度（描述性，默认关闭）**：两个独立支系完全可以有相似的年龄先验。若显式开启 `diagnostics.prior_similarity` 并给出 `similarity_threshold`，工具会返回严重度 `info` 的 `prior_similarity` 条目；它不给出合并建议，也不阻断闸门 2。`OneOnX` 没有定义的均值与区间，涉及它的配对报告为 unchecked。
 - **单系性冲突**：有交集但不嵌套的分类子集
 
 同一套冲突检测会作为 `generate` 与 `quick` 的闸门 2 自动运行：出现 `error` 级别的冲突时，闸门不写出任何文件，命令以非零码退出。
@@ -66,7 +68,7 @@ calibrations:
 beast2py diagnose --config config.yaml --report report.html --sensitivity
 ```
 
-此命令生成 N+1 个仅先验采样 XML（N 为校准点数量）：一个包含完整校准集，外加 N 个留一法版本。它们落在 `<报告目录>/diagnostics/sensitivity/` 下，或落在 `--sensitivity-xml-dir` 所指目录的 `sensitivity/` 子目录里。用 BEAST2 运行每个 XML，然后比较完整运行与各留一法运行的树高及校准节点年龄。这些链从先验采样，因此该比较针对的是每组校准所产生的**有效边缘先验**；其中不涉及似然，故与后验无关。链长、抽样间隔与 burn-in 需自行设定，并在运行前确定 ESS 判据、随结果一并报告——仅先验运行既不自动很快，也不自动收敛。
+此命令生成 N+1 个仅先验采样 XML（N 为校准点数量）：一个包含完整校准集，外加 N 个留一法版本。它们落在 `<报告目录>/diagnostics/sensitivity/` 下，或落在 `--sensitivity-xml-dir` 所指目录的 `sensitivity/` 子目录里。用 BEAST2 运行每个 XML，然后比较完整运行与各留一法运行的树高及校准节点年龄。这些链从先验采样，因此该比较针对的是每组校准所产生的**有效边缘先验**；其中不涉及似然，故与后验无关。链长、抽样间隔与 burn-in 需自行设定，需在运行前确定 ESS 判据，并把这三项随结果一并报告——仅先验运行既不自动很快，也不自动收敛。
 
 ## 常见陷阱
 
@@ -78,13 +80,13 @@ beast2py diagnose --config config.yaml --report report.html --sensitivity
 
 ### 2. 冲突校准
 
-**问题**：两个校准为嵌套 clade 指定了不兼容的时间范围。
+**问题**：两个校准为嵌套支系指定了不兼容的时间范围。
 
-**解决方案**：运行 `diagnose` 检测时间冲突，然后调整校准，让父 clade 的范围比子 clade 更老。注意：闸门 2 报出 `error` 级别的冲突时，`generate` 不会写出任何文件，因此退出码为 0 的流水线已经通过了这一检查。
+**解决方案**：运行 `diagnose` 检测时间冲突，然后调整校准，让父支系的范围比子支系更老。注意：闸门 2 报出 `error` 级别的冲突时，`generate` 不会写出任何文件，因此退出码为 0 的流水线已经通过了这一检查。
 
 ### 3. 过窄先验
 
-**问题**：使用很窄的正态分布（`sigma` 很小）会人为地约束后验。
+**问题**：使用很窄的正态分布（`sigma` 很小）可能人为地约束后验。
 
 **解决方案**：对化石校准使用更宽的分布或对数正态分布，因为化石校准通常具有不对称的不确定性。
 
@@ -96,7 +98,7 @@ beast2py diagnose --config config.yaml --report report.html --sensitivity
 
 ## 参考文献
 
-- Heled & Drummond (2012) Syst Biol 61: 138～149, DOI:10.1093/sysbio/syr087 — CalibratedYule 和 MRCA 校准方法
+- Heled & Drummond (2012) Syst Biol 61: 138～149, DOI:10.1093/sysbio/syr087 — Calibrated Yule 与 MRCA 校准方法
 - Rieux & Balloux (2016) Mol Ecol 25: 1911～1924, DOI:10.1111/mec.13586 — 校准最佳实践
 - Ho & Phillips (2009) Syst Biol 58: 367～380, DOI:10.1093/sysbio/syp035 — 分子钟校准
-- Parham et al. (2012) Syst Biol 61: 346～359, DOI:10.1093/sysbio/syr107 — 化石校准最佳实践
+- Parham et al. (2012) Syst Biol 61: 346～359, DOI:10.1093/sysbio/syr107 — 为化石校准提供依据的最佳实践

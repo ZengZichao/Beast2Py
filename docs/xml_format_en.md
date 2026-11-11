@@ -1,9 +1,11 @@
 # BEAST2 XML Format Guide
 
+English | [中文](xml_format_zh.md)
+
 ## Overview
 
 Beast2Py generates BEAST2 v2.7.x compatible XML files using `xml.etree.ElementTree`,
-verified against BEAST 2.7.8. This document describes the XML structure the tool produces.
+verified against BEAST 2.7.7. This document describes the XML structure the tool produces.
 The generator assembles the XML in memory and writes it to disk only after the validation
 gates (structural and semantic checks, calibration conflict detection, and — on request —
 the BEAST2 parser plus `initAndValidate()`) have all passed. The files on disk therefore

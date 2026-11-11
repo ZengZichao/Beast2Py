@@ -1,5 +1,7 @@
 # 教程
 
+[English](tutorial_en.md) | 中文
+
 ## 1. 安装
 
 ```bash
@@ -11,9 +13,9 @@ cd Beast2Py
 pip install -e .
 ```
 
-未安装时，在仓库根目录下，下文每条命令都可以改用 `python3 -m beast2py.main <子命令>` 运行，入口完全相同。
+未安装时，在仓库根目录下，下文每条命令都可以改用 `python3 -m beast2py.main <subcommand>` 运行（尖括号内是占位符，`subcommand` 指 `generate`、`quick`、`diagnose` 等实际子命令名，不要字面输入），入口完全相同。
 
-## 2. 基本用法：单 partition 分析
+## 2. 基本用法：单分区分析
 
 ### 步骤 1：准备序列数据
 
@@ -112,7 +114,7 @@ beast -overwrite -seed 1 output.xml
 
 ## 3. 快速模式
 
-对于简单的单 partition 分析，使用 `quick` 命令：
+对于简单的单分区分析，使用 `quick` 命令：
 
 ```bash
 beast2py quick \
@@ -141,7 +143,7 @@ beast2py quick \
     parameters: {mean: 6.0, sigma: 0.5}
 ```
 
-## 4. 多 Partition 分析
+## 4. 多分区分析
 
 ```yaml
 alignments:
@@ -169,7 +171,7 @@ partitions:
     tree: "shared"
 ```
 
-`tree: "shared"` 是唯一合法取值。逐分区的独立拓扑尚未实现，解析阶段会直接拒绝 `tree: separate`（以及在该位置写一个 partition id），而不是静默连锁。否则，本意为 *BEAST 风格的多基因座分析就变成了完全连锁的分析。在逐分区树实现之前，请为每个独立分区各运行一次分析。`linked_to` 必须指向另一个已存在的 partition，自链接与未知 id 都是错误。
+`tree: "shared"` 是唯一合法取值。逐分区的独立拓扑尚未实现，解析阶段会直接拒绝 `tree: separate`（以及在该位置写一个分区 id），而不是静默链接。否则，本意为 *BEAST 风格的多基因座分析就变成了完全链接的分析。在逐分区树实现之前，请为每个独立分区各运行一次分析。`linked_to` 必须指向另一个已存在的分区，自链接与未知 id 都是错误。
 
 ## 5. 密码子分区
 
@@ -198,13 +200,13 @@ partitions:
     tree: "shared"
 ```
 
-声明 `filter` 时，`data_id` 为必填，且必须指向一个已声明的比对，不能指向过滤器自身。
+声明 `filter` 时，`data_id` 为必填，且必须指向另一个已声明的比对，不能是声明该 `filter` 的条目自身（不得自引用）。
 
 Filter 表达式遵循 BEAST2 自己的 `FilteredAlignment.parseFilterSpec` 语法，坐标是 **1-based**（从 1 开始计数）。表达式是用逗号分隔的列表，每一项可以是：
 
 - 单个位点（`N`）
 - 闭区间（`from-to`，末端留空表示最后一个位点）
-- 带步长的区间（`from-to\step`）
+- 每隔 k 个位点取一个的区间（`from-to\step`）
 - 迭代器（`from:to:step`，上面两个例子用的就是 `from::step`）
 
 于是 `1::3,2::3` 保留第 1、2、4、5、7、8 等位（每个密码子的前两位），`3::3` 保留 3、6、9 等位（第三位）。
@@ -234,7 +236,7 @@ beast2py pipeline --config config.yaml --type both --output-dir pipeline
 
 `--output-dir` 默认为当前目录；`--type` 默认为 `snakemake`。
 `--threads N` 设定写入流程的 BEAST2 线程数（`beast -threads N`），覆盖 YAML 里的
-`mcmc.threads`（该键缺省为 4）；笔记本或受限的 HPC 分区可用 `--threads 1`。
+`mcmc.threads`（该键缺省为 4）；笔记本或受限的作业队列（HPC 分区）可用 `--threads 1`。
 
 ## 8. 验证
 
@@ -246,7 +248,7 @@ beast2py validate --xml output.xml
 beast2py validate --xml output.xml --beast2
 ```
 
-`--beast2` 运行无头的 BEAST2 解析器。它解析文件**并对每个对象调用 `initAndValidate()`**，因此检查的是模型能否初始化，而不只是能否解析。这与 `generate` 的闸门 3（`--beast2-validate`）走同一条代码路径，需要 BEAST2 以及 **JDK 17 或更新版本**。
+`--beast2` 运行无头的 BEAST2 解析器。它**既**解析文件，**也**对每个对象调用 `initAndValidate()`，因此检查的是模型能否被初始化，而不只是文件是否**良构（well-formed）**。这与 `generate` 的闸门 3（`--beast2-validate`）走同一条代码路径，需要 BEAST2 以及 **JDK 17 或更新版本**。
 
 随包发布的 `beast2_validate.sh`（位于包内，仓库根只有一个薄包装）按以下顺序查找 `BEAST.base.jar`：
 
