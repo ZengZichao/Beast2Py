@@ -13,13 +13,16 @@ Node calibration is a critical step in divergence time estimation. Poorly chosen
 - **Normal**: For well-constrained calibrations with symmetric uncertainty
 - **LogNormal**: For calibrations with right-skewed uncertainty (common in fossil data)
 - **Uniform**: For hard boundary constraints only
-- **Exponential**: For minimum-age constraints with no upper bound
+- **Exponential**: For a minimum-age constraint with **no upper bound at all** (its right tail is unbounded, so it cannot encode a maximum age)
 
 Beast2Py accepts eleven distribution types in total. The four above are the ones that usually
 make biological sense for a node age. The others are `gamma`, `beta`, `laplace`,
 `inverse_gamma`, `poisson` and `chi_square` (parameterisable shapes), and `one_on_x`
-(`f(x) = 1/x`). The last one is an **improper** density: it has no mean and no 95% interval,
-so Beast2Py reports its statistics as "undefined" and excludes it from the overlap check.
+(`f(x) = 1/x`). The last one is an **improper** density: it has no mean and no 95% interval, so
+Beast2Py reports its statistics as "undefined" and leaves any pair involving it out of the
+temporal/range comparison, reporting that pair as `unchecked`. Where a proper distribution has no
+closed-form 95% interval, the tool computes it as a shortest-probability-interval HPD; the discrete
+`poisson` is the one exception and is given a central 95% interval instead.
 Use `one_on_x` as a deliberately flat prior only on a parameter that something else bounds.
 
 ### 2. Soft vs. Hard Bounds
@@ -27,10 +30,11 @@ Use `one_on_x` as a deliberately flat prior only on a parameter that something e
 - **Soft bounds** (recommended): Allow the posterior to extend beyond the prior range, letting data inform the estimate
 - **Hard bounds**: Constrain the posterior strictly; use only when fossil evidence is definitive
 
-Each calibration point records this choice in `provenance.calibration_type` (a free string; anything other than `"hard"` is treated as a soft bound, and omitting it defaults to a **soft** bound). Beast2Py also *enforces* the claim you record: at parse time it compares the prior's 95% interval with `provenance.original_age_min` / `original_age_max`, and
+Each calibration point records this choice in `provenance.calibration_type`, which accepts only `soft` and `hard`, matched case-, space- and hyphen-insensitively; any other value is a parse-time `ConfigError`, and omitting it defaults to a **soft** bound. Beast2Py also *enforces* the claim you record: at parse time it compares the prior's 95% interval with `provenance.original_age_min` / `original_age_max`, and
 
 - a calibration declared **hard** whose prior lies entirely outside the recorded fossil range is an **error** — the run stops before any file is written;
-- a calibration declared **soft** in the same situation is a **warning**, because a soft bound is *meant* to put most of its mass above the fossil minimum (a lognormal whose 2.5% quantile sits at the hard minimum is the BEAST2 convention).
+- a calibration declared **soft** in the same situation is a **warning**, because a soft bound is *meant* to put most of its mass above the fossil minimum (a lognormal whose 2.5% quantile sits at the hard minimum is the BEAST2 convention);
+- the maximum-side comparison is skipped whenever the prior has an `offset` (`offset > 0` makes it a minimum-style prior, whose upper tail is meant to run past the fossil's own age bracket), so an offset prior lying outside `original_age_max` is never flagged.
 
 ### 3. Document Provenance
 
@@ -60,8 +64,8 @@ calibrations:
 Use the `diagnose` command to detect:
 
 - **Temporal inconsistency**: A nested pair whose parent prior is *wholly* younger than its child prior. The detector reports an error only when the parent's 95% upper bound is younger than the child's 95% lower bound. Overlapping intervals are not reported, including a parent whose mean is younger than its child's: a soft parent prior with a long tail can have a younger mean and still be perfectly compatible. A root calibration (`taxa: null`) takes part as the parent of every other clade
-- **Prior similarity (descriptive, off by default)**: Two independent clades may legitimately have similar age priors. If you enable `diagnostics.prior_similarity` with an explicit `similarity_threshold`, the tool reports `prior_similarity` entries with severity `info`. They carry no merge recommendation and never block Gate 2. `OneOnX` has no defined mean or interval, so a pair involving it is reported as unchecked.
-- **Monophyly conflict**: Overlapping but non-nested taxon sets
+- **Prior similarity (descriptive, off by default)**: Two independent clades may legitimately have similar age priors. If you enable `diagnostics.prior_similarity` with an explicit `similarity_threshold`, the tool reports `prior_similarity` entries with severity `info`. They carry no merge recommendation and never block Gate 2. `OneOnX` has no defined mean or interval, so a pair involving it is reported as `unchecked`.
+- **Monophyly conflict** (`topology`): Overlapping but non-nested taxon sets. This is an error only when both calibrations assert monophyly (`monophyletic: true`, the default); if one side sets `monophyletic: false` there is no topology constraint to violate, and the pair is reported as `unchecked` instead.
 
 The same conflict detection runs automatically as Gate 2 of `generate` and `quick`: when it reports an error-severity conflict, the gate writes nothing and the command exits non-zero.
 
