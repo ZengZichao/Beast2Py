@@ -24,9 +24,9 @@ Beast2Py is a Python framework for **standardizing, validating, and diagnosing n
 
 | Feature | Description |
 |---------|-------------|
-| **Calibration conflict detection** | Automatic detection of same-node contradictions, nested temporal inconsistencies, and intersecting non-nested monophyly constraints; crown/stem-aware and with explicit `unchecked` pairs. Prior similarity is a separate, opt-in descriptive report, not a conflict |
-| **Prior sensitivity analysis** | Automatic generation of "prior-only sampling" XMLs to evaluate the marginal impact of calibration priors |
-| **Calibration provenance metadata** | Each calibration point records fossil source, reference DOI, and calibration type (hard/soft bound) |
+| **Calibration conflict detection** | Automatic detection of same-node contradictions, nested temporal inconsistencies, and intersecting non-nested monophyly constraints; crown/stem-aware and with explicit `unchecked` pairs, i.e. pairs the static detector cannot put in age order. Prior similarity (`prior_similarity`) is a separate, opt-in descriptive report, not a conflict |
+| **Prior sensitivity analysis** | Automatic generation of "prior-only sampling" XMLs to evaluate the marginal impact of calibration priors. The analysis is prior-level only: those XMLs sample the prior, and Beast2Py neither runs nor reads a posterior |
+| **Calibration provenance metadata** | Each calibration point records fossil source, reference DOI, and calibration type (`hard`/`soft` bound) |
 | **Reproducibility framework** | YAML configuration versioning + analysis fingerprint + LaTeX methods description + Snakemake/Nextflow pipeline generation |
 
 ### Three-Tier Feature Set
@@ -43,9 +43,9 @@ Beast2Py is a Python framework for **standardizing, validating, and diagnosing n
 - **Clock models:** Strict clock, UC Relaxed LogNormal (UCLN), UC Relaxed Exponential (UCE), Random Local Clock (RLC)
 - **Tree priors:** Yule, CalibratedYule, Birth-Death, Coalescent (Constant/Exponential), Bayesian Skyline, EBSP; BD Skyline Serial (requires the [bdsky](https://github.com/BEAST2-Dev/bdsky) add-on package)
 - **Calibration distributions:** Normal, LogNormal, Uniform, Exponential, Gamma, Beta, Laplace, InverseGamma, OneOnX, Poisson, ChiSquare
-- **Multi-partition:** Several alignments (or codon-position `FilteredAlignment` subsets of one alignment) with independent or shared site and clock models (`linked_to`). All partitions are assembled on **one linked topology**: the parser refuses `tree: separate` and any per-partition tree id outright, and says why, because unlinked gene trees (`` `*BEAST` `` / StarDivergence-style analyses) are not implemented
+- **Multi-partition:** Several alignments (or codon-position `FilteredAlignment` subsets of one alignment) with independent or shared site and clock models (`linked_to`). All partitions are assembled on **one linked topology**: the parser refuses `tree: separate` and any per-partition tree id outright, and says why, because unlinked gene trees (`*BEAST` / StarDivergence-style analyses) are not implemented
 - **Multi MRCA priors:** Unlimited calibration points
-- **Tip dates:** A `TraitSet` supports serially sampled data (`TipDatesRandomWalker` is emitted as soon as tip dates are enabled, without needing a `tipsonly` calibration)
+- **Tip dates:** A `TraitSet` supports serially sampled data (`TipDatesRandomWalker` is emitted whenever the `tip_dates` block is enabled and at least one taxon carries a non-zero date, without needing a `tipsonly` calibration)
 - **MCMC:** Standard MCMC + Nested Sampling MCMC (nested sampling requires the [NS](https://github.com/BEAST2-Dev/nested-sampling) add-on package)
 - **Initialization:** RandomTree, UPGMA, User Newick
 - **Hyperpriors:** Priors on the parameters of a calibration distribution
@@ -56,7 +56,7 @@ Beast2Py is a Python framework for **standardizing, validating, and diagnosing n
 ### Prerequisites
 
 - Python 3.10 or higher
-- BEAST2 2.7.x. The generated XML targets the BEAST 2.7 `beast.base.*` namespace. Continuous integration validates against a **2.7.7** runtime; a best-effort job can upgrade the `BEAST.base` package to **2.7.8**. Other 2.7.x releases are expected to work but have not been tested. BEAST 2.7.x class files require **JDK 17 or newer**
+- BEAST2 2.7.x. The generated XML targets the BEAST 2.7 `beast.base.*` namespace. Continuous integration validates against a **2.7.7** runtime on which a best-effort step upgrades the `BEAST.base` package to **2.7.8**; if that upgrade fails the job logs a warning and continues on 2.7.7, so a green run does not prove which version was in use (see [Validation](#validation)). Other 2.7.x releases are expected to work but have not been tested. BEAST 2.7.x class files require **JDK 17 or newer**
 - JDK 17 or newer, only for the optional BEAST2 validation gate (`--beast2-validate` / `validate --beast2`); everything else is pure Python
 
 ### Install from PyPI
@@ -180,6 +180,7 @@ Comprehensive documentation is available in the `docs/` directory:
 - **[Tutorial](docs/tutorial_en.md)** — Step-by-step tutorial with example configurations
 - **[Calibration Guide](docs/calibration_guide_en.md)** — Guide to specifying calibration priors with provenance metadata
 - **[XML Format Guide](docs/xml_format_en.md)** — Description of the generated BEAST2 XML format
+- **[Capability Coverage Matrix](docs/capability_coverage.md)** — Row-by-row Gate 3 evidence for the 36 declared model capabilities (English only)
 
 Each manual also carries a **strict validation** section listing every input the parser now rejects and the error message it produces.
 
@@ -187,18 +188,19 @@ Each manual also carries a **strict validation** section listing every input the
 
 The `examples/` directory holds **19** complete YAML configurations.
 `tests/test_beast2_validation.py` generates XML for all 19 and checks each one
-against the real BEAST 2.7.7 `XMLParser`, which parses *and* initialises the model.
+against the real BEAST 2.7.7 `XMLParser`, which parses *and* calls `initAndValidate()`
+to initialise the model.
 Their actual coverage is:
 
 - **Substitution models:** 9 of the 13 supported models are exemplified — all seven nucleotide models (JC69, HKY, TN93, GTR, SYM, TIM, TVM) plus two of the six amino-acid matrices (WAG, JTT). `dayhoff`, `blosum62`, `cprev` and `mtrev` are supported but have no example
 - **Clock models:** all four (strict, UCLN, UCE, RLC)
 - **Tree priors:** 7 of the 8 supported priors — `coalescent_constant` has no example of its own
-- **Calibration distributions:** 3 of the 11 supported distributions appear (lognormal, normal, uniform)
+- **Calibration distributions:** 3 of the 11 supported distributions appear (lognormal, uniform, exponential)
 
 | File | Scenario | Tree prior | Substitution model | Clock model | Calibrations | Special features |
 |---|---|---|---|---|---|---|
 | `config_basic.yaml` | Basic analysis | Yule | HKY+Γ4 | Strict | 1 | explicit `parameter_priors`, provenance; source of `output_basic.*` |
-| `config_advanced.yaml` | Advanced multi-calibration | Birth-Death | GTR+Γ4+I / HKY | UCLN + linked | 3 | codon partitions + site/clock linking + hyperpriors + `diagnostics` block + stem calibration |
+| `config_advanced.yaml` | Advanced multi-calibration | Birth-Death | GTR+Γ4+I / linked site model | UCLN + linked | 3 | codon partitions + site/clock linking + hyperpriors + `diagnostics` block |
 | `config_subst_jc69.yaml` | Model comparison, JC69 | Yule | JC69+Γ4 | Strict | 1 | one analysis per candidate model |
 | `config_subst_sym.yaml` | Model comparison, SYM | Birth-Death | SYM+Γ4 | UCLN | 2 | `rates` vector + `frequencies.mode: uniform` |
 | `config_subst_tim.yaml` | Model comparison, TIM | Yule | TIM+Γ4 | Strict | 1 | named rates + `frequencies.mode: empirical` |
@@ -206,7 +208,7 @@ Their actual coverage is:
 | `config_aa_model.yaml` | Amino acid model | Birth-Death | WAG+Γ4 | UCLN | 2 | `aminoacid.fasta` + offset lognormal calibrations |
 | `config_aa_jtt.yaml` | Amino acid model | Yule | JTT+Γ4+I | Strict | 2 | Gamma+I on protein data |
 | `config_tip_dates.yaml` | Tip dates | Birth-Death | HKY | UCLN | 1 | `TraitSet`, `date-backward`, one date per taxon |
-| `config_calibrated_yule.yaml` | CalibratedYule | CalibratedYule | HKY+Γ4 | Strict | 3 | `calibration_method` switching + stem calibration |
+| `config_calibrated_yule.yaml` | CalibratedYule | CalibratedYule | HKY+Γ4 | Strict | 3 | `calibration_method` switching: the calibrations become `CalibrationPoint` children of CalibratedYuleModel; the root point is crown, since root + originate is rejected |
 | `config_multi_partition.yaml` | Multi-partition | Birth-Death | HKY+Γ4 / GTR+Γ4 | UCLN + linked | 2 | `FilteredAlignment` codon partitioning, clock linking, one linked topology |
 | `config_relaxed_clock.yaml` | Relaxed lognormal clock | Birth-Death | GTR+Γ4 | UCLN | 2 | bounded `ucld_mean` / `ucld_stdev` |
 | `config_relaxed_exponential.yaml` | Relaxed exponential clock | Yule | GTR+Γ4 | UCE | 2 | UCE relaxed clock |
@@ -225,7 +227,7 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 - `examples/` — 19 example configurations, example alignments (FASTA), and example output artifacts
 - `tests/` — Test suite (559 collected tests: 538 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
 - `beast2py/tools/` — Headless BEAST2 validation helper bundled *inside* the package (`Beast2Validator.java` source plus the precompiled `classes/` and `launcher.jar`), shipped as `package-data` by `pyproject.toml`; the repository root keeps only a thin `beast2_validate.sh` wrapper
-- `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English)
+- `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English), plus the capability coverage matrix (English only)
 - `beast2_validate.sh` — Launcher script for headless BEAST2 validation (needs `BEAST.base.jar` and JDK 17 or newer; it auto-detects `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`, or set `BEAST2_JAR`)
 - `pyproject.toml` — Package build and dependency configuration
 - `.flake8` — Lint settings shared by local runs and CI, so `flake8 beast2py tests` behaves identically in both
@@ -250,10 +252,11 @@ needs `--force`, otherwise it is refused, and the CLI warns when a sibling
    `Configuration error` line and never reaches the generation gates.
 1. **Structural checks (Gate 1)** — XML well-formedness and required elements, id/idref consistency,
    duplicate IDs, initial values inside their bounds, sequence sanity; plus confirmation
-   that every estimated parameter carries a `Prior`, that every estimated state node carries
-   an operator, and that no operator touches a fixed parameter
+   that every estimated parameter carries a `Prior`. The operator invariants — an operator
+   for every estimated state node, and none touching a fixed parameter — are enforced one
+   step earlier, by the writer that builds the XML
 2. **Calibration conflict detection (Gate 2)** — temporal consistency between nested
-   clades (root calibrations included), same-node contradictions and intersecting non-nested monophyly conflicts; prior similarity is descriptive and off by default
+   clades (root calibrations included), same-node contradictions and intersecting non-nested monophyly conflicts; a pair that cannot be ordered from clade containment — a crown-calibrated parent against a stem-calibrated child — is reported as the status value `unchecked`, not as a pass; prior similarity is descriptive and off by default
 3. **BEAST2 check (Gate 3, optional, `--beast2-validate`)** — the headless BEAST2 `XMLParser` calls
    `initAndValidate()` on every object after parsing, so what is checked is whether the
    model can **complete initialisation**, not merely whether it parses
@@ -301,18 +304,19 @@ same way — exit code 2, with `Level 2/2 not run (Gate 3, …)` — and accepts
 the other. `validate` keeps its own two-level vocabulary and prints the mapping: Level 1/2 is
 Gate 1 (structural) and Level 2/2 is Gate 3 (BEAST2 parse + model initialisation).
 
-Gate 3 also does not police add-on package dependencies. `XMLParser` resolves the classes a
+Gate 3 also does not police add-on package dependencies. `XMLParser` resolves and loads the classes a
 file names and never consults an installed add-on's `version.xml`, so an XML that references
-`nestedsampling.gss.NS` parses and initialises even when the MODEL_SELECTION package that NS
-1.2.0 declares as a dependency is not installed — which is exactly the environment these
-results were verified on (BEAST 2.7.7 with its bundled JDK 17.0.3, BDSKY 1.5.1, and NS 1.2.2 with MODEL_SELECTION 1.6.2, all in a project-local runtime, no
-MODEL_SELECTION). A green Gate 3 therefore does not show the add-on set is complete; install
-MODEL_SELECTION before running a nested-sampling analysis.
+`nestedsampling.gss.NS` is resolved, loaded and initialised even when the `MODEL_SELECTION` package that NS
+declares as a dependency is absent. That is a property of the parser rather than of any one
+environment: the project-local runtime these results were verified on — BEAST 2.7.7 with its
+bundled OpenJDK 17.0.3, `BDSKY` 1.5.1, `NS` 1.2.2 and `MODEL_SELECTION` 1.6.2, all under `tools/` —
+does have `MODEL_SELECTION` installed, while CI fetches it best-effort and may therefore lack it.
+A green Gate 3 therefore does not show the add-on set is complete; install
+`MODEL_SELECTION` before running a nested-sampling analysis.
 
-Continuous integration validates gate 3 against a BEAST2 **2.7.7** runtime whose
-`BEAST.base` package is then upgraded to **2.7.8**. That upgrade is best-effort: if the
-package download fails, the job logs a warning and continues on 2.7.7, so a green run does
-not prove 2.7.8 was the version in use. What has actually been verified is the BEAST 2.7.7 /
+Continuous integration validates gate 3 against a BEAST2 **2.7.7** runtime on which a best-effort step
+upgrades the `BEAST.base` package to **2.7.8**. If the package download fails, the job logs a warning and
+continues on 2.7.7, so a green Gate 3 does not prove which version ran. What has actually been verified is the BEAST 2.7.7 /
 2.7.8 band; other 2.7.x releases are untested. The `integration` job prints the version it
 resolved, so the exact combination is visible in the run log rather than assumed.
 
@@ -320,7 +324,7 @@ The test suite comprises 559 collected tests (538 unit/semantic/release-integrit
 integration). The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and
 check each with the real BEAST2 parser and model initialisation. When the
-BEAST2 jars or JDK 17 are missing, those tests simply skip instead of failing. Two of those cases additionally require the BDSKY and nested-sampling add-ons, and the CI workflow treats a failed `beast -get` of either — or of the MODEL_SELECTION dependency it also fetches best-effort — as a warning rather than an error, so those two cases can skip on a green run. A passing CI badge therefore does not by itself show that `config_bd_skyline.yaml` and `config_nested_sampling.yaml` cleared Gate 3; run `pytest tests -rs` to see which integration cases actually executed and which skipped.
+BEAST2 jars or JDK 17 are missing, those tests simply skip instead of failing. Two of those cases additionally require the `BDSKY` and `NS` add-ons, and the CI workflow treats a failed `beast -get` of either — or of the `MODEL_SELECTION` dependency it also fetches best-effort — as a warning rather than an error, so those two cases can skip on a green run. A passing CI badge therefore does not by itself show that `config_bd_skyline.yaml` and `config_nested_sampling.yaml` cleared Gate 3; run `pytest tests -rs` to see which integration cases actually executed and which skipped.
 
 ## Reproducibility
 
@@ -344,7 +348,7 @@ Beast2Py generates the following reproducibility artifacts:
 
 ## Related Tools
 
-Adjacent open-source tools in the BEAST2 ecosystem (see also the BEAST2 blog post "10 ways to generate BEAST XML"):
+Adjacent open-source tools in the BEAST2 ecosystem (see also the BEAST2 blog post "[10+ ways to generate BEAST XML](https://www.beast2.org/2018/03/09/10-ways-to-generate-beast-xml.html)"):
 
 | Tool | Language | Scope |
 |---|---|---|
@@ -356,14 +360,14 @@ Adjacent open-source tools in the BEAST2 ecosystem (see also the BEAST2 blog pos
 | [LPhy](https://github.com/LinguaPhylo/linguaPhylo) / [LPhyBeast](https://github.com/LinguaPhylo/LPhyBeast) | Java | Probabilistic model specification language → BEAST XML (already targeting BEAST 3) |
 | [pybeast](https://github.com/Wytamma/pybeast) / [beastiary](https://github.com/Wytamma/beastiary) | Python | BEAST2 run wrapper (run directories/seeds/resume) and live MCMC trace monitoring (ESS/HPD) |
 
-Beast2Py's differentiator is that it integrates the following into a single configuration-stage pipeline: declarative YAML configuration, crown/stem-aware calibration conflict detection (same node, nested time order, intersecting non-nested monophyly, with explicit unchecked pairs), an opt-in descriptive prior-similarity report, automated leave-one-out prior-only XML generation, and calibration provenance cards, analysis fingerprint, methods description and pipeline generation.
+Beast2Py's differentiator is that it integrates the following into a single configuration-stage pipeline: declarative YAML configuration, crown/stem-aware calibration conflict detection (same node, nested time order, intersecting non-nested monophyly, with explicit `unchecked` pairs), an opt-in descriptive prior-similarity report, automated leave-one-out prior-only XML generation, and calibration provenance cards, analysis fingerprint, methods description and pipeline generation.
 
-## Third-party licences
+## Third-party licenses
 
 The compiled classes shipped under `beast2py/tools/classes/beast/pkgmgmt/` come from
 [BEAST 2](https://github.com/CompEvol/beast2) v2.7.8 and are licensed under the **GNU LGPL v2.1**; the rest of
-this package is MIT. The licence text is in `beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt`, and
-`beast2py/tools/NOTICE` records the provenance, whether anything was modified, and how to obtain the full
+this package is MIT. The license text is in `beast2py/tools/LICENSE.BEAST2-LGPL-2.1.txt`, and
+`beast2py/tools/NOTICE` records the provenance, the version, whether anything was modified, and how to obtain the full
 corresponding source. `beast2py/tools/Beast2Validator.java` ships its source with the package, as LGPL-2.1
 requires for that compilation unit.
 

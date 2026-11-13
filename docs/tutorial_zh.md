@@ -1,5 +1,7 @@
 # 教程
 
+[English](tutorial_en.md) | 中文
+
 ## 1. 安装
 
 ```bash
@@ -11,9 +13,9 @@ cd Beast2Py
 pip install -e .
 ```
 
-未安装时，在仓库根目录下，下文每条命令都可以改用 `python3 -m beast2py.main <子命令>` 运行，入口完全相同。
+未安装时，在仓库根目录下，下文每条命令都可以改用 `python3 -m beast2py.main <subcommand>` 运行，入口完全相同。
 
-## 2. 基本用法：单 partition 分析
+## 2. 基本用法：单分区分析
 
 ### 步骤 1：准备序列数据
 
@@ -79,7 +81,7 @@ output:
 
 这里有两个默认值值得注意。
 
-- 本例没有写 `mcmc.store_every`。它由链长按 `max(1, chain_length // 10000)` 推出（链长 1,000 万时为 `1000`），于是一次运行大约得到十个 `.xml.state` 检查点，而不是只有最末一个。
+- 本例没有写 `mcmc.store_every`。它由链长按 `max(1, chain_length // 10000)` 推出（链长 1,000 万时为 `1000`）。`store_every` 计数的是被写入日志的样本数，而不是代数；默认的 trace 日志器每 1000 个样本写一次（`log_every: 1000`），因此按这个默认间隔，一次运行大约产出十个 `.xml.state` 检查点，而不是只有最末一个；把 `log_every` 改成 1 就会得到约一万个。
 - 写成 `estimate: false` 的参数由生成器内联到引用它的元素里，因此不进入 `<state>`，不获得算子，也不出现在轨迹中。
 
 ### 步骤 3：生成 XML
@@ -108,11 +110,11 @@ beast -overwrite output.xml
 beast -overwrite -seed 1 output.xml
 ```
 
-每 `store_every` 个已记录样本，BEAST2 写出一个 `output.xml.state` 检查点，这正是中断的运行可以续算的原因。按上面的默认值，一条 1,000 万代的链大约会得到十个检查点。传 `mcmc.store_every: -1` 可关闭检查点，此时验证器会警告该链无法续算。
+每 `store_every` 个已记录样本，BEAST2 写出一个 `output.xml.state` 检查点，这正是中断的运行可以续算的原因。按上面的默认值（`store_every` 为 1000，且 trace 日志器每 1000 个样本记录一次），一条 1,000 万代的链大约会得到十个检查点。传 `mcmc.store_every: -1` 可关闭检查点，此时验证器会警告该链无法续算。
 
 ## 3. 快速模式
 
-对于简单的单 partition 分析，使用 `quick` 命令：
+对于简单的单分区分析，使用 `quick` 命令：
 
 ```bash
 beast2py quick \
@@ -125,10 +127,9 @@ beast2py quick \
     --output quick_output.xml
 ```
 
-这里的输出文件命名为 `quick_output.xml`，而不是沿用第 2 节的 `output.xml`：两个命令在没有 `--force` 时都不会
-覆盖已存在的输出文件，因此复用同一个名字只会让这一步以拒绝写入收场，而不是把两次分析混进同一个文件。
+这里的输出文件命名为 `quick_output.xml`，而不是沿用第 2 节的 `output.xml`：两个命令在没有 `--force` 时都不会覆盖已存在的输出文件，因此复用同一个名字只会让这次运行以拒绝写入收场，而不是把两次分析混进同一个文件。
 
-此外，`quick` 还接受 `--gamma-categories N`（默认 0，表示不使用 Gamma）、`--pre-burnin N`、`--name NAME`、`--force` 与 `-v/--verbose`。`quick` 同样运行那四道编号检查，`store_every` 的默认值也相同。
+此外，`quick` 还接受 `--data-type auto|nucleotide|aminoacid`（默认 `auto`，即按比对中实际出现的残基推断序列类型，因此氨基酸比对在这里同样可用）、`--gamma-categories N`（默认 0，表示不使用 Gamma）、`--pre-burnin N`、`--name NAME`、`--force` 与 `-v/--verbose`。`quick` 与 `generate` 一样运行闸门 0 以及闸门 1/3、2/3；但 `quick` 没有 `--beast2-validate` 选项，因此闸门 3 不会在那里运行。`store_every` 的默认值也相同。
 
 校准 YAML 文件：
 
@@ -141,7 +142,7 @@ beast2py quick \
     parameters: {mean: 6.0, sigma: 0.5}
 ```
 
-## 4. 多 Partition 分析
+## 4. 多分区分析
 
 ```yaml
 alignments:
@@ -169,7 +170,7 @@ partitions:
     tree: "shared"
 ```
 
-`tree: "shared"` 是唯一合法取值。逐分区的独立拓扑尚未实现，解析阶段会直接拒绝 `tree: separate`（以及在该位置写一个 partition id），而不是静默连锁。否则，本意为 *BEAST 风格的多基因座分析就变成了完全连锁的分析。在逐分区树实现之前，请为每个独立分区各运行一次分析。`linked_to` 必须指向另一个已存在的 partition，自链接与未知 id 都是错误。
+`tree: "shared"` 是唯一合法取值。逐分区的独立拓扑尚未实现，解析器会直接拒绝 `tree: separate`（以及在该位置写一个分区 id），而不是静默链接。否则，本意为 *BEAST 风格的多基因座分析就变成了完全链接的分析。在逐分区树实现之前，请为每个独立分区各运行一次分析。`linked_to` 必须指向另一个已存在的分区，自链接与未知 id 都是错误。
 
 ## 5. 密码子分区
 
@@ -198,16 +199,16 @@ partitions:
     tree: "shared"
 ```
 
-声明 `filter` 时，`data_id` 为必填，且必须指向一个已声明的比对，不能指向过滤器自身。
+声明 `filter` 时，`data_id` 为必填，且必须指向另一个已声明的比对，不能是声明该 `filter` 的条目自身。
 
-Filter 表达式遵循 BEAST2 自己的 `FilteredAlignment.parseFilterSpec` 语法，坐标是 **1-based**（从 1 开始计数）。表达式是用逗号分隔的列表，每一项可以是：
+过滤表达式遵循 BEAST2 自己的 `FilteredAlignment.parseFilterSpec` 语法，坐标是 **1-based**（从 1 开始计数）。表达式是用逗号分隔的列表，每一项可以是：
 
 - 单个位点（`N`）
 - 闭区间（`from-to`，末端留空表示最后一个位点）
-- 带步长的区间（`from-to\step`）
-- 迭代器（`from:to:step`，上面两个例子用的就是 `from::step`）
+- 每隔 k 个位点取一个的区间（`from-to\step`）
+- 迭代器（`from:to:step`，下面两个例子用的就是 `from::step`）
 
-于是 `1::3,2::3` 保留第 1、2、4、5、7、8 等位（每个密码子的前两位），`3::3` 保留 3、6、9 等位（第三位）。
+于是 `1::3,2::3` 保留第 1、2、4、5、7、8 位，依此类推（每个密码子的前两位），`3::3` 保留第 3、6、9 位，依此类推（第三位）。
 
 解析器会针对源比对逐项校验范围。以下情况都会报错，并指名违规项：无法解析的表达式、步长小于 1、坐标超出比对长度、不选出任何位点。
 
@@ -232,9 +233,7 @@ beast2py pipeline --config config.yaml --type nextflow --output-dir pipeline
 beast2py pipeline --config config.yaml --type both --output-dir pipeline
 ```
 
-`--output-dir` 默认为当前目录；`--type` 默认为 `snakemake`。
-`--threads N` 设定写入流程的 BEAST2 线程数（`beast -threads N`），覆盖 YAML 里的
-`mcmc.threads`（该键缺省为 4）；笔记本或受限的 HPC 分区可用 `--threads 1`。
+`--output-dir` 默认为当前目录；`--type` 默认为 `snakemake`。`--threads N` 设定写入流程的 BEAST2 线程数（`beast -threads N`），覆盖 YAML 里的 `mcmc.threads`（该键缺省为 4）；资源受限的运行（例如笔记本，或繁忙的共享机器）下用 `--threads 1`。
 
 ## 8. 验证
 
@@ -246,7 +245,7 @@ beast2py validate --xml output.xml
 beast2py validate --xml output.xml --beast2
 ```
 
-`--beast2` 运行无头的 BEAST2 解析器。它解析文件**并对每个对象调用 `initAndValidate()`**，因此检查的是模型能否初始化，而不只是能否解析。这与 `generate` 的闸门 3（`--beast2-validate`）走同一条代码路径，需要 BEAST2 以及 **JDK 17 或更新版本**。
+`--beast2` 运行无头的 BEAST2 解析器。它**既**解析文件，**也**对每个对象调用 `initAndValidate()`，因此检查的是模型能否被初始化，而不只是文件是否**良构（well-formed）**。这与 `generate` 的闸门 3（`--beast2-validate`）走同一条代码路径，需要 BEAST2 以及 **JDK 17 或更新版本**。
 
 随包发布的 `beast2_validate.sh`（位于包内，仓库根只有一个薄包装）按以下顺序查找 `BEAST.base.jar`：
 
@@ -254,7 +253,7 @@ beast2py validate --xml output.xml --beast2
 2. 最新的 `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`
 3. 脚本旁边的 `tools/lib/` 或 `lib/`
 
-脚本还会把 `~/.beast/2.7` 下安装的任何插件包追加到 class path。
+脚本还会把 `~/.beast/2.7` 下安装的任何附加包追加到 class path。
 
 脚本按一批候选路径搜索 JDK 17 或更新版本，而不是轻信 `PATH`——`PATH` 上一个古老的 Oracle `java` 垫片遮蔽不了可用的 `openjdk@17`。搜索顺序为：`BEAST2_JAVA_CANDIDATES`（冒号分隔列表）、`JAVA_HOME`、`/usr/libexec/java_home`、Homebrew 与系统 JVM 目录，最后才是 `PATH` 上的 `java`。
 

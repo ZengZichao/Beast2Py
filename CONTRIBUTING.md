@@ -170,9 +170,15 @@ checks in part; if you change a rejection message, a documented command or flag,
 or a count of tests or example configurations, update the documentation and those
 counts in the same pull request.
 
+One file is deliberately monolingual: `docs/capability_coverage.md` is an
+evidence matrix keyed to fixture paths, XML class names and archived Gate 3 log
+names, so translating it would duplicate row numbers rather than add a
+reader-facing Chinese document. It is referenced from both READMEs and is
+exempt from the `*_en.md`/`*_zh.md` pairing rule above.
+
 When you document a limitation, state it as precisely as the code does: the
-difference between "verified against BEAST2 v2.7.8" and "expected to work on
-other 2.7.x releases", and between a check that ran and one that was skipped, is
+difference between "verified against the BEAST 2.7.7 runtime" and "expected to
+work on other 2.7.x releases", and between a check that ran and one that was skipped, is
 deliberate throughout this project.
 
 ## Licensing

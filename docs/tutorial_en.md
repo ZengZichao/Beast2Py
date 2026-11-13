@@ -1,5 +1,7 @@
 # Tutorial
 
+English | [中文](tutorial_zh.md)
+
 ## 1. Installation
 
 ```bash
@@ -82,7 +84,10 @@ Two defaults are worth noting.
 
 - This example omits `mcmc.store_every`. The generator derives it from the chain length as
   `max(1, chain_length // 10000)` (`1000` for this 10,000,000-generation chain), so one run
-  gets about ten `.xml.state` checkpoints instead of only the last one.
+  gets about ten `.xml.state` checkpoints instead of only the last one. Note that this
+  interval counts *logged samples*, not generations, and the default trace logger logs every
+  1000 samples: the count of ten is what that pairing gives. Ask for `log_every: 1` instead
+  and the same `store_every` of 1000 yields about 10,000 checkpoints.
 - The generator inlines a parameter written `estimate: false` into the element that uses it,
   so that parameter does not enter `<state>`, does not receive an operator, and does not
   appear in the trace.
@@ -121,10 +126,11 @@ no `seed` input, so writing one makes the model unparseable):
 beast -overwrite -seed 1 output.xml
 ```
 
-Every `store_every` logged samples, BEAST2 writes an `output.xml.state` checkpoint, which is
-what makes an interrupted run resumable. With the default above, a 10,000,000-generation
-chain gets about ten checkpoints. Pass `mcmc.store_every: -1` to switch checkpointing off;
-the validator then warns that the chain cannot be resumed.
+BEAST2 writes an `output.xml.state` checkpoint once every `store_every` logged samples, which
+is what makes an interrupted run resumable. With the defaults above (`store_every` is 1000,
+and the trace logger logs every 1000 samples), a 10,000,000-generation chain gets about ten
+checkpoints. Pass `mcmc.store_every: -1` to switch checkpointing off; the validator then
+warns that the chain cannot be resumed.
 
 ## 3. Quick Mode
 
@@ -145,8 +151,11 @@ The output is named `quick_output.xml`, not §2's `output.xml`: neither command 
 existing output unless you pass `--force`, so reusing the name would stop this run with a
 refusal rather than mix two analyses under one file.
 
-`quick` also accepts `--gamma-categories N` (default 0, meaning no Gamma), `--pre-burnin N`,
-`--name NAME`, `--force` and `-v/--verbose`. It runs the same four checks, and the same
+`quick` also accepts `--data-type auto|nucleotide|aminoacid` (default `auto`, which infers
+the sequence type from the residues present, so an amino-acid alignment works here too),
+`--gamma-categories N` (default 0, meaning no Gamma), `--pre-burnin N`, `--name NAME`,
+`--force` and `-v/--verbose`. It runs Gate 0 and Gates 1/3 and 2/3 the same way as
+`generate`; `quick` has no `--beast2-validate` flag, so Gate 3 never runs there. The same
 `store_every` default applies.
 
 The calibrations YAML file:
@@ -232,7 +241,7 @@ terms may be:
 - a single site (`N`)
 - an inclusive range (`from-to`, where an empty end means the last site)
 - a range stepping every k-th site (`from-to\step`)
-- an iterator (`from:to:step`; the two examples above use `from::step`)
+- an iterator (`from:to:step`; the two examples below use `from::step`)
 
 So `1::3,2::3` keeps positions 1, 2, 4, 5, 7, 8 and so on (the first two codon positions),
 and `3::3` keeps 3, 6, 9 and so on (the third position).
@@ -265,7 +274,8 @@ beast2py pipeline --config config.yaml --type both --output-dir pipeline
 `--output-dir` defaults to the current directory; `--type` defaults to `snakemake`.
 `--threads N` sets the BEAST2 thread count written into the workflow as
 `beast -threads N`, overriding `mcmc.threads` from the YAML (which is itself 4
-unless you change it); use `--threads 1` on a laptop or a constrained partition.
+unless you change it); use `--threads 1` for a resource-constrained run (a laptop, or a
+busy shared machine).
 
 ## 8. Validation
 
