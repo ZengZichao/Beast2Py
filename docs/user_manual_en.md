@@ -4,6 +4,8 @@
 - **Authors:** Zichao Zeng (曾子超) · [ORCID: 0000-0001-6553-970X](https://orcid.org/0000-0001-6553-970X)
 - **Date:** 2026
 
+English | [中文](user_manual_zh.md)
+
 ---
 
 ## Table of Contents
@@ -58,7 +60,7 @@ pipeline file generation.
 Two properties of the pipeline matter for every section below:
 
 - **The parser is fail-closed.** Every key is checked against a schema, every boolean must be an unambiguous boolean, every alignment is checked for equal lengths, unique names and a legal alphabet, and every distribution and tree-prior parameter is range-checked. Anything the generator cannot honour is an error, not a silent default ([Section 22.1](#221-strict-validation-rejected-inputs-and-their-error-messages)).
-- **Writing an XML is gated.** `generate` and `quick` run the parse-time provenance and character checks (Gate 0), then structural checks, calibration conflict detection and (optionally) the real BEAST2 parser+initialiser (Gates 1 to 3), and exit non-zero without writing the file if any check that ran fails ([Section 16](#16-validation)).
+- **Writing an XML is gated.** `generate` and `quick` run the parse-time provenance and character checks (Gate 0), then structural checks and calibration conflict detection (Gates 1 and 2); only `generate` can add the real BEAST2 parser+initialiser (Gate 3, with `--beast2-validate`), which `quick` does not offer. Both exit non-zero without writing the file if any check that ran fails ([Section 16](#16-validation)).
 
 ### Design Philosophy
 
@@ -106,7 +108,7 @@ The following dependencies are installed automatically:
 | numpy | >=1.20 | Numerical computation and array operations |
 | scipy | >=1.8 | Statistical distributions and Wasserstein distance |
 | matplotlib | >=3.5 | Calibration distribution visualization |
-| jinja2 | >=3.0 | HTML diagnostic report generation |
+| defusedxml | >=0.7 | Secure XML parsing (structural validator and the `validate` subcommand) |
 
 ### 2.4 Optional dependencies
 
@@ -118,6 +120,7 @@ The following dependencies are installed automatically:
 | black | Code formatting |
 | flake8 | Code style checking |
 | mypy | Type checking |
+| types-PyYAML | Type stubs for PyYAML (used by mypy) |
 
 Install the development dependencies:
 
@@ -152,8 +155,8 @@ same entry point (`[project.scripts] beast2py = "beast2py.main:main"`).
 
 ### 2.6 Installing BEAST2 (optional, for the BEAST2 validation gate)
 
-BEAST2 can be downloaded from https://www.beast2.org/. Passing `--beast2-validate` (for
-`generate` and `quick`) or `--beast2` (for `validate`) enables the third gate; `--beast2-path`
+BEAST2 can be downloaded from https://www.beast2.org/. Passing `--beast2-validate` (`generate`
+only — `quick` has no such option) or `--beast2` (for `validate`) enables the third gate; `--beast2-path`
 then accepts either a BEAST2 `beast` executable or a `beast2_validate.sh` script. Specify
 neither, and the tool locates the bundled `beast2_validate.sh` on its own, trying next to the
 installed package, the project root, and `PATH`. The script needs `BEAST.base.jar`, looked up
@@ -178,8 +181,9 @@ candidate whose major version is at least 17 wins, in this order:
    with `BEAST2_SKIP_JDK_PROBES=1`);
 5. `java` on `PATH` — last, because it is the least specific of all the candidates.
 
-If none of these reaches 17, the script gives up, exiting **2** and listing the candidates it
-rejected:
+If none of these reaches 17, the script gives up, exiting **2** and printing each rejected
+candidate to stderr. The two commands below demonstrate the success path: the first prints the
+validation result, the second shows which `java` the script selected:
 
 ```bash
 bash beast2_validate.sh examples/output_basic.xml
@@ -204,11 +208,12 @@ Java missing/too old). Several files may be validated in one call.
 
 ## 3. Two Invocation Modes: CLI and API
 
-Beast2Py provides two equivalent invocation modes; choose whichever fits your workflow.
+Beast2Py provides two invocation modes; choose whichever fits your workflow. The API mirrors
+the CLI command for command, with the single exception of `prior-summary`, which is CLI-only.
 
 ### 3.1 CLI Mode (Command-Line Interface)
 
-CLI mode suits batch analyses, scripted workflows, and pipeline integration in terminal environments. It is invoked through the `beast2py` command and provides 8 subcommands: `generate`, `diagnose`, `quick`, `validate`, `methods`, `pipeline`, `fingerprint`, and `list-models`.
+CLI mode suits batch analyses, scripted workflows, and pipeline integration in terminal environments. It is invoked through the `beast2py` command and provides nine subcommands: `generate`, `diagnose`, `prior-summary`, `quick`, `validate`, `methods`, `pipeline`, `fingerprint`, and `list-models`.
 
 ```bash
 beast2py generate --config config.yaml --output output.xml
@@ -256,6 +261,12 @@ result = validate_xml("output.xml")
 | `beast2py pipeline` | `Beast2Py.generate_pipeline()` | `generate_pipeline()` |
 | `beast2py fingerprint` | `Beast2Py.generate_fingerprint()` | `generate_fingerprint()` |
 | `beast2py list-models` | `Beast2Py.list_models()` | `list_models()` |
+| `beast2py prior-summary` | — (CLI-only) | — (CLI-only) |
+
+`prior-summary` is the one subcommand with no Python-API counterpart. It takes `--trace`
+(repeatable, required), optional `--reference`, `--column`, `--label`, `--burn-in` or
+`--burn-in-fraction`, `--ess-min` and `--out`, reads the `.log` traces of prior-only runs, and
+is described in [Section 14.3](#143-sensitivity-analysis).
 
 ---
 
@@ -305,7 +316,8 @@ $ beast2py generate -c examples/config_basic.yaml -o /tmp/output.xml -v
 [INFO] Generating BEAST2 XML...
 [OK] Gate 1/3 passed: Beast2Py structural checks (ids, idrefs, priors, operators).
   [verbose] Gate 1: 0 errors, 0 warnings
-[OK] Gate 2/3 passed: no contradictory calibration conflicts.
+[OK] Gate 2/3 passed: no contradictory structural calibration conflicts (0 pairs assessed: 0 checked, 0 unchecked, 0 without an applicable relation). Unchecked pairs are not passes; prior similarity is descriptive and does not block this gate.
+[INFO] Gate 2 checks the specified marginal priors and their taxon sets only. It cannot rule out: distortion of the effective marginal prior; posterior dominance; MCMC non-convergence; insufficient data to inform a node.
 [OK] XML written to: /tmp/output.xml
 [OK] Done!
 ```
@@ -407,6 +419,7 @@ beast2py generate \
     [--methods] \
     [--beast2-validate] \
     [--beast2-path PATH] \
+    [--allow-unvalidated] \
     [--force] \
     [--verbose]
 ```
@@ -505,6 +518,7 @@ command-line arguments. It suits simple analyses and quick tests.
 beast2py quick \
     --alignment input.fasta \
     --output output.xml \
+    [--data-type auto] \
     [--tree-prior yule] \
     [--subst-model hky] \
     [--clock-model strict] \
@@ -521,8 +535,9 @@ beast2py quick \
 
 | Parameter | Short | Required | Default | Description |
 |---|---|---|---|---|
-| `--alignment` | `-a` | Yes | — | Sequence file path (FASTA/NEXUS), read as nucleotide data |
+| `--alignment` | `-a` | Yes | — | Sequence file path (FASTA/NEXUS); its data type is taken from `--data-type` |
 | `--output` | `-o` | Yes | — | Output XML file path |
+| `--data-type` | | No | `auto` | Sequence type: `nucleotide` or `aminoacid`, or `auto`, which infers it from the residues present — this is what makes an amino-acid alignment work in quick mode at all |
 | `--tree-prior` | | No | `yule` | Tree prior type |
 | `--subst-model` | | No | `hky` | Substitution model type |
 | `--clock-model` | | No | `strict` | Clock model type |
@@ -538,8 +553,12 @@ beast2py quick \
 but it has **no `--beast2-validate` option**. Validate the result with
 `beast2py validate --xml output.xml --beast2` instead.
 
-`quick` reads the alignment as nucleotide data, so `--subst-model` may only name a nucleotide
-model; the data-type cross-check refuses an amino-acid model here just as it does in YAML mode.
+`quick` is not restricted to nucleotide data: by default `--data-type auto` infers the type
+from the residues actually present, and the data-type cross-check compares `--subst-model`
+against that inferred type exactly as it does in YAML mode. A nucleotide alignment therefore
+refuses an amino-acid model, an amino-acid alignment refuses a nucleotide model, and an
+amino-acid alignment with an amino-acid model works (`examples/aminoacid.fasta` with
+`--subst-model wag`). Pass `nucleotide` or `aminoacid` explicitly to override the inference.
 The same validator parses the calibration YAML, so a quoted `monophyletic: "false"`, reversed
 `uniform` bounds or an unknown distribution type are errors here too.
 
@@ -586,10 +605,6 @@ beast2py quick -a examples/primates.fasta -o /tmp/output_quick_full.xml \
 Each example writes its own file because `quick`, like `generate`, refuses to replace an
 existing output unless you pass `--force`.
 
-The calibration YAML is parsed by the same validator as a full configuration, so a
-quoted `monophyletic: "false"`, an inverted `uniform` bound or an unknown
-distribution type is rejected here too.
-
 ### 5.4 `validate` — Validate XML
 
 Validates a BEAST2 XML file: first Beast2Py's own structural and semantic checks, then, when
@@ -599,7 +614,8 @@ requested, the BEAST2 parse and model initialisation checks.
 beast2py validate \
     --xml output.xml \
     [--beast2] \
-    [--beast2-path PATH]
+    [--beast2-path PATH] \
+    [--allow-unvalidated]
 ```
 
 **Parameters:**
@@ -623,11 +639,14 @@ Level 1/2 is Gate 1 (structural), Level 2/2 is Gate 3 (BEAST2 parse + model init
 - The required elements `<data>`, `<run>` and `<state>` are present
 - id/idref/`@ref` references are consistent and no ID is duplicated
 - The posterior reference and the loggers are present
-- The sequence data is non-empty and of equal length, and the taxon names are unique
+- The sequence data is of equal length and the taxon names are unique
 
 The semantic checks are: every estimated parameter carries a `Prior`, no state node has
 inverted bounds, and every initial value lies inside its own bounds and matches the declared
-dimension. When `storeEvery` disables checkpointing, this level warns instead of failing.
+dimension. Two things warn rather than fail: `storeEvery` when it disables checkpointing, and
+a `<data>` element that carries no `<sequence>` child at all (`data '…' has no sequences`) —
+empty or fully filtered sequence data, unless its `spec` is `FilteredAlignment`, which keeps
+its sequences in the parent alignment.
 
 **Level 2 (`--beast2`).** The headless BEAST2 `XMLParser` parses the file *and* calls
 `initAndValidate()` on every object. The two levels report with distinct wording, and each line
@@ -685,12 +704,12 @@ beast2py pipeline \
     [--threads 4]
 ```
 
-| Parameter | Required | Default | Description |
-|---|---|---|---|
-| `--config` | Yes | — | YAML configuration file path |
-| `--type` | No | `snakemake` | Pipeline type: `snakemake`, `nextflow`, or `both` |
-| `--output-dir` | No | `.` | Output directory |
-| `--threads` | No | `mcmc.threads` (4) | BEAST2 thread count written into the workflow as `beast -threads N`; must be a positive integer |
+| Parameter | Short | Required | Default | Description |
+|---|---|---|---|---|
+| `--config` | `-c` | Yes | — | YAML configuration file path |
+| `--type` | | No | `snakemake` | Pipeline type: `snakemake`, `nextflow`, or `both` |
+| `--output-dir` | | No | `.` | Output directory |
+| `--threads` | | No | `mcmc.threads` (4) | BEAST2 thread count written into the workflow as `beast -threads N`; must be a positive integer |
 
 The pipeline contains the following rules or processes: XML generation (invoking `beast2py generate`), BEAST2 execution (invoking `beast -overwrite`), calibration diagnostics (invoking `beast2py diagnose`), and methods description generation (invoking `beast2py methods`). The thread count of the BEAST2 execution step comes from `mcmc.threads` (default 4) and can be overridden per invocation with `--threads`, so a two-core laptop or a resource-restricted HPC partition can ask for `-threads 1`.
 
@@ -813,6 +832,7 @@ xml_str = b2p.quick_generate(
     pre_burnin=0,
     name="my_analysis",
     force=False,
+    data_type="auto",  # auto / nucleotide / aminoacid
 )
 ```
 
@@ -930,7 +950,8 @@ result = b2p.generate(
 # 'fingerprint_path': path to the fingerprint file (if fingerprint=True)
 # 'methods_path': path to the methods file (if methods=True)
 # 'diagnostic_report': DiagnosticReport object (if diagnose=True)
-# 'beast2_validation': {'success': bool, 'output': str} (if beast2_validate=True)
+# 'beast2_validation': {'success': bool, 'status': 'passed' / 'failed' / 'unavailable',
+#                       'output': str} (if beast2_validate=True)
 ```
 
 `generate()` delegates the write to `generate_xml()`, so it inherits the gates and the
@@ -970,7 +991,7 @@ print(f"Taxon names: {alignment.taxa_names}")
 
 ### 6.16 Module-level convenience functions
 
-All `Beast2Py` class methods have corresponding module-level functions that can be called without creating an instance:
+Every `Beast2Py` class method that mirrors a CLI subcommand has a corresponding module-level function that can be called without creating an instance; `generate`, `detect_conflicts`, `generate_sensitivity_xmls` and `plot_calibrations` are available on the class only:
 
 ```python
 from beast2py.api import (
@@ -1137,7 +1158,7 @@ calibration_method: "mrca_prior"        # mrca_prior / calibrated_yule (default 
 
 # === Parameter priors (optional; `priors:` is accepted as a synonym) ===
 parameter_priors:
-  - parameter: "birthRate"              # Parameter name or alias (see Section 10.5)
+  - parameter: "birthRate"              # Parameter name or alias (see Section 10)
     distribution:
       type: "uniform"
       parameters: {lower: 0.0, upper: 1000.0}
@@ -1148,7 +1169,7 @@ mcmc:
   chain_length: 10000000                # Chain length, must be > 0 (default 10000000)
   pre_burnin: 0                         # Pre-burnin, must be < chain_length (default 0)
   store_every: 10000                    # Checkpoint interval in logged samples;
-                                        # default chain_length // 10000; -1 disables
+                                        # default max(1, chain_length // 10000); -1 disables
   sample_from_prior: false              # Sample from the prior only (default false)
   seed: 1                               # Accepted and range-checked but NOT written
                                         # into the XML: BEAST2's MCMC has no `seed`
@@ -1165,7 +1186,7 @@ mcmc:
 # === Loggers ===
 loggers:
   trace_log:
-    file_name: "output.$(seed).log"     # Log file name (supports the $(seed) variable)
+    file_name: "output.$(seed).log"     # Log file name (supports the $(seed) variable, expanded by the beast launcher at run time)
     log_every: 1000                     # Log interval
   tree_log:
     file_name: "output.$(seed).trees"
@@ -1405,14 +1426,15 @@ a reader would report as "the γ shape parameter".
 |---|---|---|---|
 | Strict clock | `strict` | `clock_rate` | Same rate on all branches |
 | UC relaxed lognormal | `ucln` | `ucld_mean`, `ucld_stdev` | Uncorrelated relaxed lognormal clock |
-| UC relaxed exponential | `uce` | `ucld_mean` | Uncorrelated relaxed exponential clock |
+| UC relaxed exponential | `uce` | `ucld_mean` (`ucld_stdev` accepted, then ignored) | Uncorrelated relaxed exponential clock |
 | Random local clock | `rlc` | (automatic) | Random local clock model |
 
 `ucld_mean` and `ucld_stdev` are accepted **only** for `ucln` and `uce`. Writing either on
 a `strict` or `rlc` clock is an error, with
 `… only applies to the ucln/uce clocks; the strict clock has no such parameter`.
 The UCLN rate distribution is lognormal with `M = 1` fixed and `S = ucld.stdev`;
-the UCE rate distribution is exponential with mean 1.
+the UCE rate distribution is exponential with mean 1, so a `ucld_stdev` written for `uce` is
+accepted by the parser and then ignored — it never reaches the UCE prior.
 
 **Configuration examples:**
 
@@ -1444,20 +1466,25 @@ clock_model:
 
 **Notes**
 
-- **The generator honours both bounds.** Dropping `upper` for `clock_rate`, `ucld.mean` or
-  `gamma_shape` would leave `ucld.stdev` unbounded above — the classic UCLN standard-deviation
-  drift. Both `lower` and `upper` reach the XML, and when you give neither the generator
-  applies the role defaults (`ucld.mean` and `clock.rate` above 0; `ucld.stdev` within
-  `[0, 1]`).
+- **The generator honours both bounds.** Both `lower` and `upper` reach the XML for
+  `clock_rate`, `ucld.mean`, `ucld_stdev` and `gamma_shape`, so holding the UCLN
+  standard-deviation drift in check is the job of the `upper` you write, not of a bound the
+  generator adds. When you give neither, the generator applies the intrinsic support of the
+  parameter's statistical role, and `ucld.stdev` is built with the `rate` role, whose support
+  is `(0, None)`: the role contributes only the lower bound of 0, so the node is bounded below
+  at 0 and stays unbounded above. That is deliberate — `ucld.stdev` is a log-scale standard
+  deviation of among-branch rates, not a proportion, and the old `(0, 1]` clamp that rejected
+  perfectly ordinary strongly rate-varying phylogenies has been removed.
 - **A fixed clock rate must not be the only time scale.** The generator now honours
   `clock_rate: {estimate: false}` as well: it writes the parameter inline with
   `estimate="false"`, so that parameter leaves the state space, the operator set and the
   trace. If no calibration accompanies it, absolute time is unidentifiable and the parser
   refuses the run (the message is listed
   in [Section 22.1](#221-strict-validation-rejected-inputs-and-their-error-messages)).
-- **`ucld.mean` normalisation.** The generator emits every relaxed-clock XML with
+- **`ucld.mean` normalisation.** The UCLN and UCE clocks are emitted with
   `normalize="true"`, matching BEAUti's reference layout, so rates and node ages stay
-  identifiable.
+  identifiable. The random local clock is a different object: `RandomLocalClockModel` is
+  written with `ratesAreMultipliers="false"` and carries no `normalize` attribute at all.
 
 ---
 
@@ -1495,10 +1522,10 @@ be written and would only fail later, inside BEAST2:
 **Default priors.** When an estimated continuous parameter has no `parameter_priors` entry,
 the generator gives it a weakly informative default
 (`xml_writer.py::_default_prior_element`): positive rates get a broadly dispersed lognormal
-centred on the initial value; `ucld.stdev` gets `Normal(mean 0.4, sigma 0.3334)` (BEAUti's
-convention), truncated to the parameter's range; probability and frequency parameters get
-`Uniform(lower, upper)`; signed parameters get a broad normal. Discrete state nodes
-(`IntegerParameter`, `BooleanParameter`) need no prior.
+centred on the initial value, `M = ln(initial value)` with `S = 2`; `ucld.stdev` gets
+`Normal(mean 0.4, sigma 0.3334)` (BEAUti's convention), truncated to the parameter's range;
+probability and frequency parameters get `Uniform(lower, upper)`; signed parameters get a
+broad normal. Discrete state nodes (`IntegerParameter`, `BooleanParameter`) need no prior.
 
 Without this step, a flat prior on (0, ∞) would be an improper density, and the analysis
 could not be reconstructed from the XML.
@@ -1804,10 +1831,13 @@ The pattern above — declare the source once, then point each filtered partitio
 into the XML exactly once. If a filtered alignment omits `data_id`, the parser reports an
 error (`… has a filter but no data_id: it would reference itself and lose all sequence data`).
 
-**Two partitions must not cover the same sites.** The parser does not stop the same FASTA
-from being declared twice under two ids, with a `TreeLikelihood` built over each. But the
-resulting posterior is the product of two identical likelihoods, which counts the same 898
-sites twice, and BEAST2 runs it without complaint. Split model comparisons into separate
+**Two partitions must not cover the same sites.** The parser now refuses the same FASTA
+declared twice under two ids, each with its own `TreeLikelihood`:
+`_validate_partition_site_coverage` raises
+`ConfigError: Partitions 'a1' and 'a2' both draw on the same sequence data (examples/primates.fasta) and share 898 site(s) …`
+and nothing is written. Such a posterior would be the product of two identical likelihoods,
+counting the same 898 sites twice — the posterior squared, over-confident rather than sharper.
+Split model comparisons into separate
 runs (one configuration per candidate model, as in
 `examples/config_subst_jc69.yaml`, `config_subst_sym.yaml`, `config_subst_tim.yaml`,
 `config_subst_models.yaml`) and use disjoint filters for partitioned analyses.
@@ -1867,8 +1897,9 @@ tip_dates:
   that are absent from the alignments.
 - **`trait_name` ∈ {`date-forward`, `date-backward`}.** `date-forward` counts forward from the
   oldest sampling point (0 is the oldest sample); `date-backward` counts back from the most
-  recent one (0 is the youngest sample). Any other value still yields valid XML, but BEAST2
-  does not read it as a date, so the analysis runs as contemporaneous sampling. The parser
+  recent one (0 is the youngest sample). Any other value is now refused at parse time, so no
+  XML is produced for it; before that check existed such a value yielded valid XML that
+  BEAST2 did not read as a date, and the analysis ran as contemporaneous sampling. The parser
   rejects `date_backward` (underscore) and lists the valid names.
 - **`units` ∈ {`year`, `month`, `day`, `coordinate`}.**
 - **Dates must be numeric.** The parser reports an error for a CSV row whose second column is
@@ -1876,7 +1907,7 @@ tip_dates:
 - **Keep one time axis.** `units`, the tip values and the calibrations must share one time
   axis. `units: year` with dates 0–20 next to a root calibration measured in Ma puts the two
   six orders of magnitude apart. Express everything in years (and scale the clock rate, e.g.
-  2 × 10⁻³ subs/site/Myr = 2 × 10⁻⁶ subs/site/year), or keep everything in Ma.
+  2 × 10⁻³ subs/site/Myr = 2 × 10⁻⁹ subs/site/year), or keep everything in Ma.
 
 **What gets emitted.** Enabling tip dates makes the generator attach the `TraitSet` to the
 tree *and* emit a `TipDatesRandomWalker` operator over the dated taxa, with no `tipsonly`
@@ -1887,9 +1918,10 @@ not.
 
 The operator covers only tips whose date is non-zero. A fully contemporaneous sample
 therefore emits no `TipDatesRandomWalker`, because there is no date to move — that is the
-case of `examples/config_tip_dates.yaml`, whose 12 primates are all extant. The behaviour is
-verified against BEAST 2.7.8: a variant of that configuration with one tip dated 1.5 Ma
-earlier parses and initialises.
+case of `examples/config_tip_dates.yaml`, whose 12 primates are all extant. The non-zero case
+is covered by `tests/fixtures/coverage/config_tip_dates_nonzero.yaml`, which sets `units: year`
+and the dates 0/500/1000/2000 on the four taxa `taxonA`–`taxonD`; its generated XML carries
+exactly one `TipDatesRandomWalker`, over the three tips whose date is non-zero.
 
 **`trait_name` semantics:** `date-forward` means dates increase with sample age from the
 oldest sample; `date-backward` means the value is the distance back from the most recent
@@ -1909,7 +1941,7 @@ The conflict detector analyzes pairs of calibration points for three classes of 
 
 **Same-node conflicts (`same_node`):** two calibrations attached to the same node. Identical distributions on one taxon set are a duplicate (warning); disjoint intervals on one node are a contradiction (error); a crown and a stem calibration on the same taxon set are parent and child, so they are compared as a nested pair rather than as a duplicate.
 
-**Temporal consistency conflicts (`temporal`):** for nested clades (taxon set A ⊂ B), it checks whether the parent clade (B) is calibrated older than the child clade (A). It compares the 95% HPD intervals: the detector reports an error when the parent's HPD upper bound is younger than the child's HPD lower bound, i.e. when the two intervals cannot be satisfied by any tree. Overlapping intervals are not reported, including the case where the parent's mean is younger than the child's: a soft parent prior with a long tail can have a younger mean and still be perfectly compatible, so reporting that shape would be a false positive.
+**Temporal consistency conflicts (`temporal`):** for nested clades (taxon set A ⊂ B), it checks whether the parent clade (B) is calibrated older than the child clade (A), resolving from each calibration's crown/stem setting which node it applies to first. It compares the 95% HPD intervals: the detector reports an error when the parent's HPD upper bound is younger than the child's HPD lower bound, i.e. when the two intervals cannot be satisfied by any tree. Overlapping intervals are not reported, including the case where the parent's mean is younger than the child's: a soft parent prior with a long tail can have a younger mean and still be perfectly compatible, so reporting that shape would be a false positive. One nested pair is left undecided: when the parent is calibrated on its crown and the child on its stem, taxon containment does not fix which node is older, so the detector reports the pair as `unchecked` rather than as a pass.
 
 **Monophyly conflicts (`topology`):** it detects taxon sets that intersect but are not nested. When both calibrations enforce monophyly, that topology cannot exist, and the detector reports an error.
 
@@ -2135,7 +2167,7 @@ Structural validation (`validator.py::XMLValidator`) runs two tiers in one call.
 
 - The root element is `<beast>`
 - The required elements `<data>` and `<run>` are present
-- id/idref/`@ref` references are consistent: every idref names a defined id, and no id repeats
+- id/idref/`@ref` references are consistent: every idref names a defined id (a dangling reference is an error), and no id repeats
 - The `<state>` element is present
 - The posterior distribution reference and the logger elements are present
 - The namespace attribute contains `beast.base`
@@ -2147,9 +2179,13 @@ Structural validation (`validator.py::XMLValidator`) runs two tiers in one call.
   improper density and cannot be reconstructed from the XML; bounded discrete
   `IntegerParameter`/`BooleanParameter` nodes are exempt.
 - Every estimated state node carries an operator, and no operator touches a fixed parameter.
+  This one is enforced while the XML is built (`xml_writer.py` raises `ValueError`);
+  `validator.py` never looks at operators at all.
 - No state node has inverted bounds (`lower < upper`).
 - Every initial value lies inside its bounds and matches the declared dimension.
-- Each `<data>` block has non-empty, equal-length sequences with unique taxon names.
+- Sequences inside a `<data>` block are equal-length with unique taxon names. A block that
+  holds no sequences at all is a warning in the structural tier, and `FilteredAlignment`
+  blocks are exempt because their data lives in the source alignment.
 
 A `storeEvery` that disables checkpointing is reported as a warning rather than an error.
 
@@ -2204,37 +2240,37 @@ stays reserved for a model BEAST2 actually rejected. See
 without `--beast2` legitimately exits 0.
 
 **Add-on package dependencies are not enforced by the parse gate.** An XML that uses an add-on
-names its classes in `spec=` attributes, and `XMLParser` resolves such a name by loading the class
-it needs. It never consults the `<depends>` entries of an installed add-on's `version.xml`, so a
-file that references `nestedsampling.gss.NS` parses and initialises — Gate 3 passes, `validate
---beast2` prints `Level 2/2 passed (Gate 3)` — on an installation that has NS but not the
-MODEL_SELECTION package NS 1.2.0 declares as a dependency. That is precisely the release
-environment recorded in [16.3](#163-validation-status): BEAST 2.7.8 with BDSKY 1.5.1 and
-NS 1.2.0 under `~/.beast/2.7/`, **no MODEL_SELECTION installed**, and all 21 BEAST2 integration
-cases clearing the gate. Read that as a statement about the parser and nothing more: a green Gate
-3 does not show the add-on set is complete, and an unmet dependency surfaces elsewhere — when the
-add-on manager or a GUI checks package metadata, or when a class from the missing package is
-actually asked for at run time. Install MODEL_SELECTION before running a nested-sampling analysis;
-the CI integration job fetches it best-effort so the resolved add-on set matches what NS
-advertises.
+names its classes in `spec=` attributes, and `XMLParser` resolves such a name by loading the
+class it needs. It never consults the `<depends>` entries of an installed add-on's
+`version.xml`, so a file that references `nestedsampling.gss.NS` parses and initialises — Gate 3
+passes, `validate --beast2` prints `Level 2/2 passed (Gate 3)` — even on an installation that
+has NS but not the MODEL_SELECTION package NS declares as a dependency. That is a property of
+the parser rather than of any one environment: the project-local add-on set used for the release
+coverage runs does include MODEL_SELECTION 1.6.2 (see [16.3](#163-validation-status)), while the
+CI job fetches MODEL_SELECTION best-effort and may therefore lack it. Read this as a statement
+about the parser and nothing more: a green Gate 3 does not show the add-on set is complete, and
+an unmet dependency surfaces elsewhere — when the add-on manager or a GUI checks package
+metadata, or when a class from the missing package is actually asked for at run time. Install
+MODEL_SELECTION before running a nested-sampling analysis; the CI integration job fetches it
+best-effort so the resolved add-on set matches what NS advertises.
 
 ### 16.3 Validation status
 
 All **19** example configuration files pass every check that was run on them: Gate 0 (the
-parse-time provenance and character validation), Gate 1 (structural), Gate 2 (calibration-conflict
-detection) and Gate 3 (the BEAST2 `parseFile` and `initAndValidate` check). Gate 3 uses the native
-BEAST2 **v2.7.8** parser in headless mode, so no JavaFX is required. Two of the files depend on
-add-on packages — `config_bd_skyline.yaml` and `config_nested_sampling.yaml` — and were verified
-against the packages installed under `~/.beast/2.7/`, namely **BDSKY 1.5.1** and **NS 1.2.0**.
-**MODEL_SELECTION was not installed in that environment**, although NS 1.2.0's `version.xml`
-declares it as a dependency; `config_nested_sampling.yaml` still cleared Gate 3, because
-`XMLParser` resolves the classes a file names and does not enforce add-on package dependencies at
-parse time (see 16.2 for what that does and does not show).
+parse-time provenance and character validation), Gate 1 (structural), Gate 2
+(calibration-conflict detection) and Gate 3 (the BEAST2 `parseFile` and `initAndValidate`
+check). Gate 3 uses the native BEAST2 **v2.7.7** parser in headless mode, so no JavaFX is
+required. Two of the files depend on add-on packages — `config_bd_skyline.yaml` and
+`config_nested_sampling.yaml` — and were verified against the add-ons installed in the
+project-local BEAST home under `tools/beast_home/.beast/2.7/`, namely **BDSKY 1.5.1**, **NS
+1.2.2** and **MODEL_SELECTION 1.6.2**. NS's own `version.xml` declares MODEL_SELECTION as a
+dependency, and it was present; that Gate 3 would still have passed without it follows from the
+parser behaviour described in 16.2, not from this environment.
 
 The test suite comprises **559** collected tests: **538** unit, semantic and release-integrity
 tests and **21** BEAST2 integration tests. The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and check each with the
-real BEAST 2.7.8 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests
+real BEAST 2.7.7 parser and model initialisation. When BEAST2 or JDK 17 is absent, those tests
 simply skip instead of failing. Two of those cases additionally require the BDSKY and
 nested-sampling add-ons, and the CI workflow treats a failed `beast -get` of either — or of the
 MODEL_SELECTION dependency it also fetches best-effort — as a warning rather than an error, so
@@ -2342,6 +2378,7 @@ operator_weights:
   exchange_narrow: 15.0   # Narrow exchange (default 15.0)
   exchange_wide: 3.0      # Wide exchange (default 3.0)
   wilson_balding: 1.0     # Wilson-Balding operator (default 1.0)
+  up_down: 3.0            # Up-down clade operator, tree down / clock rate up (default 3.0)
   # ... other operators
 ```
 
@@ -2358,7 +2395,7 @@ honestly, they exercise **all 4 clock models** (strict, UCLN, UCE, RLC),
 TIM, TVM) plus two amino-acid matrices (WAG, JTT).
 
 The four unexemplified models are the amino-acid Dayhoff, BLOSUM62, CPREV and MTREV.
-They do **not** put "every model in one file": substitution-model comparison is split
+The examples do **not** put "every model in one file": substitution-model comparison is split
 across `config_subst_jc69/sym/tim/models.yaml`, one model per run. Several likelihoods on
 one shared topology give a posterior self-product, not a comparison (see Section 12.2).
 
@@ -2382,7 +2419,7 @@ one shared topology give a posterior self-product, not a comparison (see Section
 | `config_skyline.yaml` | Bayesian Skyline | Bayesian Skyline | TN93+Γ4 | Strict | 1 | Skyline population history |
 | `config_ebsp.yaml` | EBSP | EBSP | HKY+Γ4 | Strict | 1 | Extended Bayesian Skyline Plot (BEAST 2.7 core package) |
 | `config_bd_skyline.yaml` | BD Skyline Serial | BD Skyline Serial | HKY+Γ4 | Strict | 1 | Requires the bdsky add-on (verified against BDSKY 1.5.1) |
-| `config_nested_sampling.yaml` | Nested Sampling | Yule | HKY+Γ4 | Strict | 1 | NS MCMC (requires the NS add-on, verified against NS 1.2.0) |
+| `config_nested_sampling.yaml` | Nested Sampling | Yule | HKY+Γ4 | Strict | 1 | NS MCMC (requires the NS add-on, verified against NS 1.2.2) |
 
 The counts in the table are the numbers of `calibrations:` entries actually present in each file, and the model strings are what the files declare per partition (`/` separates partitions).
 
@@ -2539,7 +2576,7 @@ evaluated.
 
 **`Configuration file not found`**
 
-Make sure the YAML file path is correct, either absolute or relative to the configuration file's own directory. Beast2Py resolves sequence file paths relative to the directory that contains the YAML configuration.
+Make sure the YAML file path is correct. The configuration path itself is resolved against the current working directory, or against the `base_dir` given to the API when one is passed; only the sequence file paths inside the configuration are resolved relative to the directory that contains the YAML file.
 
 **`Invalid YAML in <file>: …`**
 
@@ -2566,7 +2603,7 @@ Make sure the partition ID matches an alignment ID. If you use `FilteredAlignmen
 
 Every partition must have a unique ID. Check the YAML configuration for duplicate partition IDs.
 
-**`Invalid substitution model`, `Invalid clock model`, `Invalid tree prior type`**
+**`Invalid substitution model`, `Invalid clock model`, `Invalid tree prior: '<name>'`**
 
 Use `beast2py list-models` to see the supported model types and make sure the names used in the configuration are correct.
 
