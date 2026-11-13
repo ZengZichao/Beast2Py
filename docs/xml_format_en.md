@@ -1,9 +1,12 @@
 # BEAST2 XML Format Guide
 
+English | [中文](xml_format_zh.md)
+
 ## Overview
 
 Beast2Py generates BEAST2 v2.7.x compatible XML files using `xml.etree.ElementTree`,
-verified against BEAST 2.7.8. This document describes the XML structure the tool produces.
+verified against a BEAST 2.7.7 runtime whose `BEAST.base` package is upgraded to 2.7.8.
+This document describes the XML structure the tool produces.
 The generator assembles the XML in memory and writes it to disk only after the validation
 gates (structural and semantic checks, calibration conflict detection, and — on request —
 the BEAST2 parser plus `initAndValidate()`) have all passed. The files on disk therefore
@@ -13,7 +16,7 @@ always have the structure described here.
 
 ```xml
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<beast version='2.0' namespace='...'>
+<beast version="2.0" namespace="...">
     <!-- 1. Sequence alignment data -->
     <data id="alignment" dataType="nucleotide">
         <sequence taxon="human">ATGGCAAAT...</sequence>
@@ -29,8 +32,8 @@ always have the structure described here.
          with id=, later occurrences reference it with idref=. Writing every
          entry as idref makes BEAST2 fail with "Could not find object
          associated with idref ..." when no top-level taxon definition exists. -->
-    <taxonset spec='TaxonSet' id='humanChimpMRCA.taxonset'>
-        <taxon spec='Taxon' id='human'/><taxon spec='Taxon' idref='chimp'/>
+    <taxonset spec="TaxonSet" id="humanChimpMRCA.taxonset">
+        <taxon spec="Taxon" id="human"/><taxon spec="Taxon" idref="chimp"/>
     </taxonset>
 
     <!-- 3. Posterior distribution -->
@@ -66,11 +69,10 @@ A parameter the user marks `estimate: false` never enters `<state>`. The generat
 trace column:
 
 ```xml
-<!-- estimated: a state node referenced from the substitution model -->
-<parameter id="alignment.hky.kappa" name="stateNode" value="2" estimate="true" lower="0"/>
-<substModel spec="HKY" id="alignment.hky">
-    <parameter idref="alignment.hky.kappa" name="kappa"/>
-</substModel>
+<!-- estimated: a state node referenced from the substitution model's kappa attribute -->
+<parameter id="alignment.hky.kappa" name="stateNode" value="2" dimension="1"
+          estimate="true" lower="0"/>
+<substModel spec="HKY" id="alignment.hky" kappa="@alignment.hky.kappa">...</substModel>
 
 <!-- fixed: an inline parameter, no state node, no operator, not traced -->
 <substModel spec="HKY" id="alignment.hky">
@@ -110,20 +112,25 @@ beast.base.evolution.alignment:beast.base.evolution.speciation:beast.pkgmgmt:bea
 
 ## Multi-Partition Support
 
-The generator writes a separate `<data>` element and a separate `<TreeLikelihood>` element for each partition:
+The generator writes a separate `<data>` element and, for each partition, a separate
+likelihood node `<distribution id="gene1.treeLikelihood" spec="TreeLikelihood">`: the id
+pattern is `{partition}.treeLikelihood` (`gene1`/`gene2` are illustrative partition names;
+the shipped multi-partition example uses the codon partitions `codon12` and `codon3`). There
+is no `<TreeLikelihood>` element tag, that class name appears only as the `spec` attribute,
+and the writer emits every attribute in double quotes:
 
 ```xml
-<data id='gene1' dataType='nucleotide'>...</data>
-<data id='gene2' dataType='nucleotide'>...</data>
+<data id="gene1" dataType="nucleotide">...</data>
+<data id="gene2" dataType="nucleotide">...</data>
 
 <distribution id="likelihood" spec="CompoundDistribution">
-    <distribution data='@gene1' id="treeLikelihood.gene1" spec="TreeLikelihood" tree='@tree'>
+    <distribution id="gene1.treeLikelihood" spec="TreeLikelihood" data="@gene1" tree="@tree">
         <siteModel id="gene1.siteModel" spec="SiteModel">...</siteModel>
         <branchRateModel id="gene1.clockModel"
                          spec="beast.base.evolution.branchratemodel.UCRelaxedClockModel"
                          normalize="true">...</branchRateModel>
     </distribution>
-    <distribution data='@gene2' id="treeLikelihood.gene2" spec="TreeLikelihood" tree='@tree'>
+    <distribution id="gene2.treeLikelihood" spec="TreeLikelihood" data="@gene2" tree="@tree">
         <siteModel idref="gene1.siteModel"/>           <!-- Shared site model -->
         <branchRateModel idref="gene1.clockModel"/>    <!-- Shared clock -->
     </distribution>
@@ -132,7 +139,7 @@ The generator writes a separate `<data>` element and a separate `<TreeLikelihood
 
 The generator emits a shared clock exactly once, with its own `id`, and every other
 partition points at it with `idref` (a shared site model works the same way). All
-partitions are assembled on **one** `tree='@tree'`: per-partition topologies are not
+partitions are assembled on **one** `tree="@tree"`: per-partition topologies are not
 implemented, so the parser refuses `tree: separate` outright instead of silently linking
 the trees. An XML file with several `<tree>` state nodes is therefore never produced.
 
@@ -157,7 +164,8 @@ gives the class name; what is written into the XML is the fully qualified form, 
 | ChiSquare | `ChiSquare` | df (config key: `dof`) |
 
 `OneOnX` (`f(x) = 1/x`) is an improper density: its mean and 95% interval are undefined,
-so the diagnostics report them as such and exclude it from the distribution-overlap check.
+so the diagnostics report them as such and leave any pair involving it out of the temporal
+and range comparisons, reporting that pair as `unchecked`.
 
 ## Tree Priors
 
@@ -183,10 +191,14 @@ so the diagnostics report them as such and exclude it from the distribution-over
 
 UCLN and UCE share the `UCRelaxedClockModel` spec and differ only in the branch-rate
 distribution: UCLN carries a `LogNormalDistributionModel` with `M = 1` and
-`S = ucld.stdev`, UCE an `Exponential` with mean `ucld.mean`. The generator emits every
-relaxed clock with `normalize="true"`, matching BEAUti's reference layout, so rates and
-node ages stay identifiable. The random local clock adds two state nodes of its own,
-`rates` and `indicators`.
+`S = ucld.stdev`, UCE an `Exponential` whose `mean` is written as the fixed literal
+`<parameter name="mean" value="1.0"/>`; in both cases the user-facing `ucld.mean`
+parameter enters the clock separately,
+as the `clock.rate` input of the `UCRelaxedClockModel` element. The `normalize="true"`
+attribute, matching BEAUti's reference layout, is emitted only on those two relaxed
+`UCRelaxedClockModel` elements, so their rates and node ages stay identifiable. The random
+local clock is written as `RandomLocalClockModel` with `ratesAreMultipliers="false"` and
+**no** `normalize` attribute; it adds two state nodes of its own, `rates` and `indicators`.
 
 ## Analysis Fingerprint
 
@@ -199,13 +211,16 @@ The tool embeds an analysis fingerprint as an XML comment:
 Format: `B2P-{config_hash_12chars}-{tool_version} | Data: {data_hash_16chars}`
 
 `config_hash` is the first 12 hex characters of the SHA-256 digest of the
-serialised configuration, and `data_hash` is the first 16 hex characters of the
-SHA-256 digest of the alignment *sequences*.
+serialised configuration, and `data_hash` folds every alignment's id and content
+digest (taxon names plus sequence characters, not the file path) into one SHA-256
+digest and keeps its first 16 hex characters.
 
 The identifier deliberately carries no calendar date, no time zone and not the
 output file name, so the same configuration and the same alignments yield the
 same fingerprint on every machine and on every day. Changing any model component,
-calibration, MCMC setting or sequence changes the fingerprint with it.
+calibration, MCMC setting or sequence changes the fingerprint with it; the one
+documented exception is `mcmc.threads`, which schedules the run without changing
+the posterior and is therefore kept out of the digest.
 
 The generation time is recorded separately in the JSON sidecar file and never
 becomes part of the identifier.
