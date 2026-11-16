@@ -85,6 +85,10 @@ change to observed behaviour even if no API changes.
 
 ### Changed
 
+- Repository maintenance: Dependabot's automated version-update PRs are disabled
+  (`.github/dependabot.yml` removed), and the contributor and security pages no
+  longer refer to it. The two `beast2_validate.sh` launchers are now committed
+  with the executable bit set.
 - The Release workflow gates a tag on the suite, not on version strings alone:
   `build` now needs a `test` job that installs BEAST2, runs the whole suite, and
   fails the release if any Gate 3 test skipped for want of a runtime.
