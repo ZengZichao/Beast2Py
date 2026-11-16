@@ -148,8 +148,8 @@ status and how to obtain the corresponding source.
 - Branch from `main`; do not push to `main`.
 - One logical change per pull request. Unrelated cleanups, reformatting and
   behaviour changes in the same PR make it much harder to review.
-- Commit messages follow the Conventional Commits style already used by
-  Dependabot here: a type prefix, then a short imperative summary, for example
+- Commit messages follow the Conventional Commits style: a type prefix, then a
+  short imperative summary, for example
   `fix(calibration): honour lower bound on lognormal offset`.
 - Reference the issue in the body with `Closes #<n>`, and fill in the pull
   request template. In particular, paste the `pytest tests/ -rs` summary line

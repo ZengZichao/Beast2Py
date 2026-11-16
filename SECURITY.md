@@ -56,8 +56,8 @@ report that turns out not to be a vulnerability still gets a reply.
   when BEAST2 or JDK 17 is missing. That is the documented behaviour of
   `--beast2-validate`, designed to fail loudly rather than pass.
 - Anything reproducible only after editing a local checkout or patching a vendored
-  class under `beast2py/tools/classes/`, and a vulnerable transitive dependency
-  flagged by Dependabot. The second is still worth reporting here.
+  class under `beast2py/tools/classes/`. A vulnerable transitive dependency is
+  not a vulnerability in Beast2Py itself, but is still worth reporting here.
 
 Reporting a non-vulnerability is not a mistake, and credit in the advisory is
 offered if you want it. Please do not publish details of an unfixed vulnerability
