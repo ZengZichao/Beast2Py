@@ -733,7 +733,7 @@ beast2py fingerprint \
 | `--verbose` | `-v` | No | False | Show detailed fingerprint information |
 
 **Fingerprint format:** `B2P-{first 12 hex digits of the config digest}-{tool version}`,
-e.g. `B2P-3f43bfab58c3-0.2.0`. The identifier carries **no date and no time zone**, so
+e.g. `B2P-683694fabe0b-0.2.1`. The identifier carries **no date and no time zone**, so
 rerunning the same configuration on the same data always reproduces it. Twelve hex
 digits are 48 bits of digest: by the birthday bound, a 50% chance of even one collision needs
 sqrt(2 * 2**48 * ln 2) = 1.98 × 10⁷ distinct analyses — about 2 × 10⁷, not the 2**24 = 1.7 × 10⁷ that a
@@ -743,9 +743,9 @@ square-root shortcut would suggest. It is a change-detection token, not a global
 
 ```json
 {
-  "fingerprint": "B2P-3f43bfab58c3-0.2.0",
-  "config_hash": "3f43bfab58c3181b58a4fce3b738a50c2a1e9d10cca476cae01a8177471a5cf8",
-  "full_hash": "3f43bfab58c3181b58a4fce3b738a50c2a1e9d10cca476cae01a8177471a5cf8",
+  "fingerprint": "B2P-683694fabe0b-0.2.1",
+  "config_hash": "683694fabe0ba09de03d1dc3a77a2aa0da388ea7c5819911d9ea4c676c03bb23",
+  "full_hash": "683694fabe0ba09de03d1dc3a77a2aa0da388ea7c5819911d9ea4c676c03bb23",
   "data_hash": "72a8314e0bde0640",
   "hash_bits": 48,
   "collision_note": "The identifier truncates the configuration digest to 48 bits; a 50% chance of one collision needs sqrt(2 * 2**48 * ln 2), about 1.98e+07 distinct analyses, so it is a change-detection token rather than a globally unique key.",
@@ -757,7 +757,7 @@ square-root shortcut would suggest. It is a change-detection token, not a global
 }
 ```
 
-`generation_time` above is the moment this sample was captured; the identifier itself has no time component, so the same configuration on the same alignment always yields `B2P-3f43bfab58c3-0.2.0`.
+`generation_time` above is the moment this sample was captured; the identifier itself has no time component, so the same configuration on the same alignment always yields `B2P-683694fabe0b-0.2.1`.
 
 `data_hash` condenses the digest of each alignment's content down to the first 16 hex
 characters, and travels in the XML as `| Data: {hash16}` inside the fingerprint comment.
@@ -2104,7 +2104,7 @@ diagnostics:
 
 ### 15.1 Analysis fingerprint
 
-The analysis fingerprint is a deterministic identifier generated from the SHA-256 hash of the *scientific* configuration, in the date-free format `B2P-{hash12}-{version}`, e.g. `B2P-3f43bfab58c3-0.2.0`. It carries **no date and no time zone**, so the same configuration over the same alignment data reproduces byte-for-byte on every rerun.
+The analysis fingerprint is a deterministic identifier generated from the SHA-256 hash of the *scientific* configuration, in the date-free format `B2P-{hash12}-{version}`, e.g. `B2P-683694fabe0b-0.2.1`. It carries **no date and no time zone**, so the same configuration over the same alignment data reproduces byte-for-byte on every rerun.
 
 These changes alter the fingerprint, because `models.py::to_dict` includes them in the hash: the sequence content, the tree setting (`Partition.tree`), a crown/stem (`use_originate`) or `tipsonly` flag, a hyperprior, a `parameter_priors` entry, a tip date, or an operator weight. Renaming the output file alone does not.
 

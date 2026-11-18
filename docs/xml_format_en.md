@@ -205,7 +205,7 @@ local clock is written as `RandomLocalClockModel` with `ratesAreMultipliers="fal
 The tool embeds an analysis fingerprint as an XML comment:
 
 ```xml
-<!-- Analysis Fingerprint: B2P-3f43bfab58c3-0.2.0 | Data: 72a8314e0bde0640 -->
+<!-- Analysis Fingerprint: B2P-683694fabe0b-0.2.1 | Data: 72a8314e0bde0640 -->
 ```
 
 Format: `B2P-{config_hash_12chars}-{tool_version} | Data: {data_hash_16chars}`

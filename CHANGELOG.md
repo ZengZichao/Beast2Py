@@ -15,7 +15,7 @@ open at https://github.com/ZengZichao/Beast2Py. Version numbers follow SemVer,
 and a change to generated BEAST2 XML or to a validation gate is treated as a
 change to observed behaviour even if no API changes.
 
-## [Unreleased] - review-A fixes (2026-11-18)
+## [0.2.1] - 2026-11-18
 
 ### Fixed — diagnostics (review items S01–S03, S07)
 
