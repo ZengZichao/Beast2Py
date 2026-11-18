@@ -1288,3 +1288,19 @@ class TestReleaseWorkflowGate:
             assert ("uses" in step) != ("run" in step), step
             if "run" in step:
                 assert step.get("shell"), f"composite steps must name a shell: {step['name']}"
+
+
+def test_release_pipeline_cannot_swallow_a_failing_suite():
+    """The release workflow's pytest step must run under pipefail.
+
+    `pytest ... | tee suite.log` under default bash returns tee's exit
+    status, so a failing suite used to read as success and `needs: test`
+    did not block the release.  This pins the declared shell and the
+    pipefail option to the step that runs the suite.
+    """
+    workflow_path = REPO / ".github" / "workflows" / "release.yml"
+    workflow = workflow_path.read_text(encoding="utf-8")
+    run_index = workflow.index("pytest tests -q -rs | tee suite.log")
+    step = workflow[:run_index]
+    assert "shell: bash" in step, "the pytest step must declare shell: bash"
+    assert "set -euo pipefail" in step, "the pytest step must enable pipefail"

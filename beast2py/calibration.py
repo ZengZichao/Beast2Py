@@ -7,7 +7,7 @@ and CalibratedYuleModel calibration points.
 from __future__ import annotations
 
 import xml.etree.ElementTree as ET
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from .models import CalibrationPoint, DistributionConfig
 from .registry import ModelRegistry
@@ -23,6 +23,54 @@ class CalibrationBuilder:
     # to +inf. A small positive floor keeps the model proper.
     SCALE_PARAM_KEYS = frozenset({"sigma", "S", "scale"})
     SCALE_PARAM_FLOOR = 1e-3
+
+    #: Statistical role of a hyperprior target parameter.  The role decides
+    #: the state node's support domain and its proposal operator: location
+    #: parameters (Normal mean, LogNormal log-location M, Laplace mu, Uniform
+    #: bounds) are unbounded and may be negative — truncating them at 0 used
+    #: to silently cut a LogNormal M ~ Normal(-1, 1) prior in half — while
+    #: scale/shape/rate parameters stay positive.  Keys outside this table
+    #: are rejected explicitly rather than guessed.
+    HYPERPARAM_ROLES = {
+        "mean": "location",
+        "M": "location",
+        "mu": "location",
+        "lower": "bound",
+        "upper": "bound",
+        "sigma": "scale",
+        "S": "scale",
+        "scale": "scale",
+        "alpha": "shape",
+        "beta": "shape",
+        "lambda": "rate",
+        "dof": "count",
+    }
+
+    #: (lower, upper) support per role; None means unbounded.
+    HYPERPARAM_SUPPORT = {
+        "location": (None, None),
+        "bound": (None, None),
+        "scale": (SCALE_PARAM_FLOOR, None),
+        "shape": (0.0, None),
+        "rate": (0.0, None),
+        "count": (1.0, None),
+    }
+
+    @staticmethod
+    def hyperparam_role(config_key: str) -> str:
+        """Return the statistical role of a hyperprior target parameter.
+
+        Raises:
+            ValueError: For parameters with no verified hyperprior support,
+                rather than silently truncating or mis-scaling them.
+        """
+        try:
+            return CalibrationBuilder.HYPERPARAM_ROLES[config_key]
+        except KeyError:
+            raise ValueError(
+                f"hyperprior target '{config_key}' is not supported; supported "
+                f"targets are: {', '.join(sorted(CalibrationBuilder.HYPERPARAM_ROLES))}"
+            ) from None
 
     @staticmethod
     def build_taxonset(
@@ -118,10 +166,15 @@ class CalibrationBuilder:
 
         # Add boolean attributes (e.g., meanInRealSpace for LogNormal)
         bool_attrs = dist_spec.get("bool_attrs", {})
+        from .utils import as_strict_bool
+
         for config_key, xml_attr in bool_attrs.items():
             if config_key in dist.parameters:
-                val = dist.parameters[config_key]
-                dist_elem.set(xml_attr, str(bool(val)).lower())
+                # Strict coercion: bool("false") is True in Python, and a
+                # quoted "false" that silently became meanInRealSpace="true"
+                # re-parameterised the prior without a word.
+                val = as_strict_bool(dist.parameters[config_key], f"{dist.type}.{config_key}")
+                dist_elem.set(xml_attr, str(val).lower())
 
         # Add parameters
         use_param_elements = dist_spec.get("use_param_elements", False)
@@ -130,15 +183,17 @@ class CalibrationBuilder:
         for config_key, xml_attr in param_mapping.items():
             if config_key not in dist.parameters:
                 continue
-            val = dist.parameters[config_key]
+            param_val: Any = dist.parameters[config_key]
             # BEAST2's ChiSquare.df is an IntegerParameter; writing "4.0"
             # makes XMLParser reject the model with "type mismatch for input
             # df".  The parser already requires an integral value.
             if dist.type.lower() == "chi_square" and config_key == "dof":
-                val = int(round(float(val)))
+                param_val = int(round(float(param_val)))
 
             hp = (hyperpriors or {}).get(config_key)
             if hp is not None:
+                role = CalibrationBuilder.hyperparam_role(config_key)
+                lower_hp, _ = CalibrationBuilder.HYPERPARAM_SUPPORT[role]
                 # Hyperprior on this parameter: make it an estimated state
                 # node and reference it from the distribution.
                 param_id = (
@@ -159,12 +214,12 @@ class CalibrationBuilder:
                         (
                             param_id,
                             {
-                                "value": float(val) if not isinstance(val, bool) else str(val),
-                                "lower": (
-                                    CalibrationBuilder.SCALE_PARAM_FLOOR
-                                    if config_key in CalibrationBuilder.SCALE_PARAM_KEYS
-                                    else 0.0
+                                "value": (
+                                    float(param_val)
+                                    if not isinstance(param_val, bool)
+                                    else str(param_val)
                                 ),
+                                "lower": lower_hp,
                                 "estimate": True,
                             },
                         )
@@ -175,10 +230,10 @@ class CalibrationBuilder:
                 ET.SubElement(
                     dist_elem,
                     "parameter",
-                    {"name": xml_attr, "value": str(val)},
+                    {"name": xml_attr, "value": str(param_val)},
                 )
             else:
-                dist_elem.set(xml_attr, str(val))
+                dist_elem.set(xml_attr, str(param_val))
 
         return dist_elem
 
@@ -203,11 +258,20 @@ class CalibrationBuilder:
 
         results: List[tuple] = []
         for config_key, hp in cal.hyperpriors.items():
+            # Reject unsupported targets explicitly, before anything else:
+            # a hyperprior on a key the distribution does not have used to be
+            # skipped silently, which reads as "accepted".
+            role = CalibrationBuilder.hyperparam_role(config_key)
             if config_key not in cal.distribution.parameters:
-                continue
+                raise ValueError(
+                    f"Calibration '{cal.name}': hyperprior target '{config_key}' "
+                    f"is not a parameter of the {cal.distribution.type} distribution"
+                )
             hp_spec = ModelRegistry.get_distribution_spec(hp.type)
             if hp_spec is None:
                 raise ValueError(f"Unknown hyperprior distribution type: {hp.type}")
+
+            lower_hp, _ = CalibrationBuilder.HYPERPARAM_SUPPORT[role]
 
             param_id = sanitize_id(f"{cal.name}.{config_key}")
             val = cal.distribution.parameters[config_key]
@@ -220,22 +284,13 @@ class CalibrationBuilder:
                     "x": ref(param_id),
                 },
             )
-            distr_attrs = {"spec": hp_spec["spec"]}
-            if hp.offset:
-                distr_attrs["offset"] = str(hp.offset)
-            distr_elem = ET.SubElement(prior_elem, "distr", distr_attrs)
-
-            use_param_elements = hp_spec.get("use_param_elements", False)
-            for hp_key, xml_attr in hp_spec.get("params", {}).items():
-                if hp_key in hp.parameters:
-                    if use_param_elements:
-                        ET.SubElement(
-                            distr_elem,
-                            "parameter",
-                            {"name": xml_attr, "value": str(hp.parameters[hp_key])},
-                        )
-                    else:
-                        distr_elem.set(xml_attr, str(hp.parameters[hp_key]))
+            # Reuse the full distribution serializer: the hand-rolled copy
+            # here used to drop boolean attributes (LogNormal
+            # meanInRealSpace), silently re-parameterising the hyperprior.
+            hp_dist = DistributionConfig(
+                type=hp.type, parameters=dict(hp.parameters or {}), offset=hp.offset
+            )
+            prior_elem.append(CalibrationBuilder.build_distribution(hp_dist))
 
             results.append(
                 (
@@ -243,11 +298,7 @@ class CalibrationBuilder:
                     param_id,
                     {
                         "value": float(val) if not isinstance(val, bool) else str(val),
-                        "lower": (
-                            CalibrationBuilder.SCALE_PARAM_FLOOR
-                            if config_key in CalibrationBuilder.SCALE_PARAM_KEYS
-                            else 0.0
-                        ),
+                        "lower": lower_hp,
                         "estimate": True,
                     },
                 )
@@ -379,15 +430,23 @@ class CalibrationBuilder:
             Logger XML element for MRCA time.
         """
         taxonset_id = sanitize_id(f"{cal.name}.taxonset")
-        log_elem = ET.Element(
-            "log",
-            {
-                "spec": "beast.base.evolution.tree.MRCAPrior",
-                "tree": ref(tree_id),
-                "id": f"{sanitize_id(cal.name)}.age",
-                "taxonset": ref(taxonset_id),
-            },
-        )
+        attrs = {
+            "spec": "beast.base.evolution.tree.MRCAPrior",
+            "tree": ref(tree_id),
+            "id": f"{sanitize_id(cal.name)}.age",
+            "taxonset": ref(taxonset_id),
+        }
+        if cal.use_originate:
+            # The logger must read the same node the calibration density
+            # targets: without useOriginate a stem calibration would be
+            # reported at its crown node instead.
+            if cal.taxa is None:
+                raise ValueError(
+                    f"Calibration '{cal.name}': use_originate requires a taxon set; "
+                    f"the root has no parent (stem) node."
+                )
+            attrs["useOriginate"] = "true"
+        log_elem = ET.Element("log", attrs)
         return log_elem
 
     @staticmethod

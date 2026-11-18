@@ -15,6 +15,102 @@ open at https://github.com/ZengZichao/Beast2Py. Version numbers follow SemVer,
 and a change to generated BEAST2 XML or to a validation gate is treated as a
 change to observed behaviour even if no API changes.
 
+## [Unreleased] - review-A fixes (2026-11-18)
+
+### Fixed — diagnostics (review items S01–S03, S07)
+
+- Same-node and parent/child comparisons now block only on a hard-support
+  conflict: zero-measure support overlap (endpoint contact included) is an
+  error; separated 95% intervals on overlapping supports are reported as
+  prior tension (warning), because the product density remains normalisable.
+- Stem node identity is resolved in the two determinate cases: a monophyletic
+  clade whose complement is a single taxon has its stem at the root, and two
+  disjoint monophyletic clades covering every taxon are both stemmed at the
+  root (same node). Other stem relations are `unchecked`, never silently
+  independent.
+- Calibrations with hyperpriors are compared as `unchecked` (the specified
+  density is conditional on initial parameter values), and the duplicate
+  signature now includes the hyperpriors.
+- Distribution summaries distinguish interval kinds: uniform reports the
+  shortest 95% window plus the full support at 100%; U-shaped beta is labelled
+  a shortest-contiguous interval with a note that the true HDR is a union;
+  the visualization shades only the reported interval.
+- Monophyly-only calibrations (no age distribution) show "N/A — monophyly
+  constraint only" in reports instead of a spurious age of zero.
+
+### Fixed — model generation (C01–C13)
+
+- Determined tip dates are no longer moved: a `TipDatesRandomWalker` is
+  emitted only for tips explicitly declared under `tip_dates.uncertain`, one
+  operator per tip with its own window.
+- The coalescent-exponential `growthRate` gets a `RealRandomWalkOperator`
+  (an additive proposal that crosses zero; the old ScaleOperator froze the
+  default zero and could not change sign).
+- Calibration hyperprior serialization reuses the full distribution builder
+  (LogNormal `mean_in_real_space` is no longer dropped), hyperparameter
+  supports are role-based (location parameters are unbounded and get a random
+  walk; unknown targets are rejected), and boolean attributes go through
+  strict coercion.
+- `calibration_method` must match the tree prior: `calibrated_yule` with a
+  plain yule prior (silently calibration-free XML) and MRCAPriors on top of a
+  CalibratedYuleModel are parse-time errors.
+- The MRCA age logger inherits `useOriginate`, so a stem calibration is logged
+  at its stem node.
+- `frequencies: {mode: fixed}` normalises to `estimate: false` (and conflicts
+  with an explicit `estimate: true`) instead of silently estimating.
+- `parameter_priors` now get the same distribution validation as calibration
+  priors (unknown keys, required keys, ranges, strict booleans).
+- A reused `data_id` must name identical content, taxa and data type, and an
+  implicit parent redeclared explicitly is checked the same way.
+- `linked_to` is mutually exclusive with any local model declaration (the
+  partial field comparison could never be complete); a bare link is unchanged.
+- A fixed clock rate is accepted as a legitimate absolute time scale (the
+  "absolute time is not identifiable" rejection was backwards); a fixed-rate
+  note is recorded instead.
+- BDSKY `sampling_rate` is a non-negative rate without the artificial upper
+  bound of 1 (rho remains the proportion).
+- Gamma shape parameters are created only when there is more than one
+  category.
+- Sequence alphabets match BEAST2 2.7.8 (`Nucleotide.java`,
+  `Aminoacid.java`): no `.`/`*` for DNA, no B/Z/U/O for protein, `X` accepted.
+
+### Fixed — interfaces, gates and security (I01–I08, R06–R08)
+
+- `Beast2Py.generate()` runs Gate 1 and the external BEAST2 check on an
+  in-memory/temporary copy and writes the XML and companion artifacts only
+  after every requested gate passed; a failed external validation raises and
+  leaves no files.
+- `quick` (CLI and API) runs the same configuration-level calibration
+  validation as the full parser, rejects non-positive chain lengths, and the
+  quick calibration YAML parser keeps hyperpriors.
+- Explicit `INVALID:` verdicts are never reclassified as "unavailable", so
+  `--allow-unvalidated` cannot write a model BEAST2 already rejected.
+- Gate 1 checks prior coverage only within the posterior, rejects non-finite
+  initial values, reports non-numeric bounds without crashing, and
+  length-checks `value=`-spelled sequences.
+- XML carrying DTD/entity constructs is refused before any Java validation
+  runs; the shell and Java entry points independently reject DOCTYPE/ENTITY.
+- Trace reading rejects duplicate headers, non-increasing or fractional
+  sample ids, NaN/Inf values, and resolves node-age columns only by exact name
+  or the complete `.taxonset` suffix. Combined multi-chain traces keep the
+  chain boundary and report per-chain ESS only — no pooled single-chain ESS or
+  convergence label.
+- Sensitivity scenarios write disjoint logger file names and a
+  `sensitivity_manifest.tsv` mapping scenario → seed → launch command.
+- Snakemake/Nextflow outputs are templates: `rule all` is the default target,
+  processes declare their file inputs, and the BEAST2 call carries the
+  configured seed.
+- The release workflow runs the suite under `shell: bash` with
+  `set -euo pipefail`; the sdist ships `.zenodo.json` and the workflow/action
+  files its tests read, and CI runs a test subset in the unpacked tree.
+
+### Tests
+
+- 46 new regression tests pin each fixed behaviour with independent answers
+  (mathematical references, BEAST2 class semantics or mocked control flow).
+  Suite: 624 collected (603 unit/semantic/release-integrity + 21 BEAST2
+  integration), 623 passed + 1 environment skip.
+
 ## [0.2.0] - 2026-10-27
 
 ### Changed

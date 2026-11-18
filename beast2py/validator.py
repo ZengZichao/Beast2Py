@@ -6,6 +6,7 @@ and BEAST2-specific requirements.
 
 from __future__ import annotations
 
+import math
 import xml.etree.ElementTree as ET
 from defusedxml import ElementTree as SafeElementTree
 from defusedxml.common import DefusedXmlException
@@ -193,7 +194,21 @@ class XMLValidator:
                     estimated.append((node_id, elem))
 
         covered = set()
-        for prior_elem in root.iter("distribution"):
+        # Only Priors reachable from the actual posterior count towards
+        # coverage: a Prior that was moved out of the posterior (but kept its
+        # id and x reference) used to satisfy this check while the run never
+        # saw the density.  The generator writes the posterior as
+        # id="posterior"; when no such element exists, fall back to the whole
+        # document rather than guessing.
+        posterior = None
+        for candidate in root.iter("distribution"):
+            if candidate.get("id") == "posterior":
+                posterior = candidate
+                break
+        search_space = (
+            posterior.iter("distribution") if posterior is not None else root.iter("distribution")
+        )
+        for prior_elem in search_space:
             # Match the *simple* class name, case-insensitively. Only accepting
             # the fully qualified ".Prior" spelling made `beast2py validate`
             # report five invented "has no <Prior>" errors on its own example
@@ -236,6 +251,7 @@ class XMLValidator:
         for node_id, elem in estimated:
             lower = elem.get("lower")
             upper = elem.get("upper")
+            bounds_numeric = True
             if lower is not None and upper is not None:
                 try:
                     if float(lower) >= float(upper):
@@ -244,6 +260,7 @@ class XMLValidator:
                         )
                 except ValueError:
                     result.add_error(f"State node '{node_id}': non-numeric bounds")
+                    bounds_numeric = False
             value = elem.get("value")
             if value is None:
                 continue
@@ -266,6 +283,14 @@ class XMLValidator:
                 numeric = [float(tok) for tok in tokens]
             except ValueError:
                 numeric = []  # boolean / textual initial values
+            for num in numeric:
+                if not math.isfinite(num):
+                    result.add_error(
+                        f"State node '{node_id}': initial value {tokens[0]!r} is not "
+                        f"finite; NaN/Inf initial values pass size comparisons "
+                        f"silently and must be rejected explicitly"
+                    )
+                    break
             if numeric and len(numeric) == 1 and dimension > 1:
                 numeric = numeric * dimension
             if numeric and len(numeric) != dimension:
@@ -273,24 +298,40 @@ class XMLValidator:
                     f"State node '{node_id}': {len(numeric)} initial values but "
                     f"dimension={dimension}"
                 )
+            if not bounds_numeric:
+                continue
             for num in numeric:
-                if lower is not None and num < float(lower):
-                    result.add_error(
-                        f"State node '{node_id}': initial value {num} is below lower ({lower})"
-                    )
+                if not math.isfinite(num):
                     break
-                if upper is not None and num > float(upper):
-                    result.add_error(
-                        f"State node '{node_id}': initial value {num} is above upper ({upper})"
-                    )
+                try:
+                    if lower is not None and num < float(lower):
+                        result.add_error(
+                            f"State node '{node_id}': initial value {num} is below lower ({lower})"
+                        )
+                        break
+                    if upper is not None and num > float(upper):
+                        result.add_error(
+                            f"State node '{node_id}': initial value {num} is above upper ({upper})"
+                        )
+                        break
+                except ValueError:
+                    # Non-numeric bounds were already reported above; do not
+                    # crash on them a second time.
                     break
 
-        # Alignment sanity inside the produced XML (a backstop)
+        # Alignment sanity inside the produced XML (a backstop).  Sequences
+        # may carry their residues as element text or as a value attribute,
+        # and both spellings are length-checked.
         for data_elem in root.findall("data"):
             seqs = data_elem.findall("sequence")
             if not seqs:
                 continue
-            lengths = {len((seq.text or "").strip().replace(" ", "")) for seq in seqs}
+            lengths = set()
+            for seq in seqs:
+                residues = (seq.text or "").strip().replace(" ", "")
+                if not residues:
+                    residues = (seq.get("value") or "").replace(" ", "")
+                lengths.add(len(residues))
             if len(lengths) > 1:
                 result.add_error(
                     f"<data id='{data_elem.get('id')}': sequences of unequal length "
@@ -399,6 +440,13 @@ class XMLValidator:
         success, output = XMLValidator.validate_with_beast2(xml_file, beast2_path=beast2_path)
         if success:
             return True, output, "passed"
+        # An explicit INVALID verdict is a model failure and outranks any
+        # "not found"-shaped substring inside its own message: lines like
+        # "INVALID: Class not found: ..." or "INVALID: Taxon not found in
+        # tree: ..." used to be classified as "unavailable", letting
+        # --allow-unvalidated write a model BEAST2 had already rejected.
+        if any(line.strip().startswith("INVALID:") for line in (output or "").splitlines()):
+            return False, output, "failed"
         lowered = (output or "").lower()
         if (
             "setup-error:" in lowered

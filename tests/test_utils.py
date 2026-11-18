@@ -59,10 +59,42 @@ class TestDistributionStats:
         assert abs(stats["hpd_upper"] - (5.0 + 1.96)) < 0.01
 
     def test_uniform_stats(self):
-        stats = compute_distribution_stats("uniform", {"lower": 0.0, "upper": 10.0})
-        assert stats["mean"] == 5.0
-        assert stats["hpd_lower"] == 0.0
-        assert stats["hpd_upper"] == 10.0
+        from scipy import stats as sp_stats
+
+        stats = compute_distribution_stats("uniform", {"lower": 5.0, "upper": 15.0})
+        assert stats["mean"] == 10.0
+        # The reported interval is the shortest 95% window (width 9.5), not
+        # the full support; the full support is reported separately at 100%.
+        assert stats["hpd_lower"] == 5.0
+        assert stats["hpd_upper"] == 14.5
+        assert stats["interval_type"] == "shortest_contiguous"
+        assert stats["support_lower"] == 5.0
+        assert stats["support_upper"] == 15.0
+        assert stats["support_mass"] == 1.0
+        # Independent CDF quality check: the window carries exactly 95%.
+        frozen = sp_stats.uniform(loc=5.0, scale=10.0)
+        coverage = frozen.cdf(stats["hpd_upper"]) - frozen.cdf(stats["hpd_lower"])
+        assert abs(coverage - 0.95) < 1e-9
+        assert frozen.cdf(stats["support_upper"]) - frozen.cdf(stats["support_lower"]) == 1.0
+
+    def test_u_shaped_beta_is_not_called_an_hpd(self):
+        from scipy import stats as sp_stats
+
+        stats = compute_distribution_stats("beta", {"alpha": 0.5, "beta": 0.5})
+        assert stats["interval_type"] == "shortest_contiguous"
+        assert "hdr_note" in stats
+        # Independent CDF quality check of the shortest contiguous window.
+        frozen = sp_stats.beta(0.5, 0.5)
+        coverage = frozen.cdf(stats["hpd_upper"]) - frozen.cdf(stats["hpd_lower"])
+        assert abs(coverage - 0.95) < 1e-9
+        # The true 95% HDR of the arcsine density is the union of the two
+        # tails, ~[0, 0.46077] U [0.53923, 1], which is not an interval.
+        tail = frozen.cdf(0.46077) + (1.0 - frozen.cdf(0.53923))
+        assert abs(tail - 0.95) < 1e-3
+
+    def test_unimodal_beta_is_still_an_hpd(self):
+        stats = compute_distribution_stats("beta", {"alpha": 2.0, "beta": 5.0})
+        assert stats["interval_type"] == "hpd"
 
     def test_lognormal_stats(self):
         stats = compute_distribution_stats("lognormal", {"M": 1.0, "S": 0.5})

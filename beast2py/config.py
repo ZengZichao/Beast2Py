@@ -156,7 +156,7 @@ KNOWN_KEYS: Dict[str, Set[str]] = {
     },
     "loggers": {"trace_log", "tree_log", "screen_log"},
     "logger": {"file_name", "log_every"},
-    "tip_dates": {"enabled", "trait_name", "units", "dates", "file"},
+    "tip_dates": {"enabled", "trait_name", "units", "dates", "file", "uncertain"},
     "initialization": {"tree_type", "newick_file"},
     "diagnostics": {
         # Prior similarity is descriptive only and is off by default.  The old
@@ -267,6 +267,10 @@ class ConfigParser:
     DISTRIBUTION_EXTRA_KEYS = {
         "lognormal": {"mean_in_real_space"},
         "uniform": {"min", "max"},
+        # Gamma selects its parameterisation with a mode *attribute*
+        # (Gamma.java:22-31); build_distribution serialises it explicitly.
+        "gamma": {"mode"},
+        "inverse_gamma": {"mode"},
     }
 
     @staticmethod
@@ -347,6 +351,10 @@ class ConfigParser:
             base_dir: Base directory for resolving relative file paths.
         """
         self.base_dir = Path(base_dir) if base_dir else Path.cwd()
+        # Set for configurations whose time axis rests on a fixed clock rate
+        # alone; entry points may surface it as a notice.  Never a rejection:
+        # a fixed rate with known units is a legitimate absolute scale.
+        self._time_scale_note: Optional[str] = None
 
     # -- key checking -------------------------------------------------------
 
@@ -563,7 +571,15 @@ class ConfigParser:
                         )
                     from .models import Alignment as AlignmentModel
 
-                    if base_id not in alignments:
+                    if base_id in alignments:
+                        # Reusing an existing data_id is only legal when the
+                        # declared source is the same alignment: two different
+                        # files behind one id would silently analyse the first
+                        # file twice.
+                        self._check_same_source_alignment(
+                            alignments[base_id], base_alignment, base_id, aln_id
+                        )
+                    else:
                         alignments[base_id] = base_alignment
                         implicit_alignment_ids.add(base_id)
                     alignment = AlignmentModel(
@@ -619,6 +635,11 @@ class ConfigParser:
 
             if aln_id in alignments and aln_id not in implicit_alignment_ids:
                 raise ConfigError(f"Duplicate alignment id: {aln_id}")
+            if aln_id in implicit_alignment_ids:
+                # An implicit parent (created by a filtered alignment's
+                # data_id) is being re-declared explicitly: the content must
+                # be the same alignment, or the id now points at other data.
+                self._check_same_source_alignment(alignments[aln_id], alignment, aln_id, aln_id)
             # An implicit parent may be re-declared explicitly further down the
             # list; declaration order must not decide whether the config is
             # valid.
@@ -748,6 +769,32 @@ class ConfigParser:
         calibration_method = ConfigParser._parse_enum(
             CalibrationMethod, cal_method_str, "calibration_method"
         )
+        # The method must match the tree prior actually in force, otherwise
+        # the calibrations can vanish entirely (e.g. calibrated_yule method
+        # with a plain yule prior produces a Yule model with no MRCAPrior and
+        # no CalibrationPoint) or be double-counted (MRCAPriors on top of a
+        # CalibratedYuleModel's own CalibrationPoints).
+        if (
+            calibration_method == CalibrationMethod.CALIBRATED_YULE
+            and tree_prior_type != TreePriorType.CALIBRATED_YULE
+        ):
+            raise ConfigError(
+                "calibration_method: calibrated_yule requires tree_prior.type: "
+                "calibrated_yule: the CalibratedYuleModel is itself a tree prior "
+                "that carries the calibration points. With "
+                f"tree_prior.type: {tree_prior_type.value} the calibration "
+                "density would be silently absent from the model."
+            )
+        if (
+            calibration_method == CalibrationMethod.MRCA_PRIOR
+            and tree_prior_type == TreePriorType.CALIBRATED_YULE
+        ):
+            raise ConfigError(
+                "tree_prior.type: calibrated_yule already carries its calibrations "
+                "as CalibrationPoint children; calibration_method must be "
+                "calibrated_yule here. With mrca_prior the node ages would be "
+                "constrained twice (CalibrationPoints plus MRCAPriors)."
+            )
 
         # --- Parameter priors ---
         parameter_priors = raw.get("parameter_priors", raw.get("priors", [])) or []
@@ -762,22 +809,38 @@ class ConfigParser:
             )
             if "parameter" not in pp:
                 raise ConfigError(f"parameter_priors[{pp_index}]: missing 'parameter'")
+            # The same validation the calibration distributions get: unknown
+            # keys are rejected instead of dropped, required keys are
+            # enforced, numeric ranges are checked, and boolean flags go
+            # through strict boolean coercion.
+            pp_dist_raw = pp.get("distribution", {}) or {}
+            pp_type = ConfigParser._norm_name(pp_dist_raw.get("type", ""))
+            if pp_type:
+                pp_params = dict(pp_dist_raw.get("parameters", {}) or {})
+                pp_offset = float(self._as_num(pp_dist_raw, "offset", "distribution", 0.0) or 0.0)
+                self._validate_distribution(
+                    DistributionConfig(type=pp_type, parameters=pp_params, offset=pp_offset),
+                    f"parameter_priors[{pp_index}] ({pp.get('parameter')})",
+                )
 
-        # --- Identifiability: an absolute time axis needs either a clock rate
-        # that is estimated, or at least one absolute calibration. With a
-        # fixed clock rate and no calibration the timestamps are unidentified.
-        has_calibration = bool(calibrations)
+        # --- Time scale.  With no calibration and an estimated clock rate the
+        # node heights are only identifiable in expected-substitutions units:
+        # that is a limitation of what the configuration can express, stated
+        # here for the report, not an error to reject.  A fixed clock rate
+        # with known units (substitutions per site per time unit) supplies the
+        # absolute scale by itself, and tip dates or node calibrations supply
+        # it too — so none of these combinations is refused.
         fixed_clock = all(
             (p.clock_model.clock_rate is not None and not p.clock_model.clock_rate.estimate)
             or p.clock_model.linked_to
             for p in partitions
         ) and any(p.clock_model.clock_rate is not None for p in partitions)
-        if fixed_clock and not has_calibration:
-            raise ConfigError(
-                "The clock rate is fixed and no calibration is supplied, so absolute "
-                "time is not identifiable: node heights can only be estimated in "
-                "expected-substitutions-per-site units. Either estimate the clock rate "
-                "or add at least one absolute (e.g. fossil) calibration."
+        if fixed_clock and not calibrations:
+            self._time_scale_note = (
+                "clock rate fixed and no node calibration supplied: the analysis "
+                "is calibrated by the fixed clock rate alone; if its units are "
+                "not substitutions per site per absolute time unit, node ages "
+                "are in expected-substitution units"
             )
 
         # --- MCMC ---
@@ -1040,27 +1103,55 @@ class ConfigParser:
                         f"'filter' (e.g. codon positions '1::3,2::3' and '3::3')."
                     )
 
+    def _check_same_source_alignment(
+        self,
+        registered,
+        declared,
+        data_id: str,
+        aln_id: str,
+    ) -> None:
+        """Reject a reused ``data_id`` that names different sequence data.
+
+        The first registration of a ``data_id`` wins today, so a second file
+        declared under the same id would have its data silently replaced by
+        the first file's.  Content, taxa and data type must all agree.
+        """
+        problems = []
+        if registered.data_type != declared.data_type:
+            problems.append(
+                f"data type {declared.data_type.value} vs already-registered "
+                f"{registered.data_type.value}"
+            )
+        if registered.taxa_names != declared.taxa_names:
+            problems.append("different taxon names or order")
+        registered_seqs = {s.taxon: s.sequence for s in registered.sequences}
+        declared_seqs = {s.taxon: s.sequence for s in declared.sequences}
+        if registered_seqs != declared_seqs:
+            problems.append("different sequence content")
+        if problems:
+            raise ConfigError(
+                f"Alignment '{aln_id}': data_id '{data_id}' is already registered "
+                f"for other sequence data ({'; '.join(problems)}). A data_id must "
+                f"name one alignment: choose a distinct data_id, or point both "
+                f"alignments at the same file."
+            )
+
     def _validate_linked_model_consistency(self, partitions, partitions_raw, errors) -> None:
-        """Reject a ``linked_to`` that also declares a *different* model.
+        """Enforce the contract that ``linked_to`` replaces the whole model.
 
         When a partition links its site or clock model to another partition the
-        generator skips building its own model entirely, so anything declared
-        alongside the link was discarded without a word: ``gtr`` plus
-        ``linked_to: g1`` quietly produced a second copy of g1's HKY, and a
-        relaxed clock linked to a strict one quietly became strict. The analysis
-        that ran was not the one written.
-
-        Only fields the author actually wrote are compared: the dataclasses fill
-        in defaults (gamma_categories 0, clock type strict), and comparing those
-        against the target would reject the documented, correct "link and
-        declare nothing else" style used by the shipped examples.
+        generator skips building its own model entirely, so a partial
+        comparison of *some* declared fields could never be complete: any
+        declared field the comparison forgot would be discarded without a
+        word.  The reliable contract is therefore mutual exclusion —
+        ``linked_to`` plus any other model key is a configuration error — and
+        the documented style "link and declare nothing else" stays legal.
 
         Args:
             partitions: All parsed partitions.
             partitions_raw: The raw ``partitions`` list, for declared-key checks.
             errors: Accumulator list, extended in place.
         """
-        by_id = {p.id: p for p in partitions}
         raw_by_id = {r["id"]: r for r in partitions_raw if isinstance(r, dict) and "id" in r}
 
         for p in partitions:
@@ -1068,53 +1159,29 @@ class ConfigParser:
             raw_sm = raw.get("site_model", {}) or {}
             raw_cm = raw.get("clock_model", {}) or {}
 
-            target_id = p.site_model.linked_to
-            if target_id and target_id in by_id:
-                target = by_id[target_id].site_model
-                declared_sm = raw_sm.get("substitution_model")
-                if isinstance(declared_sm, dict) and "type" in declared_sm:
-                    mine = ConfigParser._norm_name(declared_sm.get("type"))
-                    theirs = ConfigParser._norm_name((target.substitution_model or {}).get("type"))
-                    if mine and theirs and mine != theirs:
-                        errors.append(
-                            f"Partition '{p.id}': site_model.linked_to '{target_id}' "
-                            f"replaces this partition's whole site model, but the two "
-                            f"declare different substitution models ({mine} vs "
-                            f"{theirs}). Linking silently discards {mine}; either drop "
-                            f"'substitution_model' here or stop linking."
-                        )
-                if "gamma_categories" in raw_sm:
-                    if p.site_model.gamma_categories != target.gamma_categories:
-                        errors.append(
-                            f"Partition '{p.id}': site_model.linked_to '{target_id}' "
-                            f"ignores this partition's gamma_categories="
-                            f"{p.site_model.gamma_categories}; the linked target uses "
-                            f"{target.gamma_categories}. Make them agree or stop linking."
-                        )
-                if "proportion_invariant" in raw_sm:
-                    if bool(p.site_model.proportion_invariant) != bool(target.proportion_invariant):
-                        missing = "does not " if not target.proportion_invariant else ""
-                        errors.append(
-                            f"Partition '{p.id}': site_model.linked_to '{target_id}' "
-                            f"ignores this partition's proportion_invariant setting; "
-                            f"the linked target {missing}use one. Make them agree or "
-                            f"stop linking."
-                        )
+            sm_link = raw_sm.get("linked_to")
+            if sm_link and sm_link in raw_by_id:
+                extras = sorted(key for key in raw_sm if key != "linked_to")
+                if extras:
+                    errors.append(
+                        f"Partition '{p.id}': site_model.linked_to '{sm_link}' "
+                        f"replaces this partition's whole site model, so declaring "
+                        f"{', '.join(extras)} alongside is not allowed: those "
+                        f"settings would be silently discarded. Remove them, or "
+                        f"drop the link and declare the model explicitly."
+                    )
 
-            clock_target_id = p.clock_model.linked_to
-            if clock_target_id and clock_target_id in by_id:
-                if "type" in raw_cm:
-                    mine = getattr(p.clock_model.type, "value", p.clock_model.type)
-                    target_clock = by_id[clock_target_id].clock_model
-                    theirs = getattr(target_clock.type, "value", target_clock.type)
-                    if mine and theirs and mine != theirs:
-                        errors.append(
-                            f"Partition '{p.id}': clock_model.linked_to "
-                            f"'{clock_target_id}' reuses that partition's clock, but "
-                            f"this partition declares type '{mine}' while "
-                            f"'{clock_target_id}' uses '{theirs}'. Linking discards "
-                            f"'{mine}' and runs '{theirs}' instead."
-                        )
+            cm_link = raw_cm.get("linked_to")
+            if cm_link and cm_link in raw_by_id:
+                extras = sorted(key for key in raw_cm if key != "linked_to")
+                if extras:
+                    errors.append(
+                        f"Partition '{p.id}': clock_model.linked_to '{cm_link}' "
+                        f"replaces this partition's whole clock model, so declaring "
+                        f"{', '.join(extras)} alongside is not allowed: those "
+                        f"settings would be silently discarded. Remove them, or "
+                        f"drop the link and declare the model explicitly."
+                    )
 
     @staticmethod
     def parse_filter_terms(expr: str, n_sites: int, aln_id: str) -> List[range]:
@@ -1267,7 +1334,11 @@ class ConfigParser:
                 # sampling through rho *or* sampling_rate, leaving the other at 0.
                 ("birth_rate", 0.0, None, True),
                 ("death_rate", 0.0, None, False),
-                ("sampling_rate", 0.0, 1.0, False),
+                # BDSKY's samplingRate is a rate with time dimension, not a
+                # proportion: it has no upper bound at 1 (rho is the
+                # proportion input, below).  A change of time units changes
+                # its legitimate values, so only non-negativity is enforced.
+                ("sampling_rate", 0.0, None, False),
                 ("rho", 0.0, 1.0, False),
             ):
                 if key not in params:
@@ -1356,8 +1427,44 @@ class ConfigParser:
                 f"time zero, which silently turns those lineages into contemporaneous "
                 f"samples. Supply a date for every tip, or disable tip_dates."
             )
+
+        # Explicitly uncertain sampling dates: only these tips are given a
+        # TipDatesRandomWalker.  A mapping gives one proposal window per taxon
+        # (in the same units as the dates); a plain list uses a default window.
+        uncertain: Dict[str, float] = {}
+        raw_uncertain = td_raw.get("uncertain") or {}
+        if isinstance(raw_uncertain, dict):
+            entries: List[Tuple[str, Any]] = [
+                (str(taxon), window) for taxon, window in raw_uncertain.items()
+            ]
+        elif isinstance(raw_uncertain, list):
+            entries = [(str(taxon), 1.0) for taxon in raw_uncertain]
+        else:
+            raise ConfigError(
+                "tip_dates.uncertain must be a mapping of taxon name to proposal "
+                "window, or a list of taxon names"
+            )
+        for taxon, window in entries:
+            taxon = str(taxon)
+            if taxon not in dates:
+                raise ConfigError(
+                    f"tip_dates.uncertain names {taxon!r}, which has no entry in "
+                    f"tip_dates.dates; only dated tips can be estimated"
+                )
+            window_value = self._as_num({"w": window}, "w", f"tip_dates.uncertain.{taxon}")
+            if window_value <= 0:
+                raise ConfigError(
+                    f"tip_dates.uncertain.{taxon}: window must be > 0, got {window_value}"
+                )
+            uncertain[taxon] = window_value
+
         return TipDatesConfig(
-            enabled=True, trait_name=trait_name, units=units, dates=dates, file=csv_file
+            enabled=True,
+            trait_name=trait_name,
+            units=units,
+            dates=dates,
+            file=csv_file,
+            uncertain=uncertain,
         )
 
     @staticmethod
@@ -1700,9 +1807,13 @@ class ConfigParser:
                 f"while still appearing as a column in the trace."
             )
 
-        # Parse gamma shape
+        # Parse gamma shape: only meaningful when there is more than one
+        # category. SiteModel.java documents the shape input as 'Ignored if
+        # gammaCategoryCount 1 or less', so with a single category no shape
+        # parameter is created at all — an estimated one would be a pure
+        # prior random walk contributing nothing to the likelihood.
         gamma_shape = None
-        if gamma_cats > 0:
+        if gamma_cats > 1:
             gs_raw = sm_raw.get("gamma_shape")
             if gs_raw:
                 gamma_shape = self._parse_real_parameter(gs_raw, f"'{partition_id}'.gamma_shape")
@@ -1865,7 +1976,7 @@ class ConfigParser:
             parameters = dict(dist_raw.get("parameters", {}) or {})
             offset = self._as_num(dist_raw, "offset", f"Calibration '{name}'", 0.0) or 0.0
             dist = DistributionConfig(type=dist_type, parameters=parameters, offset=float(offset))
-            self._validate_distribution(dist, name)
+            self._validate_distribution(dist, f"Calibration '{name}'")
             hp_raw = dist_raw.get("hyperpriors", {}) or {}
 
         # Parse provenance
@@ -1913,8 +2024,33 @@ class ConfigParser:
                     )
 
         # Parse hyperpriors
+        hyperpriors = self._parse_distribution_hyperpriors(dist, hp_raw, name)
+
+        return CalibrationPoint(
+            name=name,
+            taxa=taxa,
+            monophyletic=monophyletic,
+            distribution=dist,
+            use_originate=use_originate,
+            tipsonly=tipsonly,
+            provenance=provenance,
+            hyperpriors=hyperpriors,
+        )
+
+    def _parse_distribution_hyperpriors(
+        self,
+        dist: Optional[DistributionConfig],
+        hp_raw: Dict[str, Any],
+        name: str,
+    ) -> Dict[str, HyperpriorConfig]:
+        """Parse a calibration distribution's ``hyperpriors`` block.
+
+        Shared by the full configuration path and the calibration-only YAML
+        used by ``quick`` mode, so a hyperprior accepted in one is accepted in
+        the other.
+        """
         hyperpriors: Dict[str, HyperpriorConfig] = {}
-        for param_name, hp_config in hp_raw.items():
+        for param_name, hp_config in (hp_raw or {}).items():
             where_hp = f"Calibration '{name}': hyperpriors.{param_name}"
             if not isinstance(hp_config, dict):
                 raise ConfigError(f"{where_hp}: must be a mapping")
@@ -1935,21 +2071,11 @@ class ConfigParser:
                 parameters=dict(hp_config.get("parameters", {}) or {}),
                 offset=float(self._as_num(hp_config, "offset", where_hp, 0.0) or 0.0),
             )
-            self._validate_distribution(hp_dist, f"{name} hyperprior {param_name}")
+            self._validate_distribution(hp_dist, f"Calibration '{name}' hyperprior {param_name}")
             hyperpriors[param_name] = HyperpriorConfig(
                 type=hp_type, parameters=hp_dist.parameters, offset=hp_dist.offset
             )
-
-        return CalibrationPoint(
-            name=name,
-            taxa=taxa,
-            monophyletic=monophyletic,
-            distribution=dist,
-            use_originate=use_originate,
-            tipsonly=tipsonly,
-            provenance=provenance,
-            hyperpriors=hyperpriors,
-        )
+        return hyperpriors
 
     def _validate_distribution(self, dist: DistributionConfig, where: str) -> None:
         """Range-check a parametric distribution.
@@ -1979,7 +2105,7 @@ class ConfigParser:
         unknown = set(params) - allowed
         if unknown:
             raise ConfigError(
-                f"Calibration '{where}': {dist.type} accepts "
+                f"{where}: {dist.type} accepts "
                 f"{sorted(canonical) or 'no parameters'}, but got unrecognised "
                 f"key(s) {sorted(unknown)}. An unknown key is dropped without a "
                 f"word and BEAST2 substitutes its own default, so the prior that "
@@ -1988,7 +2114,7 @@ class ConfigParser:
         missing = self.DISTRIBUTION_REQUIRED.get(dist.type, set()) - set(params)
         if missing:
             raise ConfigError(
-                f"Calibration '{where}': {dist.type} is missing required "
+                f"{where}: {dist.type} is missing required "
                 f"parameter(s) {sorted(missing)}; BEAST2 would silently fall back "
                 f"to its own defaults and sample a different prior."
             )
@@ -2014,32 +2140,26 @@ class ConfigParser:
             if key not in params:
                 continue
             try:
-                val = as_number(params[key], f"Calibration '{where}': {key}")
+                val = as_number(params[key], f"{where}: {key}")
             except ValueError as exc:
                 raise ConfigError(str(exc)) from exc
             if range_spec is None:
                 continue
             lo, hi = range_spec
             if lo is not None and val <= lo:
-                raise ConfigError(
-                    f"Calibration '{where}': {dist.type}.{key} = {val} must be > {lo}"
-                )
+                raise ConfigError(f"{where}: {dist.type}.{key} = {val} must be > {lo}")
             if hi is not None and val >= hi:
-                raise ConfigError(
-                    f"Calibration '{where}': {dist.type}.{key} = {val} must be < {hi}"
-                )
+                raise ConfigError(f"{where}: {dist.type}.{key} = {val} must be < {hi}")
         if dist.type == "uniform":
             lower = params.get("lower", params.get("min"))
             upper = params.get("upper", params.get("max"))
             if lower is None or upper is None:
-                raise ConfigError(
-                    f"Calibration '{where}': uniform requires both 'lower' and 'upper'"
-                )
+                raise ConfigError(f"{where}: uniform requires both 'lower' and 'upper'")
             lo = as_number(lower, f"'{where}'.uniform.lower")
             hi = as_number(upper, f"'{where}'.uniform.upper")
             if lo + dist.offset >= hi + dist.offset:
                 raise ConfigError(
-                    f"Calibration '{where}': uniform lower ({lo}) must be strictly below "
+                    f"{where}: uniform lower ({lo}) must be strictly below "
                     f"upper ({hi}); as given, the density is zero on the whole support."
                 )
         if dist.type == "chi_square":
@@ -2048,7 +2168,7 @@ class ConfigParser:
                 value = as_number(dof, f"'{where}'.chi_square.dof")
                 if value != int(value):
                     raise ConfigError(
-                        f"Calibration '{where}': chi_square.dof = {value} must be an "
+                        f"{where}: chi_square.dof = {value} must be an "
                         f"integer; BEAST2's ChiSquare takes an IntegerParameter."
                     )
         if dist.type == "lognormal":
@@ -2064,7 +2184,7 @@ class ConfigParser:
             if params.get("mean_in_real_space") and "M" in params:
                 if as_number(params["M"], f"'{where}'.lognormal.M") <= 0:
                     raise ConfigError(
-                        f"Calibration '{where}': lognormal M must be > 0 when "
+                        f"{where}: lognormal M must be > 0 when "
                         f"mean_in_real_space is true (M is then the real-space mean). "
                         f"With mean_in_real_space false, M is the log-scale mean and any "
                         f"real value is valid."

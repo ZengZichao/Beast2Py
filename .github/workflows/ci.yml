@@ -248,8 +248,14 @@ jobs:
           bash -n "$tree/beast2_validate.sh"
           # Collecting from the unpacked tree is what proves a source install can
           # run the suite it documents; a missing fixture file aborts collection.
+          # The fast, BEAST2-free tests then actually RUN there: collect-only
+          # cannot see run-time resource gaps (.zenodo.json, workflow files)
+          # that only surface when the release-integrity tests execute.
           (cd "$tree" && python -m pip install --quiet pytest && \
             python -m pytest --collect-only -q -p no:cacheprovider tests/ | tail -1)
+          (cd "$tree" && python -m pytest -q -p no:cacheprovider \
+            --ignore=tests/test_beast2_validation.py -m "not slow" \
+            -k "release_integrity or coverage_fixtures" tests/)
       - name: Assert the licence files ship in the wheel
         # license-files in pyproject.toml (PEP 639) is what puts the MIT text
         # and the LGPL-2.1 notice for the vendored BEAST2 classes into the

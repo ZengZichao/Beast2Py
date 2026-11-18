@@ -16,7 +16,7 @@ from beast2py.diagnostics import (
     DiagnosticEngine,
     ReportGenerator,
 )
-from beast2py.models import CalibrationPoint, DistributionConfig
+from beast2py.models import CalibrationPoint, DistributionConfig, HyperpriorConfig
 
 from .conftest import TEST_FASTA, TEST_MULTI_CAL_YAML
 
@@ -56,11 +56,42 @@ class TestStructuralConflicts:
         assert [c for c in conflicts if c.severity == "error"] == []
 
     def test_parent_younger_than_child_is_temporal_error(self):
-        parent = cal("parent", ["A", "B", "C"], mean=3.0, sigma=0.5)
-        child = cal("child", ["A", "B"], mean=10.0, sigma=1.0)
+        # Only a zero-measure support overlap is a hard temporal error.
+        parent = cal("parent", ["A", "B", "C"], "uniform", lower=2.0, upper=4.0)
+        child = cal("child", ["A", "B"], "uniform", lower=8.0, upper=10.0)
         conflicts = ConflictDetector.detect_conflicts([parent, child])
         errors = [c for c in conflicts if c.severity == "error"]
         assert errors and errors[0].conflict_type == "temporal"
+
+    def test_separated_normal_intervals_on_same_support_are_tension_not_error(self):
+        # Normal(10,1) vs Normal(15,1): 95% intervals are disjoint but the
+        # supports overlap everywhere, so P(parent > child) > 0.  This is a
+        # warning, not a structural impossibility.
+        a = cal("a", ["A", "B"], mean=10.0, sigma=1.0)
+        b = cal("b", ["A", "B"], mean=15.0, sigma=1.0)
+        conflicts = ConflictDetector.detect_conflicts([a, b])
+        assert not [c for c in conflicts if c.severity == "error"]
+        hits = [c for c in conflicts if c.conflict_type == "same_node"]
+        assert len(hits) == 1 and hits[0].severity == "warning"
+        assert "tension" in hits[0].description
+
+    def test_separated_parent_child_normals_are_temporal_warning(self):
+        parent = cal("parent", ["A", "B", "C"], mean=3.0, sigma=0.5)
+        child = cal("child", ["A", "B"], mean=10.0, sigma=1.0)
+        conflicts = ConflictDetector.detect_conflicts([parent, child])
+        assert not [c for c in conflicts if c.severity == "error"]
+        hits = [c for c in conflicts if c.conflict_type == "temporal"]
+        assert len(hits) == 1 and hits[0].severity == "warning"
+
+    def test_endpoint_contact_of_uniform_supports_is_error(self):
+        # Uniform(1,2) and Uniform(2,3) touch at the single point 2: no
+        # positive-measure common support, so no node age satisfies both.
+        a = cal("a", ["A", "B"], "uniform", lower=1.0, upper=2.0)
+        b = cal("b", ["A", "B"], "uniform", lower=2.0, upper=3.0)
+        conflicts = ConflictDetector.detect_conflicts([a, b])
+        errors = [c for c in conflicts if c.severity == "error"]
+        assert len(errors) == 1 and errors[0].conflict_type == "same_node"
+        assert "positive measure" in errors[0].description
 
     def test_intersecting_non_nested_monophyletic_is_topology_error(self):
         a = cal("calA", ["A", "B", "C"], mean=5.0, sigma=0.5)
@@ -90,12 +121,22 @@ class TestSameNode:
         hits = [c for c in conflicts if c.conflict_type == "duplicate"]
         assert len(hits) == 1 and hits[0].severity == "warning"
 
-    def test_disjoint_distributions_on_same_node_is_error(self):
-        a = cal("a", ["A", "B"], mean=5.0, sigma=0.2)
-        b = cal("b", ["A", "B"], mean=20.0, sigma=0.2)
+    def test_zero_measure_support_overlap_on_same_node_is_error(self):
+        a = cal("a", ["A", "B"], "uniform", lower=4.0, upper=6.0)
+        b = cal("b", ["A", "B"], "uniform", lower=19.0, upper=21.0)
         conflicts = ConflictDetector.detect_conflicts([a, b])
         hits = [c for c in conflicts if c.conflict_type == "same_node"]
         assert len(hits) == 1 and hits[0].severity == "error"
+
+    def test_disjoint_normal_intervals_on_same_node_are_warning(self):
+        # Normal(5,0.2) vs Normal(20,0.2): the product density is still
+        # normalisable, so separated 95% intervals are tension, not error.
+        a = cal("a", ["A", "B"], mean=5.0, sigma=0.2)
+        b = cal("b", ["A", "B"], mean=20.0, sigma=0.2)
+        conflicts = ConflictDetector.detect_conflicts([a, b])
+        assert not [c for c in conflicts if c.severity == "error"]
+        hits = [c for c in conflicts if c.conflict_type == "same_node"]
+        assert len(hits) == 1 and hits[0].severity == "warning"
 
     def test_overlapping_different_distributions_is_warning(self):
         a = cal("a", ["A", "B"], mean=10.0, sigma=2.0)
@@ -113,9 +154,10 @@ class TestSameNode:
 
 class TestCrownStem:
     def test_crown_and_stem_on_same_taxon_set_are_parent_and_child(self):
-        # Stem is the parent; a stem younger than the crown is impossible.
-        crown = cal("crown", ["A", "B"], mean=20.0, sigma=0.5)
-        stem = cal("stem", ["A", "B"], mean=5.0, sigma=0.5, use_originate=True)
+        # Stem is the parent; a stem whose support cannot reach the crown's
+        # support is a hard temporal impossibility.
+        crown = cal("crown", ["A", "B"], "uniform", lower=19.0, upper=21.0)
+        stem = cal("stem", ["A", "B"], "uniform", lower=4.0, upper=6.0, use_originate=True)
         conflicts = ConflictDetector.detect_conflicts([crown, stem])
         assert "temporal" in types(conflicts)
         assert [c for c in conflicts if c.severity == "error"]
@@ -434,9 +476,11 @@ class TestCrownStemTruthTable:
         (("intersecting", True, False), ("checked", ["topology"])),
         (("intersecting", True, True), ("checked", ["topology"])),
         (("disjoint", False, False), ("not_applicable", [])),
-        (("disjoint", False, True), ("not_applicable", [])),
-        (("disjoint", True, False), ("not_applicable", [])),
-        (("disjoint", True, True), ("not_applicable", [])),
+        (("disjoint", False, True), ("unchecked", ["unchecked"])),
+        (("disjoint", True, False), ("unchecked", ["unchecked"])),
+        # {A,B} and {C,D} are both monophyletic and cover every taxon, so both
+        # stems are necessarily the root: the same node, compared as such.
+        (("disjoint", True, True), ("checked", ["same_node"])),
     ]
 
     SETS = {
@@ -484,3 +528,81 @@ class TestCrownStemTruthTable:
             assessments = ConflictDetector.assess([a, b], all_taxa=set(self.ALL))
             assert assessments[0].status == "not_applicable"
             assert not [c for c in assessments[0].conflicts if c.severity == "error"]
+
+
+class TestStemNodeIdentity:
+    """Determinate stem->root identities that used to be missed.
+
+    Different taxon sets do not imply different nodes: a stem can only sit
+    above a clade, and in simple topologies the stem is forced to be the
+    root.  Undecidable stem identities must be reported as unchecked, never
+    silently treated as independent nodes.
+    """
+
+    ALL4 = {"A", "B", "C", "D"}
+
+    def test_complementary_monophyletic_stems_are_the_same_root_node(self):
+        a = cal("a", ["A", "B"], "uniform", lower=10.0, upper=11.0, use_originate=True)
+        b = cal("b", ["C", "D"], "uniform", lower=20.0, upper=21.0, use_originate=True)
+        assessments = ConflictDetector.assess([a, b], all_taxa=set(self.ALL4))
+        assert assessments[0].status == "checked"
+        errors = [c for c in assessments[0].conflicts if c.severity == "error"]
+        assert len(errors) == 1 and errors[0].conflict_type == "same_node"
+        assert "positive measure" in errors[0].description
+
+    def test_stem_with_singleton_complement_is_the_root_calibration(self):
+        # all = {A,B,C}; {A,B} monophyletic => stem({A,B}) is necessarily the
+        # root, i.e. the same node as an explicit root calibration.
+        root = cal("root", None, "uniform", lower=10.0, upper=11.0)
+        stem_ab = cal("stem_ab", ["A", "B"], "uniform", lower=20.0, upper=21.0, use_originate=True)
+        assessments = ConflictDetector.assess([root, stem_ab], all_taxa={"A", "B", "C"})
+        assert assessments[0].relation == "same_node"
+        errors = [c for c in assessments[0].conflicts if c.severity == "error"]
+        assert len(errors) == 1 and errors[0].conflict_type == "same_node"
+
+    def test_disjoint_stem_without_identity_evidence_is_unchecked(self):
+        a = cal("a", ["A", "B"], mean=10.0, sigma=1.0, use_originate=True)
+        b = cal("b", ["C", "D", "E"], mean=20.0, sigma=1.0, use_originate=True)
+        # {A,B} ∪ {C,D,E} ≠ all taxa: the two stems may or may not be the
+        # same node, which cannot be decided from the taxon sets alone.
+        assessments = ConflictDetector.assess([a, b], all_taxa={"A", "B", "C", "D", "E", "F"})
+        assert assessments[0].status == "unchecked"
+        assert [c.conflict_type for c in assessments[0].conflicts] == ["unchecked"]
+
+
+class TestHyperpriorAwareComparison:
+    """Densities with hyperpriors are conditional, not marginal priors."""
+
+    def _cal_with_hyper(self, mean_hp_upper):
+        point = cal("a", ["A", "B"], mean=5.0, sigma=0.5)
+        point.hyperpriors = {
+            "mean": HyperpriorConfig(
+                type="uniform", parameters={"lower": 0.0, "upper": mean_hp_upper}
+            )
+        }
+        return point
+
+    def test_hyperprior_pair_is_unchecked_not_temporal_error(self):
+        a = self._cal_with_hyper(40.0)
+        b = cal("b", ["A", "B"], mean=20.0, sigma=0.5)
+        conflicts = ConflictDetector.detect_conflicts([a, b])
+        assert [c for c in conflicts if c.severity == "error"] == []
+        assert [c.conflict_type for c in conflicts] == ["unchecked"]
+        assert "conditional" in conflicts[0].description
+
+    def test_same_initial_params_different_hyperpriors_are_not_duplicate(self):
+        a = self._cal_with_hyper(10.0)
+        b = self._cal_with_hyper(40.0)
+        conflicts = ConflictDetector.detect_conflicts([a, b])
+        assert [c.conflict_type for c in conflicts] == ["unchecked"]
+        assert "duplicate" not in types(conflicts)
+
+    def test_identical_distribution_and_hyperprior_is_unchecked_too(self):
+        # Even fully identical declarations with hyperpriors are reported as
+        # unchecked: the density is conditional, and Gate 2 does not arbitrate
+        # whether the doubled constraint was intended.
+        a = self._cal_with_hyper(40.0)
+        b = self._cal_with_hyper(40.0)
+        conflicts = ConflictDetector.detect_conflicts([a, b])
+        assert [c.conflict_type for c in conflicts] == ["unchecked"]
+        assert "duplicate" not in types(conflicts)

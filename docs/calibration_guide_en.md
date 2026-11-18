@@ -77,7 +77,7 @@ Always assess the marginal influence of each calibration point:
 beast2py diagnose --config config.yaml --report report.html --sensitivity
 ```
 
-This generates N+1 prior-only sampling XMLs (N is the number of calibrations): one with the full calibration set, plus N leave-one-out variants. They land in a `sensitivity/` subfolder of `<report dir>/diagnostics`, or of the directory given by `--sensitivity-xml-dir`. Run each XML with BEAST2, then compare the tree height and the calibrated node ages between the full run and each leave-one-out run. These chains sample from the prior, so the comparison is about the **effective marginal prior** each calibration set induces; it says nothing about a posterior, because no likelihood is involved. Choose the chain length, sampling interval and burn-in yourself, decide an ESS criterion before running, and report all three with the result — a prior-only run is not automatically cheap or automatically converged.
+This generates N+1 prior-only sampling XMLs (N is the number of calibrations): one with the full calibration set, plus N leave-one-out variants. They land in a `sensitivity/` subfolder of `<report dir>/diagnostics`, or of the directory given by `--sensitivity-xml-dir`. Run each XML with BEAST2, then compare the tree height and the calibrated node ages between the full run and each leave-one-out run. These chains sample from the prior, so the comparison is about the **effective marginal prior** each calibration set induces; it says nothing about a posterior, because no likelihood is involved. Keep the two curve kinds apart: a prior-only chain yields *effective* prior samples, shaped by the whole model (tree prior, constraints, other calibrations), while the *specified* density curve is the analytic distribution written in the YAML — the two are not draws from the same object, and comparing them is exactly what makes the effective prior visible. Likewise, a joint effective prior is the distribution of the age *vector* on shared iterations; per-column medians of one log are a pile of marginals and lose that dependence structure. Choose the chain length, sampling interval and burn-in yourself, decide an ESS criterion before running, and report all three with the result — a prior-only run is not automatically cheap or automatically converged.
 
 ## Common Pitfalls
 
@@ -85,7 +85,7 @@ This generates N+1 prior-only sampling XMLs (N is the number of calibrations): o
 
 **Problem**: The calibration prior overwhelms the sequence data, making the posterior indistinguishable from the prior.
 
-**Solution**: Check the prior-only sampling result against the posterior. If they are identical, the prior is too informative. The same effect is visible without an extra run when the model is over-constrained: the trace simply tracks the prior HPD.
+**Solution**: Check the prior-only sampling result against the posterior. If they are identical, the data carry little information about that marginal quantity — the update from prior to posterior is limited. That is not, by itself, evidence that the prior is "too strong", and it is never a reason to delete or narrow a well-justified fossil calibration: identical curves can also mean the alignment is simply uninformative about that node. Diagnose the data's informativeness before touching a defensible fossil prior. The same limited-update effect is visible without an extra run when the model is over-constrained: the trace simply tracks the prior HPD.
 
 ### 2. Conflicting Calibrations
 

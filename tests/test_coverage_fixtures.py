@@ -74,17 +74,36 @@ def test_coalescent_constant_fixture_initialises_a_population_model():
     )
 
 
-def test_nonzero_tip_dates_operator_targets_only_dated_taxa():
+def test_uncertain_tip_dates_each_gain_a_windowed_walker():
     _, xml = _generate("config_tip_dates_nonzero")
     root = ET.fromstring(xml)
     walkers = [
         e for e in root.iter() if e.tag == "operator" and e.get("spec") == "TipDatesRandomWalker"
     ]
-    assert len(walkers) == 1
-    taxonset_id = walkers[0].get("taxonset").lstrip("@")
-    taxonset = next(e for e in root.iter() if e.tag == "taxonset" and e.get("id") == taxonset_id)
-    refs = {child.get("idref") or child.get("id") for child in taxonset}
-    assert refs == {"taxonB", "taxonC", "taxonD"}
+    # One operator per explicitly uncertain tip; the fixed tip (taxonA) has none.
+    assert len(walkers) == 3
+    covered = set()
+    for walker in walkers:
+        taxonset_id = walker.get("taxonset").lstrip("@")
+        taxonset = next(
+            e for e in root.iter() if e.tag == "taxonset" and e.get("id") == taxonset_id
+        )
+        refs = {child.get("idref") or child.get("id") for child in taxonset}
+        assert len(refs) == 1
+        covered |= refs
+    assert covered == {"taxonB", "taxonC", "taxonD"}
+
+
+def test_determined_tip_dates_are_never_moved():
+    # Same fixture without the explicit uncertainty declaration: the dates are
+    # observations, so no TipDatesRandomWalker may exist even though three of
+    # them are non-zero.
+    config, _ = _generate("config_tip_dates_nonzero")
+    config.tip_dates.uncertain = {}
+    root = ET.fromstring(XMLWriter(config).generate_xml())
+    assert not [
+        e for e in root.iter() if e.tag == "operator" and e.get("spec") == "TipDatesRandomWalker"
+    ]
 
 
 def test_all_zero_tip_dates_do_not_emit_a_walker():

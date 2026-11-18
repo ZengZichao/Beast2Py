@@ -75,8 +75,7 @@ partitions:
     site_model:
       linked_to: "codon12"     # 与 codon12 共享位点模型（link）
     clock_model:
-      type: "ucln"
-      linked_to: "codon12"     # 共享时钟（link）
+      linked_to: "codon12"     # 共享时钟（link；link 与本地模型参数互斥，类型随目标）
     tree: "shared"
 
 # --- 树先验 ---

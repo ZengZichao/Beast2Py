@@ -30,6 +30,12 @@ tip_dates:
     taxonB: 500
     taxonC: 1000
     taxonD: 2000
+  # Only taxonB/taxonC/taxonD dates are to be estimated; taxonA is a fixed
+  # (contemporaneous) observation and must not gain an operator.
+  uncertain:
+    taxonB: 25
+    taxonC: 50
+    taxonD: 100
 
 tree_prior:
   type: "coalescent_constant"

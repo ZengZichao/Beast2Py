@@ -27,7 +27,7 @@ Beast2Py is a Python framework for **standardizing, validating, and diagnosing n
 | **Calibration conflict detection** | Automatic detection of same-node contradictions, nested temporal inconsistencies, and intersecting non-nested monophyly constraints; crown/stem-aware and with explicit `unchecked` pairs, i.e. pairs the static detector cannot put in age order. Prior similarity (`prior_similarity`) is a separate, opt-in descriptive report, not a conflict |
 | **Prior sensitivity analysis** | Automatic generation of "prior-only sampling" XMLs to evaluate the marginal impact of calibration priors. The analysis is prior-level only: those XMLs sample the prior, and Beast2Py neither runs nor reads a posterior |
 | **Calibration provenance metadata** | Each calibration point records fossil source, reference DOI, and calibration type (`hard`/`soft` bound) |
-| **Reproducibility framework** | YAML configuration versioning + analysis fingerprint + LaTeX methods description + Snakemake/Nextflow pipeline generation |
+| **Reproducibility framework** | YAML configuration versioning + analysis fingerprint + LaTeX methods description + Snakemake/Nextflow workflow template generation |
 
 ### Three-Tier Feature Set
 
@@ -225,7 +225,7 @@ In addition, `calibrations.yaml` provides a calibration-only YAML for the `quick
 
 - `beast2py/` — Source code of the Beast2Py Python package (CLI, API, configuration parsing, XML generation, diagnostics, reproducibility, and validation modules)
 - `examples/` — 19 example configurations, example alignments (FASTA), and example output artifacts
-- `tests/` — Test suite (559 collected tests: 538 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
+- `tests/` — Test suite (624 collected tests: 603 unit, semantic and release-integrity tests + 21 BEAST2 integration tests)
 - `beast2py/tools/` — Headless BEAST2 validation helper bundled *inside* the package (`Beast2Validator.java` source plus the precompiled `classes/` and `launcher.jar`), shipped as `package-data` by `pyproject.toml`; the repository root keeps only a thin `beast2_validate.sh` wrapper
 - `docs/` — User manual, architecture guide, tutorial, calibration guide, and XML format guide (Chinese and English), plus the capability coverage matrix (English only)
 - `beast2_validate.sh` — Launcher script for headless BEAST2 validation (needs `BEAST.base.jar` and JDK 17 or newer; it auto-detects `~/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar`, or set `BEAST2_JAR`)
@@ -320,7 +320,7 @@ continues on 2.7.7, so a green Gate 3 does not prove which version ran. What has
 2.7.8 band; other 2.7.x releases are untested. The `integration` job prints the version it
 resolved, so the exact combination is visible in the run log rather than assumed.
 
-The test suite comprises 559 collected tests (538 unit/semantic/release-integrity + 21 BEAST2
+The test suite comprises 624 collected tests (603 unit/semantic/release-integrity + 21 BEAST2
 integration). The integration tests generate XML from all 19 example
 configurations plus the `quick` path and the committed `output_basic.xml`, and
 check each with the real BEAST2 parser and model initialisation. When the
@@ -333,7 +333,7 @@ Beast2Py generates the following reproducibility artifacts:
 - **Analysis fingerprint** — deterministic identifier `B2P-{sha256(config)[:12]}-{version}` (e.g. `B2P-3f43bfab58c3-0.2.0`). It contains **no date component**, so the same configuration plus the same alignment data yields the same bytes and the same identifier in any time zone and at any rerun time. Renaming the output file does not change the fingerprint; changing the sequence content, the tree setting, a crown/stem flag, a hyperprior, a parameter prior, a tip date or an operator weight does
 - **Data digest** — besides the identifier, the XML comment carries a separate digest: 16 hex characters over the alignment *content*. The wall-clock generation time appears only in the `.fingerprint.json` sidecar file, never in the XML
 - **LaTeX methods description** — Publication-ready methods paragraph
-- **Snakemake/Nextflow pipeline** — End-to-end reproducible workflow files
+- **Snakemake/Nextflow workflow templates** — Reproducible workflow files (templates: review before running on a cluster)
 - **Calibration provenance** — Fossil source, reference DOI, and calibration type for each calibration point
 
 ## Roadmap

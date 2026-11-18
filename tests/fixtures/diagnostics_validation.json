@@ -21,10 +21,10 @@
     },
     {
       "id": "same_node_mutually_exclusive",
-      "description": "The same node constrained by two disjoint priors: a same-node error, not a similarity between independent clades.",
+      "description": "The same node constrained by two priors with no common support of positive measure (the uniform supports only touch at most): a structural same-node error.",
       "calibrations": [
-        {"name": "hominidae_v1", "taxa": ["A", "B"], "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}},
-        {"name": "hominidae_v2", "taxa": ["A", "B"], "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}}
+        {"name": "hominidae_v1", "taxa": ["A", "B"], "distribution": {"type": "uniform", "parameters": {"lower": 10.0, "upper": 12.0}, "offset": 0.0}},
+        {"name": "hominidae_v2", "taxa": ["A", "B"], "distribution": {"type": "uniform", "parameters": {"lower": 20.0, "upper": 22.0}, "offset": 0.0}}
       ],
       "expected": {"errors": 1, "warnings": 0, "topology": 0, "temporal": 0, "same_node": 1, "unchecked": 0, "status": "checked"}
     },
@@ -39,10 +39,10 @@
     },
     {
       "id": "parent_younger_than_child",
-      "description": "A nested parent whose entire 95% interval is younger than its child's: a temporal error.",
+      "description": "A nested parent whose support lies wholly below the child's support: no tree can satisfy both, a temporal error. (Separated 95% intervals on overlapping supports would only be tension, a warning.)",
       "calibrations": [
-        {"name": "parent", "taxa": ["A", "B", "C"], "distribution": {"type": "normal", "parameters": {"mean": 6.0, "sigma": 0.3}}},
-        {"name": "child", "taxa": ["A", "B"], "distribution": {"type": "normal", "parameters": {"mean": 15.0, "sigma": 0.5}}}
+        {"name": "parent", "taxa": ["A", "B", "C"], "distribution": {"type": "uniform", "parameters": {"lower": 5.0, "upper": 7.0}, "offset": 0.0}},
+        {"name": "child", "taxa": ["A", "B"], "distribution": {"type": "uniform", "parameters": {"lower": 10.0, "upper": 12.0}, "offset": 0.0}}
       ],
       "expected": {"errors": 1, "warnings": 0, "topology": 0, "temporal": 1, "same_node": 0, "unchecked": 0, "status": "checked"}
     },
@@ -75,10 +75,10 @@
     },
     {
       "id": "crown_stem_same_set_violation",
-      "description": "Crown and stem of the same taxon set are parent and child. A stem prior younger than the crown prior is a temporal error.",
+      "description": "Crown and stem of the same taxon set are parent and child. A stem prior whose support cannot reach the crown prior's support is a temporal error.",
       "calibrations": [
-        {"name": "crown", "taxa": ["A", "B", "C"], "distribution": {"type": "exponential", "parameters": {"mean": 2.5}, "offset": 50.0}},
-        {"name": "stem", "taxa": ["A", "B", "C"], "use_originate": true, "distribution": {"type": "exponential", "parameters": {"mean": 2.0}, "offset": 10.0}}
+        {"name": "crown", "taxa": ["A", "B", "C"], "distribution": {"type": "uniform", "parameters": {"lower": 20.0, "upper": 22.0}, "offset": 0.0}},
+        {"name": "stem", "taxa": ["A", "B", "C"], "use_originate": true, "distribution": {"type": "uniform", "parameters": {"lower": 5.0, "upper": 7.0}, "offset": 0.0}}
       ],
       "expected": {"errors": 1, "warnings": 0, "topology": 0, "temporal": 1, "same_node": 0, "unchecked": 0, "status": "checked"}
     },

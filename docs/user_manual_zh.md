@@ -50,7 +50,7 @@ Beast2Py 从 YAML 配置生成完整的 BEAST2 XML，支持的模型包括：
 
 该工具支持多分区分析（含密码子分区），可在各分区之间链接或断开模型；所有分区都装配在同一棵链接拓扑上（见[第 12 节](#12-多分区分析)）。
 
-诊断方面，Beast2Py 提供结构化的校准诊断（同一节点矛盾、嵌套时间顺序、相交非嵌套单系，并显式报告 unchecked 配对）和先验敏感性分析（留一法 XML 生成）。此外，工具还支持校准分布可视化、分析指纹、方法学描述自动生成，以及 Snakemake/Nextflow 管道文件生成。
+诊断方面，Beast2Py 提供结构化的校准诊断（同一节点矛盾、嵌套时间顺序、相交非嵌套单系，并显式报告 unchecked 配对）和先验敏感性分析（留一法 XML 生成）。此外，工具还支持校准分布可视化、分析指纹、方法学描述自动生成，以及 Snakemake/Nextflow 工作流模板生成（生成的是文件本身，测试套件不会端到端执行它们）。
 
 以下两条性质贯穿本手册的所有小节。
 
@@ -1464,6 +1464,8 @@ distribution:
   offset: 12.0    # 分布从 12.0 Ma 开始，即实际年龄 = offset + LogNormal(M, S)
 ```
 
+注意：`offset` 是**平移**，本身并不自动构成硬下界：`Normal(0, 1)` 加 `offset: 5` 后仍约有一半质量低于 5。只有当分布自身的支撑本就以 0 为下界（LogNormal、Exponential、Gamma 等）、且 offset 落在支撑下缘处时，正 offset 才构成真正的最小年龄先验。其它带 offset 的分布应按普通的平移先验对待，而不是硬最小值。
+
 ### 11.3 超先验
 
 校准分布参数本身可以设置先验分布（超先验）：
@@ -1685,7 +1687,7 @@ tip_dates:
 
 冲突检测器分析校准点对，只依据拓扑与时间顺序判定三类结构问题：
 
-**同一节点冲突（`same_node`）：** 两个校准挂在同一节点上。同一分类单元集合上的相同分布是重复（warning）；同一节点上互不相交的区间是矛盾（error）；同一分类单元集合上的 crown 与 stem 校准是父子关系，因此按嵌套配对比较，而不是当作重复。
+**同一节点冲突（`same_node`）：** 两个校准挂在同一节点上。同一分类单元集合上的相同分布是重复（warning）；两个分布的支撑没有正测度的交集（例如 `Uniform(1,2)` 与 `Uniform(2,3)` 只在单点相接）是结构性矛盾（error）；95% 区间互不相交但支撑仍重叠的情形只是强烈的先验张力（warning），其乘积密度仍可归一化，不是不可能的节点；同一分类单元集合上的 crown 与 stem 校准是父子关系，因此按嵌套配对比较，而不是当作重复。
 
 **时间一致性冲突（`temporal`）：** 对于严格嵌套的分类单元集合（A 是 B 的真子集），检测器先检查父支系（B）是否被校准得比子支系（A）更老，并依据每个校准的 crown/stem 设定先解析出它作用的节点，再比较 95% HPD 区间：当父节点的 95% HPD 上界年轻于子节点的 95% HPD 下界——这两个区间没有任何树能同时满足——时报告 `error`。区间重叠不构成矛盾，不报告——即便父节点均值更年轻也不报告：长尾的柔性父先验均值更年轻仍可能完全兼容，报告它只会造成误报。父节点为 crown、子节点为 stem 时无法由包含关系判定顺序，报告 `unchecked`。
 
@@ -1722,11 +1724,14 @@ tip_dates:
 生成的 XML 在运行之前只是一份设计。`prior-summary` 是与之配套的结果读取命令：它按**列名**（而非列序）解析 BEAST2 的 `.log` 文件，应用 burn-in，报告树高与各校准节点的中位数、95% HPD 区间与有效样本量；加上 `--reference` 后还会报告某个留一法场景相对完整校准集移动了多少，包括区间宽度比。
 
 ```bash
-# 一个留一法场景对照完整校准集
+# 一个留一法场景对照完整校准集。without_cladeA 运行不会记录 cladeA
+# （其 MRCAPrior 已随校准一并移除），所以请读取仍然存在的列——树高，
+# 以及校准被保留的节点；被移除节点的年龄需从 .trees 文件中提取
+# （例如用树注释工具），不能从这份日志读取。
 beast2py prior-summary \
-    --trace runs/without_cladeA/cladeA.log \
-    --reference runs/full_calibration/cladeA.log \
-    --column treeHeight --column cladeA \
+    --trace runs/without_cladeA/without_cladeA.$(seed).log \
+    --reference runs/full_calibration/full_calibration.$(seed).log \
+    --column treeHeight --column cladeB \
     --label without_cladeA \
     --burn-in-fraction 0.1 --ess-min 200 --out results/without.tsv
 
@@ -1738,7 +1743,8 @@ beast2py prior-summary --trace run1.log --trace run2.log --column treeHeight
 
 - **缺失的列是错误，不是零。** 留一法运行不再记录被移除校准所对应节点的列（其 `MRCAPrior` 已从 XML 中删除），因此请求该列会以退出码 2 失败，而不是报出一个从未被抽到的数值；
 - **非数值单元格、残缺行、重复 sample id 都会让读取失败。** 重复 id 意味着两条链被串进了同一个文件——请保持分开，并用重复的 `--trace` 传入；只有在列集合相同、长度相等时才会合并；
-- **低于 ESS 判据的行照样打印**，标注 `converged=False` 并给出警告。把难看的场景删掉，只会让留一法图从验证变成挑选结果。
+- **低于 ESS 判据的行照样打印**，标注 `converged=False` 并给出警告。把难看的场景删掉，只会让留一法图从验证变成挑选结果。达到 ESS 判据只是这张表的筛选规则，不能当作链间收敛的证据；
+- **合并的多链输入只报告逐链 ESS。** 多次传入 `--trace` 会保留链边界：两条独立链之间的接缝是文件边界，而不是真实的时间转移，因此对合并列给出单链 ESS 会依赖于文件列举顺序。合并行因此只携带各链的 ESS 值，不给合并收敛标签。
 
 相关算式在 `beast2py/trace.py`（`read_trace`、`effective_sample_size`、`hpd_interval`、`prior_shift`），留一法汇总表可以从原始日志重算；`tests/test_trace.py` 用虚拟轨迹验证该算术，因此不依赖任何随仓库分发的实证数据。该命令读取的是仅先验边缘分布：它不估计任何后验，输出里也如此声明。
 

@@ -462,8 +462,15 @@ class TipDatesConfig:
         enabled: Whether tip dates are enabled.
         trait_name: Trait name (date-forward or date-backward).
         units: Time units (year, month, day).
-        dates: Dict mapping taxon name to date value.
+        dates: Dict mapping taxon name to date value.  These are *observed*
+            sampling times: without an entry in ``uncertain`` they are fixed
+            data and no operator ever moves them.
         file: Optional CSV file with tip dates.
+        uncertain: Dict mapping a taxon name to the proposal window (in the
+            same units as the dates) for tips whose sampling date is itself
+            to be estimated.  Only these tips get a TipDatesRandomWalker;
+            this is an explicit opt-in, because moving a date that is actually
+            known observation data changes the model being sampled.
     """
 
     enabled: bool = False
@@ -471,6 +478,7 @@ class TipDatesConfig:
     units: str = "year"
     dates: Dict[str, float] = field(default_factory=dict)
     file: Optional[str] = None
+    uncertain: Dict[str, float] = field(default_factory=dict)
 
 
 @dataclass
