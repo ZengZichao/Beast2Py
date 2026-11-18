@@ -413,8 +413,20 @@ class ModelBuilder:
                     f"got {freq_mode!r}"
                 )
             freq_estimate = _as_bool(freq_opts.get("estimate", True), f"{partition_id}.frequencies")
+            if freq_mode == "fixed":
+                # mode: fixed declares a known vector: it must leave the state
+                # space, or the run silently estimates what the YAML called
+                # fixed.  An explicit estimate: true contradicts the mode.
+                if freq_estimate and "estimate" in freq_opts:
+                    raise ValueError(
+                        f"Partition '{partition_id}': frequencies declares "
+                        f"mode: fixed together with estimate: true; a fixed "
+                        f"vector is not estimated. Drop one of the two."
+                    )
+                freq_estimate = False
             if freq_mode == "estimated":
                 freq_mode = "fixed" if not freq_estimate else "estimated"
+            freq_opts["estimate"] = freq_estimate
 
             if freq_mode in ("uniform", "empirical"):
                 # <frequencies spec="Frequencies" data="@aln" estimate=...>:
@@ -510,7 +522,7 @@ class ModelBuilder:
         gamma_cats = site_model.gamma_categories
         sm_elem.set("gammaCategoryCount", str(gamma_cats))
 
-        if gamma_cats > 0 and site_model.gamma_shape:
+        if gamma_cats > 1 and site_model.gamma_shape:
             gs = site_model.gamma_shape
             shape_id = make_xml_id("gammaShape", partition_id)
             _, node = _state_node(shape_id, gs, role="rate", default_value=0.5)
@@ -1282,12 +1294,13 @@ class ModelBuilder:
             ET.SubElement(bds_elem, "parameter", {"name": "deathRate", "idref": death_rate_id})
             state_nodes.append((death_rate_id, dr_node))
 
-            # The sampling proportion psi must lie in [0, 1]; found
-            # it emitted with a lower bound only.
+            # BDSKY's samplingRate is a *rate* (events per lineage per time
+            # unit), not a proportion: it carries time units and is not
+            # bounded above by 1.  The proportion input is rho, below.
             _, sr_node = _state_node(
                 sampling_rate_id,
                 params.get("sampling_rate", 0.1),
-                role="probability",
+                role="rate",
                 default_value=0.1,
             )
             ET.SubElement(
@@ -1668,13 +1681,18 @@ class ModelBuilder:
                 operators.append(op)
 
             if tp_type == TreePriorType.COALESCENT_EXPONENTIAL and "growthRate" in state_node_ids:
+                # growthRate is signed and its default initial value is 0: a
+                # ScaleOperator cannot move zero (0 * any scale is 0, so every
+                # proposal is rejected) and cannot cross between negative and
+                # positive values.  An additive random walk explores both
+                # signs; starting at 0 it reaches either.
                 op = ET.Element(
                     "operator",
                     {
-                        "id": "growthRateScaler",
-                        "spec": "ScaleOperator",
-                        "scaleFactor": "0.75",
-                        "weight": str(get_weight("growth_rate_scaler", 1.0)),
+                        "id": "growthRateWalker",
+                        "spec": "RealRandomWalkOperator",
+                        "windowSize": "1.0",
+                        "weight": str(get_weight("growth_rate_walker", 1.0)),
                         "parameter": ref("growthRate"),
                     },
                 )
@@ -1755,41 +1773,53 @@ class ModelBuilder:
         # --- Calibration hyperprior operators ---
         # build_hyperprior_priors registers each hyperprior parameter as an
         # estimated state node; without an operator it would never be sampled.
+        # Location/bound parameters are unbounded and may cross zero, so they
+        # get an additive random walk; positive-domain parameters get a scale
+        # operator.
         for cal in config.calibrations:
             if not cal.distribution or not cal.hyperpriors:
                 continue
             for key in cal.hyperpriors:
                 if key not in cal.distribution.parameters:
                     continue
+                from .calibration import CalibrationBuilder
+
+                role = CalibrationBuilder.hyperparam_role(key)
                 param_id = sanitize_id(f"{cal.name}.{key}")
                 if param_id in state_node_ids:
-                    op = ET.Element(
-                        "operator",
-                        {
-                            "id": f"{param_id}.scaler",
-                            "spec": "ScaleOperator",
-                            "scaleFactor": "0.5",
-                            "weight": str(get_weight(f"{cal.name}_{key}_scaler", 1.0)),
-                            "parameter": ref(param_id),
-                        },
-                    )
+                    if role in ("location", "bound"):
+                        op = ET.Element(
+                            "operator",
+                            {
+                                "id": f"{param_id}.walker",
+                                "spec": "RealRandomWalkOperator",
+                                "windowSize": "1.0",
+                                "weight": str(get_weight(f"{cal.name}_{key}_walker", 1.0)),
+                                "parameter": ref(param_id),
+                            },
+                        )
+                    else:
+                        op = ET.Element(
+                            "operator",
+                            {
+                                "id": f"{param_id}.scaler",
+                                "spec": "ScaleOperator",
+                                "scaleFactor": "0.5",
+                                "weight": str(get_weight(f"{cal.name}_{key}_scaler", 1.0)),
+                                "parameter": ref(param_id),
+                            },
+                        )
                     operators.append(op)
 
-        # --- Tip dates operator ---
-        # TipDatesRandomWalker used to be emitted only for a
-        # calibration that declared `tipsonly: true`. That is *not* how tip
-        # dating normally works — in BEAUti the dates are a trait on the tree,
-        # not a calibration — so the common configuration produced a TraitSet
-        # that no operator ever moved: the tip heights were never proposed, the
-        # dates contributed nothing, and the run returned an undated tree while
-        # the user read a dated one. The operator is now emitted whenever
-        # tip_dates is enabled, over the taxa that actually carry a date.
-        if config.tip_dates and config.tip_dates.enabled:
-            dated_taxa = sorted(
-                taxon for taxon, value in config.tip_dates.dates.items() if float(value) != 0.0
-            )
-            if dated_taxa:
-                # The TaxonSet itself is emitted at the <beast> root by
+        # --- Tip dates operators ---
+        # Determined sampling dates are observations: they must not be moved,
+        # and no operator is emitted for them.  A TipDatesRandomWalker is
+        # created only for tips whose date was explicitly declared uncertain
+        # (tip_dates.uncertain), one operator per tip with its own window.
+        if config.tip_dates and config.tip_dates.enabled and config.tip_dates.uncertain:
+            for taxon in sorted(config.tip_dates.uncertain):
+                window = config.tip_dates.uncertain[taxon]
+                # The per-tip TaxonSet is emitted at the <beast> root by
                 # XMLWriter, sharing the taxon-definition bookkeeping with the
                 # calibration taxon sets: a TaxonSet may carry either `alignment`
                 # or nested <taxon> children, never both, and a nested
@@ -1798,11 +1828,11 @@ class ModelBuilder:
                 op = ET.Element(
                     "operator",
                     {
-                        "id": "tipDatesRandomWalker",
+                        "id": f"tipDatesRandomWalker.{sanitize_id(taxon)}",
                         "spec": "TipDatesRandomWalker",
-                        "windowSize": "1",
-                        "weight": str(get_weight("tip_dates", 1.0)),
-                        "taxonset": ref("tipdates.taxonset"),
+                        "windowSize": format_number(window),
+                        "weight": str(get_weight(f"tip_dates_{sanitize_id(taxon)}", 1.0)),
+                        "taxonset": ref(f"tipdates.{sanitize_id(taxon)}.taxonset"),
                         "tree": ref(tree_id),
                     },
                 )

@@ -45,6 +45,7 @@ from .models import (
     ClockModelConfig,
     ClockModelType,
     DistributionConfig,
+    HyperpriorConfig,
     MCMCConfig,
     Partition,
     Provenance,
@@ -330,6 +331,7 @@ class Beast2Py:
             chain_length=chain_length,
             pre_burnin=pre_burnin,
         )
+        _validate_quick_inputs(mcmc, gamma_categories)
 
         metadata = {
             "analysis_name": name or "quick_analysis",
@@ -347,6 +349,9 @@ class Beast2Py:
             calibration_method=CalibrationMethod.MRCA_PRIOR,
             mcmc=mcmc,
         )
+        # The same configuration-level validation the full parser runs:
+        # quick mode must not accept a calibration the YAML path would reject.
+        _validate_quick_config(beast_config)
 
         from .xml_writer import XMLWriter
 
@@ -909,26 +914,64 @@ class Beast2Py:
         """
         results: Dict[str, Any] = {}
 
-        # Generate XML — generate_xml runs the same gates as the CLI and raises
-        # without writing if any of them fails.
-        xml_str = self.generate_xml(config, output=output, force=force)
-        results["xml_path"] = output
+        # Build the XML in memory first: generate_xml runs the same gates as
+        # the CLI and raises without writing if any of them fails.  The
+        # in-memory string is validated below *before* anything reaches disk,
+        # so a failed external validation cannot leave an XML file behind.
+        xml_str = self.generate_xml(config, output=None, force=force)
 
-        # Validate
+        # Gate 1 (structural validation of the XML that would be written).
         from .validator import XMLValidator
 
         result = XMLValidator.validate(xml_str)
         results["validation"] = result
-
-        if beast2_validate:
-            success, output_msg, status = XMLValidator.beast2_validation_status(
-                output, beast2_path=beast2_path
+        if not result.is_valid:
+            problems = "; ".join(result.errors[:5])
+            raise ValueError(
+                "Gate 1 validation failed; nothing was written"
+                + (f": {problems}" if problems else "")
             )
+
+        # Gate 3 (external BEAST2 parse/init) also runs before the write, on a
+        # temporary copy, so a failed external validation leaves no artifacts.
+        if beast2_validate:
+            import os
+            import tempfile
+
+            tmp_dir = str(Path(output).parent) if output else None
+            handle = tempfile.NamedTemporaryFile(
+                "w", suffix=".xml", encoding="utf-8", dir=tmp_dir, delete=False
+            )
+            try:
+                handle.write(xml_str)
+                handle.close()
+                success, output_msg, status = XMLValidator.beast2_validation_status(
+                    handle.name, beast2_path=beast2_path
+                )
+            finally:
+                handle.close()
+                os.unlink(handle.name)
             results["beast2_validation"] = {
                 "success": success,
                 "status": status,
                 "output": output_msg,
             }
+            if not success:
+                raise RuntimeError(
+                    "BEAST2 validation failed; nothing was written. "
+                    f"Status: {status}. Output:\n{output_msg}"
+                )
+
+        # All requested gates passed: only now does the XML reach disk, and
+        # the companion artifacts are created after it.
+        from .main import validate_and_write
+
+        write_status = validate_and_write(
+            xml_str, output, _resolve_config(config, self.base_dir), force=force
+        )
+        if write_status != 0:
+            raise ValueError(f"Validation gates failed for {output}; nothing was written.")
+        results["xml_path"] = output
 
         # Fingerprint
         if fingerprint:
@@ -1226,6 +1269,36 @@ def read_sequence(
 # ============================================================================
 
 
+def _validate_quick_inputs(mcmc: "MCMCConfig", gamma_categories: int) -> None:
+    """Validate quick-mode scalars the YAML parser would have checked.
+
+    A negative chain length used to be written straight into chainLength, and
+    quick mode never saw the parser's numeric checks.
+    """
+    if int(mcmc.chain_length) < 1:
+        raise ValueError(
+            f"chain_length must be a positive number of generations, " f"got {mcmc.chain_length}"
+        )
+    if int(gamma_categories) < 0:
+        raise ValueError(f"gamma_categories must be >= 0, got {gamma_categories}")
+
+
+def _validate_quick_config(config: "BEASTConfig") -> None:
+    """Run the configuration-level calibration validation on a quick config.
+
+    ``quick`` builds its :class:`BEASTConfig` directly, so it used to bypass
+    the parser's calibration checks: a hard-bound fossil whose prior sat
+    entirely below the recorded age was accepted by ``quick`` and rejected by
+    the full path.  Both entry points now run the same validators.
+    """
+    from .config import ConfigParser
+
+    parser = ConfigParser()
+    parser._validate_calibration_node_semantics(config)
+    parser._validate_calibration_distribution_usage(config)
+    parser._validate_calibration_provenance(config)
+
+
 def _parse_calibration_yaml_file(yaml_path: str) -> List[CalibrationPoint]:
     """Parse a calibration-only YAML file.
 
@@ -1267,6 +1340,7 @@ def _parse_calibration_yaml_file(yaml_path: str) -> List[CalibrationPoint]:
             raise ValueError(f"Calibration '{name}': tipsonly: true requires a taxon list of tips.")
 
         dist = None
+        hyperpriors: Dict[str, HyperpriorConfig] = {}
         dist_raw = cal_raw.get("distribution")
         if dist_raw:
             dist = DistributionConfig(
@@ -1276,7 +1350,13 @@ def _parse_calibration_yaml_file(yaml_path: str) -> List[CalibrationPoint]:
             )
             # Same range and support checks as the full configuration path
             # (: an inverted `uniform` was accepted silently).
-            ConfigParser()._validate_distribution(dist, name)
+            parser = ConfigParser()
+            parser._validate_distribution(dist, f"Calibration '{name}'")
+            # Hyperpriors are parsed by the same helper as the full path, so
+            # quick mode accepts exactly what the CLI accepts.
+            hyperpriors = parser._parse_distribution_hyperpriors(
+                dist, dist_raw.get("hyperpriors", {}) or {}, name
+            )
 
         provenance = None
         prov_raw = cal_raw.get("provenance")
@@ -1299,6 +1379,7 @@ def _parse_calibration_yaml_file(yaml_path: str) -> List[CalibrationPoint]:
                 use_originate=use_originate,
                 tipsonly=tipsonly,
                 provenance=provenance,
+                hyperpriors=hyperpriors,
             )
         )
 

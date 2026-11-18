@@ -882,6 +882,13 @@ def cmd_quick(args: argparse.Namespace) -> int:
         chain_length=args.chain_length,
         pre_burnin=args.pre_burnin,
     )
+    from .api import _validate_quick_config, _validate_quick_inputs
+
+    try:
+        _validate_quick_inputs(mcmc, gamma_cats)
+    except ValueError as e:
+        _error(f"{GATE_0} failed: {e}")
+        return 1
 
     # Build config
     metadata = {
@@ -900,6 +907,13 @@ def cmd_quick(args: argparse.Namespace) -> int:
         calibration_method=CalibrationMethod.MRCA_PRIOR,
         mcmc=mcmc,
     )
+    # The same configuration-level validation the full parser runs, so quick
+    # mode cannot accept a calibration the YAML path would reject.
+    try:
+        _validate_quick_config(config)
+    except ConfigError as e:
+        _error(f"{GATE_0} failed: Configuration error: {e}")
+        return 1
 
     # Generate XML
     if args.calibration_yaml:
@@ -1057,6 +1071,15 @@ def cmd_validate(args: argparse.Namespace) -> int:
         _error(f"Level 1/2 (Gate 1, structural checks) failed with {len(result.errors)} error(s):")
         for err in result.errors:
             _error(f"  {err}")
+        if any(err.startswith("XML entity expansion is not allowed") for err in result.errors):
+            # A refused XML bomb (or any entity/DTD construct) must not be
+            # handed to the Java validator below: its parser is not a sandbox,
+            # and running it would bypass the protection this gate exists for.
+            _error(
+                "Refusing to pass this XML to BEAST2: the safe parser already "
+                "rejected it. Remove the DTD/entity constructs and validate again."
+            )
+            return 1
     else:
         _success(
             "Level 1/2 passed (Gate 1, structural checks): "
@@ -1099,7 +1122,13 @@ def cmd_validate(args: argparse.Namespace) -> int:
             if detail:
                 print(detail)
         elif success:
-            _success("Level 2/2 passed (Gate 3): BEAST2 parsed and initialised the model.")
+            _success(
+                "Level 2/2 passed (Gate 3): BEAST2 parsed the XML and initialised "
+                "every object (initAndValidate). This is a parse and object-"
+                "initialisation check only: it does not guarantee a runnable "
+                "finite-density initial state, which BEAST2 only establishes "
+                "inside MCMC.run."
+            )
         else:
             _error("Level 2/2 failed (Gate 3): BEAST2 rejected the model:")
             print(output)

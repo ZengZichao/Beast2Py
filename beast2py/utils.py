@@ -362,12 +362,23 @@ def compute_distribution_stats(
         lower = float(parameters.get("lower", 0.0)) + offset_f
         upper = float(parameters.get("upper", 1.0)) + offset_f
         mean = (lower + upper) / 2
+        width = upper - lower
+        # The shortest interval carrying 95% has width 0.95 * width; the
+        # full support (returned alongside) carries 100%.  Labelling the
+        # full support as a "95% interval" would overstate the mass.
         return {
             "mean": mean,
             "median": mean,
             "hpd_lower": lower,
-            "hpd_upper": upper,
-            "interval_type": "hpd",
+            "hpd_upper": lower + 0.95 * width,
+            "interval_type": "shortest_contiguous",
+            "support_lower": lower,
+            "support_upper": upper,
+            "support_mass": 1.0,
+            "hdr_note": (
+                "uniform density: shortest 95% window shown; the full support "
+                "carries 100% of the mass"
+            ),
         }
 
     if dt == "exponential":
@@ -453,13 +464,27 @@ def compute_distribution_stats(
         alpha = float(parameters.get("alpha", 1.0))
         beta_p = float(parameters.get("beta", 1.0))
         lo, hi = _analytic_hpd(sp_stats.beta(alpha, beta_p))
-        return {
+        interval_type = "hpd"
+        hdr_note = None
+        if alpha < 1.0 and beta_p < 1.0:
+            # U-shaped density: the true highest-density region is a union of
+            # two tail intervals; what the quantile method returns is the
+            # shortest *contiguous* coverage interval, which is wider.
+            interval_type = "shortest_contiguous"
+            hdr_note = (
+                "U-shaped beta: the true 95% highest-density region is the "
+                "union of the two tail intervals, not this contiguous window"
+            )
+        result = {
             "mean": alpha / (alpha + beta_p) + offset_f,
             "median": float(sp_stats.beta.ppf(0.5, alpha, beta_p)) + offset_f,
             "hpd_lower": lo + offset_f,
             "hpd_upper": hi + offset_f,
-            "interval_type": "hpd",
+            "interval_type": interval_type,
         }
+        if hdr_note:
+            result["hdr_note"] = hdr_note
+        return result
 
     if dt in ("inverse_gamma", "inversegamma"):
         alpha = float(parameters.get("alpha", 1.0))

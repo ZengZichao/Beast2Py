@@ -20,7 +20,40 @@ import numpy as np
 
 from . import __version__
 from .models import BEASTConfig, CalibrationPoint, DistributionConfig
-from .utils import compute_distribution_stats, compute_wasserstein_distance
+from .utils import (
+    _frozen_distribution,
+    compute_distribution_stats,
+    compute_wasserstein_distance,
+    sanitize_id,
+)
+
+
+def _support_bounds(dist: Optional[DistributionConfig]) -> Optional[Tuple[float, float]]:
+    """Hard support ``[lower, upper]`` of the specified distribution, with offset.
+
+    This is the support of the density as written in the YAML -- the region
+    where the specified prior can place any mass at all -- not a 95% interval.
+    Distributions whose support cannot be normalised (OneOnX) or that are
+    unknown return ``None``.
+
+    Only a common support of *zero measure* (e.g. ``Uniform(1,2)`` versus
+    ``Uniform(2,3)``, which touch at the single point 2) makes two node priors
+    structurally impossible to satisfy simultaneously.  Two separated 95%
+    intervals on overlapping supports are strong prior *tension*, not a hard
+    contradiction: the product of the two densities is still normalisable.
+    """
+    if dist is None:
+        return None
+    try:
+        frozen = _frozen_distribution(dist.type, dist.parameters, 0.0)
+    except ValueError:
+        return None
+    try:
+        lo, hi = frozen.support()
+    except Exception:
+        return None
+    return (float(lo) + float(dist.offset or 0.0), float(hi) + float(dist.offset or 0.0))
+
 
 # ============================================================================
 # Gate 2 capability boundary
@@ -374,6 +407,32 @@ class ConflictDetector:
         return inner < outer
 
     @staticmethod
+    def _stem_is_necessarily_root(
+        cal: CalibrationPoint,
+        node_kind: str,
+        all_taxa: Optional[set],
+    ) -> bool:
+        """Whether a stem calibration must resolve to the root node.
+
+        Two determinate cases (rooted binary tree):
+
+        * the calibration is monophyletic and its taxon set's complement is a
+          single taxon: then the MRCA of the set is a child of the root, so
+          its stem (parent MRCA) is the root itself;
+        * (handled by the caller for pairs) two disjoint monophyletic sets
+          whose union is every taxon are the two clades below the root, so
+          both of their stems are the root.
+        """
+        if node_kind != "stem" or not cal.monophyletic:
+            return False
+        if all_taxa is None or cal.taxa is None:
+            return False
+        taxa_set = set(cal.taxa)
+        if not taxa_set < set(all_taxa):
+            return False
+        return len(set(all_taxa) - taxa_set) == 1
+
+    @staticmethod
     def _assess_pair(
         cal_a: CalibrationPoint,
         cal_b: CalibrationPoint,
@@ -382,6 +441,15 @@ class ConflictDetector:
     ) -> PairAssessment:
         node_a = ConflictDetector._node_kind(cal_a, all_taxa)
         node_b = ConflictDetector._node_kind(cal_b, all_taxa)
+
+        # Determinate stem->root identities.  A stem that must be the root is
+        # the *same node* as an explicit root calibration, not a parent/child
+        # pair, so the node reading is corrected before any relation logic.
+        if ConflictDetector._stem_is_necessarily_root(cal_a, node_a, all_taxa):
+            node_a = "root"
+        if ConflictDetector._stem_is_necessarily_root(cal_b, node_b, all_taxa):
+            node_b = "root"
+
         set_a = set(cal_a.taxa) if cal_a.taxa is not None else None
         set_b = set(cal_b.taxa) if cal_b.taxa is not None else None
 
@@ -393,6 +461,26 @@ class ConflictDetector:
             node_b=node_b,
             status="not_applicable",
         )
+
+        # Two intersecting, non-nested taxon sets that both assert monophyly
+        # are unsatisfiable in any rooted tree, whatever nodes the calibrations
+        # resolve to: this dominates every other reading of the pair.
+        relation = ConflictDetector._taxon_relation(set_a, set_b, node_a, node_b)
+        if (
+            relation == "intersecting"
+            and set_a != set_b
+            and cal_a.monophyletic
+            and cal_b.monophyletic
+        ):
+            assessment.relation = "intersecting"
+            assessment.status = "checked"
+            assessment.conflicts.append(
+                ConflictDetector._topology_conflict(
+                    cal_a, cal_b, (set_a or set()) & (set_b or set())
+                )
+            )
+            ConflictDetector._maybe_similarity(cal_a, cal_b, opts, assessment)
+            return assessment
 
         # Tip dates are observations, not clade-age constraints.  They cannot
         # be ordered against a clade MRCA without a dated tree, so no
@@ -501,7 +589,38 @@ class ConflictDetector:
                     )
                 )
         else:  # disjoint
-            assessment.status = "not_applicable"
+            # Two disjoint monophyletic clades that together cover every taxon
+            # are the two clades directly below the root, so both of their
+            # stems are necessarily the root node -- the *same* node.
+            if (
+                node_a == "stem"
+                and node_b == "stem"
+                and cal_a.monophyletic
+                and cal_b.monophyletic
+                and all_taxa is not None
+                and set_a is not None
+                and set_b is not None
+                and (set_a | set_b) == set(all_taxa)
+            ):
+                assessment.relation = "disjoint_complementary_stems"
+                assessment.status = "checked"
+                assessment.conflicts.extend(ConflictDetector._check_same_node(cal_a, cal_b, "root"))
+            elif "stem" in (node_a, node_b):
+                # Disjoint taxon sets do not imply distinct nodes for stems:
+                # the two stems may be the same node (sibling clades) or
+                # different nodes.  This cannot be decided statically.
+                assessment.status = "unchecked"
+                assessment.conflicts.append(
+                    ConflictDetector._unchecked(
+                        cal_a,
+                        cal_b,
+                        "the taxon sets are disjoint but at least one calibration "
+                        "targets a stem, and the identity of stem nodes cannot be "
+                        "decided from the taxon sets alone",
+                    )
+                )
+            else:
+                assessment.status = "not_applicable"
 
         ConflictDetector._maybe_similarity(cal_a, cal_b, opts, assessment)
         if any(c.conflict_type == "unchecked" for c in assessment.conflicts):
@@ -543,14 +662,50 @@ class ConflictDetector:
     @staticmethod
     def _signature(cal: CalibrationPoint) -> Any:
         dist = cal.distribution
+        hyper = tuple(
+            sorted(
+                (
+                    str(key),
+                    hp.type.lower(),
+                    tuple(sorted((str(k), str(v)) for k, v in (hp.parameters or {}).items())),
+                    float(hp.offset or 0.0),
+                )
+                for key, hp in (cal.hyperpriors or {}).items()
+            )
+        )
         if dist is None:
             # No distribution to compare: two such points on one node are
             # indistinguishable, which is what a duplicate reading means here.
-            return ("<none>", (), 0.0)
+            return ("<none>", (), 0.0, hyper)
         return (
             dist.type.lower(),
             tuple(sorted((str(k), str(v)) for k, v in (dist.parameters or {}).items())),
             float(dist.offset or 0.0),
+            hyper,
+        )
+
+    @staticmethod
+    def _hyperprior_unchecked(
+        cal_a: CalibrationPoint,
+        cal_b: CalibrationPoint,
+    ) -> Optional[Conflict]:
+        """Return an unchecked conflict when either calibration has hyperpriors.
+
+        A hyperprior makes the specified density a *conditional* distribution
+        given the initial parameter values, not the marginal prior the node
+        actually samples.  Comparing conditional densities as if they were the
+        marginal priors can raise false temporal errors and false duplicates,
+        so such pairs are reported as unchecked instead.
+        """
+        flagged = [c.name for c in (cal_a, cal_b) if c.hyperpriors]
+        if not flagged:
+            return None
+        return ConflictDetector._unchecked(
+            cal_a,
+            cal_b,
+            f"{', '.join(flagged)} declares hyperprior(s), so its specified density "
+            f"is conditional on the initial parameter values, not the marginal prior "
+            f"the node samples; the two densities cannot be compared statically",
         )
 
     @staticmethod
@@ -578,6 +733,10 @@ class ConflictDetector:
         cal_b: CalibrationPoint,
         node_kind: str,
     ) -> List[Conflict]:
+        hyper = ConflictDetector._hyperprior_unchecked(cal_a, cal_b)
+        if hyper is not None:
+            return [hyper]
+
         stats_a = ConflictDetector._get_stats(cal_a)
         stats_b = ConflictDetector._get_stats(cal_b)
         if not stats_a or not stats_b:
@@ -612,11 +771,15 @@ class ConflictDetector:
                 )
             ]
 
-        disjoint = (
-            stats_a["hpd_upper"] < stats_b["hpd_lower"]
-            or stats_b["hpd_upper"] < stats_a["hpd_lower"]
-        )
-        if disjoint:
+        # Hard-support test: only a common support of zero measure is a
+        # structural impossibility.  Endpoint contact (Uniform(1,2) versus
+        # Uniform(2,3)) has no positive-measure overlap and is an error;
+        # separated 95% intervals on overlapping supports (e.g. two Normals)
+        # are strong prior tension, not a contradiction -- the product of the
+        # two densities is still normalisable.
+        bounds_a = _support_bounds(cal_a.distribution)
+        bounds_b = _support_bounds(cal_b.distribution)
+        if bounds_a and bounds_b and min(bounds_a[1], bounds_b[1]) <= max(bounds_a[0], bounds_b[0]):
             return [
                 Conflict(
                     conflict_type="same_node",
@@ -625,18 +788,46 @@ class ConflictDetector:
                     calibration_b=cal_b.name,
                     description=(
                         f"'{cal_a.name}' and '{cal_b.name}' constrain the same "
-                        f"{node_kind} node (identical taxon set) to distributions "
-                        f"with disjoint 95% intervals "
-                        f"([{stats_a['hpd_lower']:.2f}, {stats_a['hpd_upper']:.2f}] "
-                        f"vs [{stats_b['hpd_lower']:.2f}, {stats_b['hpd_upper']:.2f}]). "
-                        f"At most one of the two can describe the node's fossil "
-                        f"evidence."
+                        f"{node_kind} node to distributions whose supports do not "
+                        f"overlap on any interval of positive measure "
+                        f"(support [{bounds_a[0]:.4f}, {bounds_a[1]:.4f}] vs "
+                        f"[{bounds_b[0]:.4f}, {bounds_b[1]:.4f}], offset included). "
+                        f"No node age can satisfy both constraints."
                     ),
                     recommendation=(
-                        "Decide which fossil/estimate applies to this node and "
-                        "remove or replace the other calibration. This is a "
-                        "same-node contradiction, not a similarity between "
-                        "independent clades."
+                        "At least one of the two constraints must be wrong for "
+                        "this node: correct its support, or remove one."
+                    ),
+                )
+            ]
+
+        disjoint = (
+            stats_a["hpd_upper"] < stats_b["hpd_lower"]
+            or stats_b["hpd_upper"] < stats_a["hpd_lower"]
+        )
+        if disjoint:
+            return [
+                Conflict(
+                    conflict_type="same_node",
+                    severity="warning",
+                    calibration_a=cal_a.name,
+                    calibration_b=cal_b.name,
+                    description=(
+                        f"'{cal_a.name}' and '{cal_b.name}' constrain the same "
+                        f"{node_kind} node to distributions with disjoint 95% "
+                        f"intervals "
+                        f"([{stats_a['hpd_lower']:.2f}, {stats_a['hpd_upper']:.2f}] "
+                        f"vs [{stats_b['hpd_lower']:.2f}, {stats_b['hpd_upper']:.2f}]). "
+                        f"The node prior becomes the product of the two densities: "
+                        f"this is strong prior tension concentrated between the "
+                        f"intervals, not a structural impossibility, so it needs "
+                        f"review rather than blocking the analysis."
+                    ),
+                    recommendation=(
+                        "Check whether both constraints on this node are intended; "
+                        "if they describe alternative fossil interpretations, keep "
+                        "the one the evidence supports instead of letting an "
+                        "unintended product prior silently tighten the node."
                     ),
                 )
             ]
@@ -667,6 +858,10 @@ class ConflictDetector:
         child: CalibrationPoint,
         relation: str,
     ) -> List[Conflict]:
+        hyper = ConflictDetector._hyperprior_unchecked(parent, child)
+        if hyper is not None:
+            return [hyper]
+
         stats_parent = ConflictDetector._get_stats(parent)
         stats_child = ConflictDetector._get_stats(child)
         if not stats_parent or not stats_child:
@@ -681,7 +876,18 @@ class ConflictDetector:
                 )
             ]
 
-        if stats_parent["hpd_upper"] < stats_child["hpd_lower"]:
+        # A common support of zero measure makes the ordering structurally
+        # impossible (no age can be both <= the parent's upper support bound
+        # and >= the child's lower support bound).  Separated 95% intervals on
+        # overlapping supports leave a small but positive prior probability
+        # that parent > child, which is tension to review, not a hard error.
+        bounds_parent = _support_bounds(parent.distribution)
+        bounds_child = _support_bounds(child.distribution)
+        if (
+            bounds_parent
+            and bounds_child
+            and min(bounds_parent[1], bounds_child[1]) <= max(bounds_parent[0], bounds_child[0])
+        ):
             return [
                 Conflict(
                     conflict_type="temporal",
@@ -689,15 +895,43 @@ class ConflictDetector:
                     calibration_a=parent.name,
                     calibration_b=child.name,
                     description=(
-                        f"Temporal inconsistency: '{parent.name}' (parent) has "
-                        f"95% upper {stats_parent['hpd_upper']:.2f}, younger than "
-                        f"'{child.name}' (child) 95% lower "
-                        f"{stats_child['hpd_lower']:.2f}; {relation}. The parent "
-                        f"MRCA cannot be younger than the nested child MRCA."
+                        f"Temporal impossibility: '{parent.name}' (parent) has "
+                        f"support [{bounds_parent[0]:.4f}, {bounds_parent[1]:.4f}] "
+                        f"and '{child.name}' (child) has support "
+                        f"[{bounds_child[0]:.4f}, {bounds_child[1]:.4f}] "
+                        f"(offset included); {relation}. The supports do not "
+                        f"overlap on any interval of positive measure, so no "
+                        f"tree exists in which the parent MRCA is older than "
+                        f"the child MRCA."
                     ),
                     recommendation=(
-                        f"Adjust the priors so that '{parent.name}' spans older "
-                        f"times than '{child.name}', or correct the taxon sets."
+                        f"Correct the support of '{parent.name}' or "
+                        f"'{child.name}' so that ages older than the child "
+                        f"remain possible for the parent."
+                    ),
+                )
+            ]
+
+        if stats_parent["hpd_upper"] < stats_child["hpd_lower"]:
+            return [
+                Conflict(
+                    conflict_type="temporal",
+                    severity="warning",
+                    calibration_a=parent.name,
+                    calibration_b=child.name,
+                    description=(
+                        f"Temporal tension: '{parent.name}' (parent) has "
+                        f"95% upper {stats_parent['hpd_upper']:.2f}, younger than "
+                        f"'{child.name}' (child) 95% lower "
+                        f"{stats_child['hpd_lower']:.2f}; {relation}. The "
+                        f"supports still overlap, so the specified priors give "
+                        f"parent > child a small but positive probability; this "
+                        f"needs review, not a structural rejection."
+                    ),
+                    recommendation=(
+                        f"Check whether '{parent.name}' and '{child.name}' "
+                        f"express the intended ages; adjust them if the parent "
+                        f"is meant to be unambiguously older."
                     ),
                 )
             ]
@@ -883,6 +1117,23 @@ class SensitivityAnalyzer:
                 "Sensitivity analysis generated duplicate file names; "
                 "calibration names must differ after normalization"
             )
+
+        # A run manifest mapping each scenario to its seed and launch command:
+        # the XML file name is unique per scenario, but the seed lives in this
+        # table, not in the XML (MCMC has no seed input -- it is a `beast
+        # -seed N` argument), so without this mapping the chains are neither
+        # independent-by-design nor reproducible-by-command.
+        base_seed = int(getattr(config.mcmc, "seed", 1) or 1)
+        manifest_path = os.path.join(output_dir, "sensitivity_manifest.tsv")
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            handle.write("scenario\txml\tseed\tcommand\n")
+            for index, xml_path in enumerate(xml_files):
+                seed = base_seed if index == 0 else base_seed + index
+                handle.write(
+                    f"{os.path.basename(xml_path)}\t{xml_path}\t{seed}\t"
+                    f"beast -seed {seed} {xml_path}\n"
+                )
+        xml_files.append(manifest_path)
         return xml_files
 
     @staticmethod
@@ -891,6 +1142,11 @@ class SensitivityAnalyzer:
         index: int,
     ) -> BEASTConfig:
         """Create a copy of config with one calibration removed.
+
+        Removing a calibration removes *both* its age density and its
+        monophyly constraint (they live in one MRCAPrior in BEAST2), so a
+        leave-one-out scenario is a joint age-and-topology intervention, not a
+        pure age-density removal.  Reports must describe it as such.
 
         Args:
             config: Original config.
@@ -938,17 +1194,31 @@ class SensitivityAnalyzer:
         # Generate XML
         from .xml_writer import XMLWriter
 
-        writer = XMLWriter(prior_config)
-        xml_str = writer.generate_xml()
-
-        # Write to file
-        from .utils import sanitize_id
+        # Scenario-unique logger names: the XML file name is unique per
+        # scenario, but a logger file name that is not (e.g. shared.log from
+        # the source configuration) would collide across concurrent or
+        # sequential runs, or silently overwrite the previous scenario's
+        # output under overwrite mode.
+        logger_cfg = getattr(prior_config, "loggers", None)
 
         def _safe_name(value: str) -> str:
             # sanitize_id already maps path separators to "_"; collapsing dot
             # sequences as well makes the traversal-safety explicit.
             return sanitize_id(value).replace("..", "_").strip("._")
 
+        if logger_cfg is not None:
+            tag = _safe_name(suffix)
+            for key in ("trace_log", "tree_log"):
+                entry = getattr(logger_cfg, key, None)
+                if isinstance(entry, dict) and entry.get("file_name"):
+                    file_name = str(entry["file_name"])
+                    stem, dot, ext = file_name.rpartition(".")
+                    entry["file_name"] = f"{stem}_{tag}.{ext}" if dot else f"{file_name}_{tag}"
+
+        writer = XMLWriter(prior_config)
+        xml_str = writer.generate_xml()
+
+        # Write to file
         analysis_name = _safe_name(config.metadata.get("analysis_name", "analysis"))
         filename = f"{analysis_name}_sensitivity_{_safe_name(suffix)}.xml"
         filepath = os.path.join(output_dir, filename)
@@ -1021,7 +1291,11 @@ class VisualizationGenerator:
 
             color = colors[idx % len(colors)]
             ax.plot(x, density, label=cal.name, color=color, linewidth=2)
-            ax.fill_between(x, density, alpha=0.15, color=color)
+            # Shade only the reported interval, not the whole extended curve:
+            # the fill is what readers take as "the 95% region", so it must
+            # cover the same mass the label claims.
+            in_interval = (x >= stats["hpd_lower"]) & (x <= stats["hpd_upper"])
+            ax.fill_between(x, density, where=in_interval, alpha=0.15, color=color)
 
             # Mark mean
             ax.axvline(stats["mean"], color=color, linestyle="--", alpha=0.5, linewidth=1)
@@ -1106,9 +1380,30 @@ class ReportGenerator:
             params_str = ", ".join(f"{k}={v}" for k, v in s.distribution_params.items())
             if "warning" in s.stats:
                 stats_cells = f'<td colspan="2">⚠ {html.escape(s.stats["warning"])}</td>'
+            elif s.distribution_type == "none" or not s.distribution_params:
+                # A monophyly-only calibration has no age distribution: show
+                # "not applicable", not a spurious exact age of zero.
+                stats_cells = (
+                    '<td colspan="2">N/A — monophyly constraint only ' "(no age distribution)</td>"
+                )
             else:
                 interval_kind = s.stats.get("interval_type", "hpd")
-                kind_label = "95% HPD" if interval_kind == "hpd" else "95% central"
+                kind_label = {
+                    "hpd": "95% HPD",
+                    "central": "95% central",
+                    "shortest_contiguous": "shortest contiguous 95% interval",
+                }.get(interval_kind, "95% interval")
+                if s.stats.get("hdr_note"):
+                    kind_label += f" ({s.stats['hdr_note']})"
+                elif s.stats.get("support_mass") == 1.0:
+                    kind_label += (
+                        f"; full support [{s.stats['support_lower']:.2f}, "
+                        f"{s.stats['support_upper']:.2f}] (100%)"
+                    )
+                if s.stats.get("conditional"):
+                    # The density is conditional on initial parameter values
+                    # because hyperpriors are declared on its parameters.
+                    kind_label += " (conditional on initial parameter values)"
                 stats_cells = (
                     f"<td>{s.stats.get('mean', 0):.2f}</td>"
                     f"<td>{kind_label}: [{s.stats.get('hpd_lower', 0):.2f}, "
@@ -1319,7 +1614,13 @@ class ReportGenerator:
         <h2>4. Prior-Only Sensitivity Design</h2>
         <p>The following XML files record a prior-only analysis design. Running
         them samples the specified and effective marginal priors; it does not
-        sample or diagnose the posterior. Inspect ESS and mixing, and report the
+        sample or diagnose the posterior. Each scenario writes to its own logger
+        file names, and <code>sensitivity_manifest.tsv</code> maps every
+        scenario to its seed and launch command (the seed is a
+        <code>beast -seed N</code> argument, not part of the XML). Note that
+        removing a calibration removes its age density <em>and</em> its
+        monophyly constraint together, so a leave-one-out scenario is a joint
+        age-and-topology intervention. Inspect ESS and mixing, and report the
         chain length, burn-in and convergence criteria used.</p>
         {sensitivity_list if sensitivity_xmls else '<p>No sensitivity analysis XMLs generated.</p>'}
     </div>
@@ -1377,6 +1678,11 @@ class DiagnosticEngine:
                         cal.distribution.parameters,
                         cal.distribution.offset,
                     )
+                    if cal.hyperpriors:
+                        # Hyperpriors make these numbers conditional on the
+                        # initial parameter values, not the marginal prior.
+                        stats = dict(stats)
+                        stats["conditional"] = True
                 except ValueError as e:
                     stats_warning = str(e)
 

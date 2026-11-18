@@ -33,13 +33,20 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- Locate BEAST.base.jar ---------------------------------------------------
+# Installation roots BEAST2 actually uses: the per-user ~/.beast/2.7 tree, its
+# macOS Application Support mirror, a version-less lib/ layout, and a
+# BEAST2_JAR override (which always wins).
+BEAST_ROOTS=("$HOME/.beast/2.7" "$HOME/Library/Application Support/BEAST/2.7")
 if [ -n "${BEAST2_JAR:-}" ] && [ -f "$BEAST2_JAR" ]; then
     :
 else
     BEAST2_JAR=""
-    for j in "$HOME"/.beast/2.7/BEAST.base/*/lib/BEAST.base.jar; do
-        # loop keeps the last (typically newest) match
-        [ -f "$j" ] && BEAST2_JAR="$j"
+    for root in "${BEAST_ROOTS[@]}"; do
+        for j in "$root"/BEAST.base/*/lib/BEAST.base.jar \
+                 "$root"/BEAST.base/lib/BEAST.base.jar; do
+            # loop keeps the last (typically newest) match
+            [ -f "$j" ] && BEAST2_JAR="$j"
+        done
     done
     if [ -z "$BEAST2_JAR" ]; then
         for j in "$SCRIPT_DIR/tools/lib/BEAST.base.jar" "$SCRIPT_DIR/lib/BEAST.base.jar"; do
@@ -144,17 +151,35 @@ fi
 # beast.pkgmgmt package-manager classes used by Beast2Validator.
 CLASSPATH="$BEAST2_JAR:$SCRIPT_DIR/tools/launcher.jar:$SCRIPT_DIR/tools/classes"
 
-# Add-on packages installed under ~/.beast/2.7 (EBSP, BD Skyline Serial, ...),
+# Add-on packages installed under the same roots (EBSP, BD Skyline Serial, ...),
 # skipping the BEAST.base jar already on the classpath.
-for j in "$HOME"/.beast/2.7/*/*/lib/*.jar; do
-    [ -f "$j" ] || continue
-    case "$j" in
-        "$BEAST2_JAR") continue ;;
-    esac
-    case "$j" in
-        */BEAST.base.jar) continue ;;
-        *) CLASSPATH="$CLASSPATH:$j" ;;
-    esac
+for root in "${BEAST_ROOTS[@]}"; do
+    for j in "$root"/*/*/lib/*.jar; do
+        [ -f "$j" ] || continue
+        case "$j" in
+            "$BEAST2_JAR") continue ;;
+        esac
+        case "$j" in
+            */BEAST.base.jar) continue ;;
+            *) CLASSPATH="$CLASSPATH:$j" ;;
+        esac
+    done
+done
+
+# --- Refuse DTD/entity constructs up front -----------------------------------
+# The upstream XMLParser uses a default DocumentBuilderFactory at this entry
+# point, so this Java validation path is NOT a sandbox for untrusted XML.
+# Anything carrying a DOCTYPE or ENTITY declaration is refused here, before
+# the JVM is started, whatever the rest of the pipeline decided.
+for xml_file in "$@"; do
+    [ -f "$xml_file" ] || continue
+    if grep -qiE '<!DOCTYPE|<!ENTITY' "$xml_file"; then
+        echo "INVALID: $xml_file" >&2
+        echo "  DTD or entity constructs are refused: this validation entry" >&2
+        echo "  point is not an untrusted-XML sandbox. Remove the DOCTYPE/" >&2
+        echo "  ENTITY declaration and validate again." >&2
+        exit 1
+    fi
 done
 
 # --- Run the headless validator ----------------------------------------------

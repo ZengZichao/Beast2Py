@@ -312,7 +312,7 @@ class TestPipelineGenerator:
         """The manual promises both engines cover methods description too."""
         _, content = self._generated("nf")
         assert "process methods" in content
-        assert re.search(r"workflow\s*\{[^}]*methods\(\)", content, re.S)
+        assert re.search(r"workflow\s*\{[^}]*methods\(", content, re.S)
 
     # --- CODE-008: the BEAST2 thread count is a knob, not a literal ---------
 

@@ -28,5 +28,11 @@ include tests/conftest.py tests/__init__.py
 # collection or run time; without them an unpacked sdist cannot collect the
 # suite and CI's packaging gate fails.
 recursive-include tests/fixtures *
+# Runtime-read release metadata and CI resources: the release-integrity tests
+# read .zenodo.json and the workflow/action files at run time, and an unpacked
+# sdist that ships the tests must ship what they read.
+include .zenodo.json
+recursive-include .github/workflows *.yml
+recursive-include .github/actions *
 include CHANGELOG.md CONTRIBUTING.md SECURITY.md
 include .flake8

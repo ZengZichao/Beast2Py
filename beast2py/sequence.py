@@ -12,11 +12,13 @@ from typing import Dict, List, Optional, Set
 
 from .models import Alignment, DataType, Sequence
 
-# IUPAC ambiguity codes and BEAST2 missing-data tokens are legal; anything else
-# in an alignment is a data error that used to reach <sequence> unchecked.
-# Note that '?' is BEAST2's wildcard token, '.' and '-' are gaps.
-NUCLEOTIDE_ALPHABET: Set[str] = set("ACGTUacgtu" "RYSWKMBDHVN" "ryswnkmbdhvn" "-.?*")
-AMINOACID_ALPHABET: Set[str] = set("ACDEFGHIKLMNPQRSTVWY" "acdefghiklmnpqrstvwy" "BZUOX*" "-.?")
+# Character tables follow BEAST2 2.7.x exactly (Nucleotide.java:34 and
+# Aminoacid.java:12 in the bundled 2.7.8 sources): '?' is the wildcard
+# token, '-' the gap, 'X' the unknown-residue token.  BEAST2 2.7.8 has no
+# '.' or '*' code for nucleotides and no B/Z/U/O codes for amino acids, so
+# accepting them here would emit XML that BEAST2's encoder rejects.
+NUCLEOTIDE_ALPHABET: Set[str] = set("ACGTURYMWSKBDHVNXacgturymwskbdhvnx" "-?")
+AMINOACID_ALPHABET: Set[str] = set("ACDEFGHIKLMNPQRSTVWYacdefghiklmnpqrstvwy" "Xx" "-?")
 
 
 class AlignmentError(ValueError):

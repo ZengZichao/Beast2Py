@@ -112,7 +112,14 @@ jobs:
         # pre-submission review asked to make impossible: "a CI failure blocks
         # the release". `-rs` keeps skips visible, and the skip audit below
         # refuses a release whose Gate 3 never actually ran.
-        run: pytest tests -q -rs | tee suite.log
+        #
+        # pipefail matters: with a plain `pytest | tee` under default bash, the
+        # pipeline's exit status is tee's, so a failing suite would read as
+        # success and `needs: test` would not block the release.
+        shell: bash
+        run: |
+          set -euo pipefail
+          pytest tests -q -rs | tee suite.log
 
       - name: Refuse a release whose Gate 3 was skipped
         run: |

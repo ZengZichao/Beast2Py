@@ -86,9 +86,18 @@ class Trace:
     burn_in_removed: int
     source: Optional[str] = None
     id_column: str = SAMPLE_ID_COLUMNS[0]
+    #: Row ranges of the source chains, set only by ``combine_traces``.  While
+    #: this is set, the trace is a stack of *independent* chains: the seam
+    #: between two ranges is a file boundary, not a real time transition, so
+    #: no single-chain autocorrelation statistic may be computed on the stack.
+    chain_slices: Optional[List[slice]] = None
 
     def __len__(self) -> int:
         return int(self.sample_ids.shape[0])
+
+    @property
+    def n_chains(self) -> int:
+        return 1 if self.chain_slices is None else len(self.chain_slices)
 
     def column(self, name: str) -> np.ndarray:
         """The kept samples of one column, addressed by its header name."""
@@ -161,7 +170,7 @@ def read_trace(
     path = Path(path)
     header: Optional[List[str]] = None
     rows: List[List[float]] = []
-    sample_ids: List[int] = []
+    sample_ids_raw: List[float] = []
 
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         for line_number, raw in enumerate(handle, start=1):
@@ -197,21 +206,58 @@ def read_trace(
                     f"{header[min(fields.index(bad), len(header) - 1)] if bad != '?' else '?'}: "
                     f"({error})"
                 ) from error
-            sample_ids.append(int(values[rate_index]))
+            sample_ids_raw.append(values[rate_index])
             rows.append(values)
 
     if header is None:
         raise TraceFormatError(f"{_where(path)} contains no header line")
+    if len(set(header)) != len(header):
+        repeated = sorted({name for name in header if header.count(name) > 1})
+        raise TraceFormatError(
+            f"{_where(path)} header repeats column name(s): {', '.join(repeated)}. "
+            "A duplicate header silently overwrites the earlier column, so the "
+            "trace is a read failure, not a file with two readings of one quantity"
+        )
     if not rows:
         raise TraceFormatError(f"{_where(path)} contains a header but no samples")
 
-    duplicates = _duplicate_sample_ids(sample_ids)
+    # The sample index must be finite, whole and strictly increasing: floats
+    # like 0.5 would silently truncate to 0, a reordered file would silently
+    # read as if time ran backwards, and NaN/Inf are never sample numbers.
+    previous: Optional[int] = None
+    for position, raw_id in enumerate(sample_ids_raw):
+        if not math.isfinite(raw_id):
+            raise TraceFormatError(
+                f"{_where(path)} sample id at row {position + 1} is not finite "
+                f"({raw_id!r}); the trace is a read failure"
+            )
+        whole = int(raw_id)
+        if whole != raw_id:
+            raise TraceFormatError(
+                f"{_where(path)} sample id at row {position + 1} is {raw_id!r}, "
+                "not a whole-number sample index; the trace is a read failure"
+            )
+        if previous is not None and whole <= previous:
+            raise TraceFormatError(
+                f"{_where(path)} sample id {whole} at row {position + 1} does not "
+                "strictly increase; the trace is corrupted or concatenated"
+            )
+        previous = whole
+
+    duplicates = _duplicate_sample_ids([int(v) for v in sample_ids_raw])
     if duplicates:
         shown = ", ".join(str(value) for value in duplicates[:5])
         raise TraceFormatError(
             f"{_where(path)} repeats sample id(s) {shown}; two chains have been "
             "concatenated into one file. Keep them separate and combine them "
-            "with combine_traces(), which checks that they are the same length"
+            "with combine_traces(), which keeps the chain boundary"
+        )
+
+    matrix = np.asarray(rows, dtype=float)
+    if not np.isfinite(matrix).all():
+        raise TraceFormatError(
+            f"{_where(path)} contains NaN or infinite value(s); a summary of "
+            "non-finite samples would look exactly like a successful read"
         )
 
     matrix = np.asarray(rows, dtype=float)
@@ -336,6 +382,15 @@ def combine_traces(traces: Sequence[Trace], *, independent: bool = True) -> Trac
         duplicates = _duplicate_sample_ids(list(sample_ids))
         if duplicates:
             raise TraceFormatError(f"pooled traces repeat sample id(s) {duplicates[:5]}")
+    # Keep the chain boundary: the seam between two independent chains is not
+    # a real transition, and any single-chain autocorrelation (ESS) computed
+    # across it would depend on the order the files happened to be listed in.
+    chain_slices: List[slice] = []
+    start = 0
+    for trace in traces:
+        stop = start + len(trace)
+        chain_slices.append(slice(start, stop))
+        start = stop
     return Trace(
         columns=columns,
         sample_ids=sample_ids,
@@ -344,6 +399,7 @@ def combine_traces(traces: Sequence[Trace], *, independent: bool = True) -> Trac
         burn_in_removed=sum(trace.burn_in_removed for trace in traces),
         source=", ".join(str(trace.source) for trace in traces),
         id_column=id_column,
+        chain_slices=chain_slices,
     )
 
 
@@ -355,9 +411,8 @@ def node_age_column(trace: Trace, name: str) -> str:
     as ``mrca.age(cladeA.taxonset)``, while an inline taxon set may be logged
     as ``mrca.age(cladeA)``.  Matching on the column index instead would
     silently follow whatever order the XML happened to produce, so the search is
-    on names: an exact hit first, then the ``.taxonset`` spelling, then any
-    single column whose ``mrca.age(...)``/``median.age(...)`` label starts with
-    the requested name.  Zero or several candidates are errors.
+    on names: an exact hit first, then the complete ``.taxonset`` spelling.
+    Zero or several candidates are errors.
 
     Raises:
         TraceFormatError: the name matches no column, or matches more than one.
@@ -369,7 +424,12 @@ def node_age_column(trace: Trace, name: str) -> str:
         for prefix in ("mrca.age(", "median.age("):
             if column.startswith(prefix) and column.endswith(")"):
                 label = column[len(prefix) : -1]
-                if label == name or label.split(".")[0] == name:
+                # Only the complete, known ".taxonset" suffix may be stripped:
+                # splitting on the first dot would let a request for "A.B"
+                # match a column logged for a different taxon set named "A".
+                if label == name or (
+                    label.endswith(".taxonset") and label[: -len(".taxonset")] == name
+                ):
                     candidates.append(column)
     exact = [column for column in candidates if column == f"mrca.age({name})"]
     if exact:
@@ -446,7 +506,14 @@ def hpd_interval(values: Iterable[float], mass: float = 0.95) -> Tuple[float, fl
 
 @dataclass
 class ColumnSummary:
-    """One column of one scenario, as a figure or table reports it."""
+    """One column of one scenario, as a figure or table reports it.
+
+    ``ess`` is ``nan`` when the trace is a stack of independent chains: the
+    chain seam is not a real transition, so a single-chain autocorrelation
+    estimate on the stack would depend on the order the files were listed in.
+    ``ess_per_chain`` carries the legitimate per-chain estimates instead, and
+    ``converged`` stays ``None`` because no pooled mixing evidence exists.
+    """
 
     column: str
     median: float
@@ -456,6 +523,7 @@ class ColumnSummary:
     n: int
     converged: Optional[bool] = None
     scenario: str = ""
+    ess_per_chain: Optional[List[float]] = None
 
     def as_row(self) -> Dict[str, object]:
         return {
@@ -465,6 +533,7 @@ class ColumnSummary:
             "hpd_lower": self.lower,
             "hpd_upper": self.upper,
             "ess": self.ess,
+            "ess_per_chain": self.ess_per_chain,
             "n": self.n,
             "converged": self.converged,
         }
@@ -480,10 +549,20 @@ def summarise_column(
 
     ``ess_minimum`` only labels the row; deciding a run converged is the
     caller's criterion, and a row below it is still reported rather than hidden.
+    For a combined multi-chain trace only per-chain ESS is reported: a pooled
+    single-chain ESS across an independent-chain seam would change when the
+    input file order changes, which is not evidence about the chains.
     """
     values = trace.column(column)
     lower, upper = hpd_interval(values)
-    ess = effective_sample_size(values)
+    if trace.chain_slices is not None:
+        ess = float("nan")
+        ess_per_chain = [effective_sample_size(values[sl]) for sl in trace.chain_slices]
+        converged = None
+    else:
+        ess = effective_sample_size(values)
+        ess_per_chain = None
+        converged = None if ess_minimum is None else bool(ess >= ess_minimum)
     return ColumnSummary(
         column=column,
         median=float(np.median(values)),
@@ -491,8 +570,9 @@ def summarise_column(
         upper=upper,
         ess=ess,
         n=int(values.shape[0]),
-        converged=None if ess_minimum is None else bool(ess >= ess_minimum),
+        converged=converged,
         scenario=scenario,
+        ess_per_chain=ess_per_chain,
     )
 
 

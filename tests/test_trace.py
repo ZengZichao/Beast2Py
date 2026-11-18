@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 from beast2py.trace import (
+    Trace,
     TraceFormatError,
     combine_traces,
     effective_sample_size,
@@ -372,3 +373,92 @@ class TestPriorSummaryCLI:
         assert ret == 0
         assert "treeHeight" in captured.out.splitlines()[1]
         assert "below the ESS criterion" in captured.err
+
+
+class TestTraceReadIntegrity:
+    """A malformed trace is a read failure, never a quiet summary."""
+
+    def _write(self, tmp_path, text, name="trace.log"):
+        path = tmp_path / name
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_duplicate_header_is_rejected(self, tmp_path):
+        path = self._write(tmp_path, "Sample\tx\tx\n0\t1.0\t2.0\n1\t3.0\t4.0\n")
+        with pytest.raises(TraceFormatError, match="repeats column name"):
+            read_trace(path)
+
+    def test_fractional_sample_id_is_rejected(self, tmp_path):
+        path = self._write(tmp_path, "Sample\tx\n0.5\t1.0\n1.5\t2.0\n")
+        with pytest.raises(TraceFormatError, match="whole-number"):
+            read_trace(path)
+
+    def test_non_increasing_sample_id_is_rejected(self, tmp_path):
+        path = self._write(tmp_path, "Sample\tx\n0\t1.0\n0\t2.0\n")
+        with pytest.raises(TraceFormatError, match="strictly increase"):
+            read_trace(path)
+
+    def test_nan_and_inf_values_are_rejected(self, tmp_path):
+        for bad in ("NaN", "inf", "-Infinity"):
+            path = self._write(tmp_path, f"Sample\tx\n0\t1.0\n1000\t{bad}\n", name=f"{bad}.log")
+            with pytest.raises(TraceFormatError, match="not finite|NaN or infinite"):
+                read_trace(path)
+
+
+class TestNodeAgeColumnResolution:
+    def test_only_complete_taxonset_suffix_is_stripped(self):
+        trace = Trace(
+            columns=["Sample", "mrca.age(A.taxonset)"],
+            sample_ids=np.array([0, 1000]),
+            data={
+                "Sample": np.array([0, 1000]),
+                "mrca.age(A.taxonset)": np.array([1.0, 2.0]),
+            },
+            n_samples_total=2,
+            burn_in_removed=0,
+        )
+        # The full "A.B" name must not resolve to a column logged for taxon "A".
+        with pytest.raises(TraceFormatError):
+            node_age_column(trace, "A.B")
+        assert node_age_column(trace, "A") == "mrca.age(A.taxonset)"
+        assert node_age_column(trace, "A.taxonset") == "mrca.age(A.taxonset)"
+
+
+class TestCombinedChainsKeepTheirIdentity:
+    """Independent chains must not masquerade as one continuous chain."""
+
+    def _constant_chain(self, value, n=200):
+        ids = np.arange(n, dtype=int)
+        return Trace(
+            columns=["Sample", "x"],
+            sample_ids=ids,
+            data={"Sample": ids, "x": np.full(n, float(value))},
+            n_samples_total=n,
+            burn_in_removed=0,
+            source=f"chain{value}",
+        )
+
+    def test_combined_trace_reports_per_chain_ess_only(self):
+        combined = combine_traces([self._constant_chain(0), self._constant_chain(1)])
+        summary = summarise_column(combined, "x", ess_minimum=5)
+        # Constant chains carry no mixing evidence, and the pooled ESS must
+        # not exist at all: the seam is a file boundary, not a transition.
+        assert summary.ess != summary.ess  # NaN
+        assert summary.converged is None
+        assert summary.ess_per_chain is not None
+        assert all(ess != ess for ess in summary.ess_per_chain)  # all NaN
+
+    def test_per_chain_summary_is_invariant_to_file_order(self):
+        chains = [self._constant_chain(v) for v in (0, 1, 0, 1)]
+        forward = combine_traces(chains)
+        shuffled = combine_traces([chains[0], chains[2], chains[1], chains[3]])
+        forward_summary = summarise_column(forward, "x", ess_minimum=5)
+        shuffled_summary = summarise_column(shuffled, "x", ess_minimum=5)
+        # Per-chain estimates must not depend on the order the files were
+        # listed in (all NaN here because every chain is constant).
+        assert len(forward_summary.ess_per_chain) == len(shuffled_summary.ess_per_chain)
+        assert all(
+            f != f and s != s
+            for f, s in zip(forward_summary.ess_per_chain, shuffled_summary.ess_per_chain)
+        )
+        assert forward_summary.median == shuffled_summary.median

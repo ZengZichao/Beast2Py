@@ -55,6 +55,7 @@ unlink models between partitions; all partitions are assembled on a single linke
 On the diagnostics side, Beast2Py provides automated structural calibration diagnostics (same-node contradictions, nested temporal order, intersecting non-nested monophyly, with explicit unchecked pairs) and prior sensitivity analysis
 (leave-one-out XML generation). It also supports calibration distribution visualization,
 automatic generation of analysis fingerprints and methods descriptions, and Snakemake/Nextflow
+workflow templates (generated files, not executed end to end by the test suite)
 pipeline file generation.
 
 Two properties of the pipeline matter for every section below:
@@ -1661,6 +1662,8 @@ distribution:
   offset: 12.0    # The distribution starts at 12.0 Ma, i.e. actual age = offset + LogNormal(M, S)
 ```
 
+Note that `offset` is a *shift*, not a hard lower bound by itself: `Normal(0, 1)` with `offset: 5` still places about half of its mass below 5. A positive offset produces a true minimum-age prior only for distributions whose own support is already bounded below (LogNormal, Exponential, Gamma, ...), where the offset sits at or below the support's lower edge. Treat any other offset distribution as an ordinary shifted prior, not as a hard minimum.
+
 ### 11.3 Hyperpriors
 
 Calibration distribution parameters can themselves carry prior distributions (hyperpriors):
@@ -1939,7 +1942,7 @@ Calibration diagnostics is the core innovation of Beast2Py and consists of three
 
 The conflict detector analyzes pairs of calibration points for three classes of structural problem, each decided from topology or time order alone:
 
-**Same-node conflicts (`same_node`):** two calibrations attached to the same node. Identical distributions on one taxon set are a duplicate (warning); disjoint intervals on one node are a contradiction (error); a crown and a stem calibration on the same taxon set are parent and child, so they are compared as a nested pair rather than as a duplicate.
+**Same-node conflicts (`same_node`):** two calibrations attached to the same node. Identical distributions on one taxon set are a duplicate (warning); two distributions whose supports have no overlap of positive measure (e.g. `Uniform(1,2)` and `Uniform(2,3)` touching at one point) are a structural contradiction (error); disjoint 95% intervals on still-overlapping supports are strong prior tension (warning), not an impossible node — the product density remains normalisable; a crown and a stem calibration on the same taxon set are parent and child, so they are compared as a nested pair rather than as a duplicate.
 
 **Temporal consistency conflicts (`temporal`):** for nested clades (taxon set A ⊂ B), it checks whether the parent clade (B) is calibrated older than the child clade (A), resolving from each calibration's crown/stem setting which node it applies to first. It compares the 95% HPD intervals: the detector reports an error when the parent's HPD upper bound is younger than the child's HPD lower bound, i.e. when the two intervals cannot be satisfied by any tree. Overlapping intervals are not reported, including the case where the parent's mean is younger than the child's: a soft parent prior with a long tail can have a younger mean and still be perfectly compatible, so reporting that shape would be a false positive. One nested pair is left undecided: when the parent is calibrated on its crown and the child on its stem, taxon containment does not fix which node is older, so the detector reports the pair as `unchecked` rather than as a pass.
 
@@ -1982,11 +1985,15 @@ those quantities relative to the full calibration set, including the interval
 width ratio.
 
 ```bash
-# One scenario against the full calibration set
+# One scenario against the full calibration set.  The without_cladeA run does
+# NOT log cladeA (its MRCAPrior is gone from the XML), so read columns that
+# still exist — treeHeight, and any calibrated node whose calibration was
+# kept.  The removed node's ages have to be extracted from the .trees file
+# (e.g. with a tree-annotation tool), not from this log.
 beast2py prior-summary \
-    --trace runs/without_cladeA/cladeA.log \
-    --reference runs/full_calibration/cladeA.log \
-    --column treeHeight --column cladeA \
+    --trace runs/without_cladeA/without_cladeA.$(seed).log \
+    --reference runs/full_calibration/full_calibration.$(seed).log \
+    --column treeHeight --column cladeB \
     --label without_cladeA \
     --burn-in-fraction 0.1 --ess-min 200 --out results/without.tsv
 
@@ -2006,7 +2013,14 @@ What it refuses, and why:
   after checking that the column sets match and the lengths are equal;
 - **a run below the ESS criterion is still printed**, labelled `converged=False`,
   with a warning. Dropping the awkward scenario is how a leave-one-out figure
-  becomes a selected result instead of a validation.
+  becomes a selected result instead of a validation. Reaching the ESS criterion
+  is a screening rule for this table, not proof of convergence between chains;
+- **pooled multi-chain input reports per-chain ESS only.** Combining several
+  `--trace` arguments keeps the chain boundary: the seam between two independent
+  chains is a file boundary, not a real time transition, so a single-chain ESS
+  on the pooled column would depend on the order the files were listed. The
+  pooled row therefore carries per-chain ESS values and no pooled convergence
+  label.
 
 The arithmetic is `beast2py/trace.py` (`read_trace`, `effective_sample_size`,
 `hpd_interval`, `prior_shift`), and a leave-one-out summary table can be

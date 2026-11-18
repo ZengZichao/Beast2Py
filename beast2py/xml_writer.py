@@ -19,7 +19,7 @@ from .models import (
 )
 from .model import ModelBuilder
 from .partition import PartitionManager
-from .utils import build_namespace, ref, serialize_xml
+from .utils import build_namespace, ref, sanitize_id, serialize_xml
 
 
 class XMLWriter:
@@ -104,15 +104,18 @@ class XMLWriter:
             if cal.taxa is not None:
                 root.append(CalibrationBuilder.build_taxonset(cal.taxa, cal.name, defined_taxa))
 
-        # Tip-dating needs the set of dated tips as a TaxonSet for the
-        # TipDatesRandomWalker operator. It is emitted here, sharing the taxon
-        # definition bookkeeping so no taxon is declared twice.
-        if self.config.tip_dates and self.config.tip_dates.enabled:
-            dated_taxa = sorted(
-                taxon for taxon, value in self.config.tip_dates.dates.items() if float(value) != 0.0
-            )
-            if dated_taxa:
-                root.append(CalibrationBuilder.build_taxonset(dated_taxa, "tipdates", defined_taxa))
+        # Tip-dating needs one single-tip TaxonSet per tip whose sampling date
+        # is explicitly uncertain, for that tip's TipDatesRandomWalker. They
+        # are emitted here, sharing the taxon definition bookkeeping so no
+        # taxon is declared twice.  Determined dates get no TaxonSet and no
+        # operator: they are observations and must not be moved.
+        tip_dates = self.config.tip_dates
+        if tip_dates and tip_dates.enabled and tip_dates.uncertain:
+            for taxon in sorted(tip_dates.uncertain):
+                tip_set = CalibrationBuilder.build_taxonset(
+                    [taxon], f"tipdates.{sanitize_id(taxon)}", defined_taxa
+                )
+                root.append(tip_set)
 
         # 3. Posterior distribution
         root.append(self._build_posterior())

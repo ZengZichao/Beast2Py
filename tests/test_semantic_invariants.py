@@ -742,7 +742,10 @@ class TestTipDating:
         with pytest.raises(ConfigError, match="trait_name"):
             ConfigParser().parse(str(path))
 
-    def test_random_walker_operator_exists_without_a_tipsonly_calibration(self, tmp_path):
+    def test_determined_tip_dates_gain_no_operator_without_uncertainty(self, tmp_path):
+        # Determined sampling dates are observations: without an explicit
+        # uncertainty declaration no TipDatesRandomWalker may exist, and the
+        # dates must still be attached as a TraitSet.
         path = write_inputs(
             tmp_path,
             head()
@@ -752,9 +755,24 @@ class TestTipDating:
         )
         config = ConfigParser().parse(str(path))
         xml = XMLWriter(config).generate_xml()
-        assert (
-            'spec="TipDatesRandomWalker"' in xml
-        ), "tip dates were attached but no operator ever proposes new tip heights"
+        assert 'spec="TipDatesRandomWalker"' not in xml
+        assert "TraitSet" in xml
+        assert result_is_valid(xml, config)
+
+    def test_explicitly_uncertain_tip_dates_gain_a_walker(self, tmp_path):
+        path = write_inputs(
+            tmp_path,
+            head()
+            + self._body(
+                "    taxonA: 2010\n    taxonB: 2011\n    taxonC: 2012\n    taxonD: 2013\n"
+                "  uncertain:\n"
+                "    taxonB: 5\n"
+                "    taxonD: 5\n"
+            ),
+        )
+        config = ConfigParser().parse(str(path))
+        xml = XMLWriter(config).generate_xml()
+        assert xml.count('spec="TipDatesRandomWalker"') == 2
         assert "TraitSet" in xml
         assert result_is_valid(xml, config)
 

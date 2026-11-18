@@ -40,6 +40,27 @@ public class Beast2Validator {
                 continue;
             }
 
+            // Refuse DTD/entity constructs: this entry point uses the default
+            // DocumentBuilderFactory and is not an untrusted-XML sandbox.
+            try {
+                String content = new String(java.nio.file.Files.readAllBytes(xmlFile.toPath()),
+                        java.nio.charset.StandardCharsets.UTF_8);
+                String lowered = content.toLowerCase(java.util.Locale.ROOT);
+                if (lowered.contains("<!doctype") || lowered.contains("<!entity")) {
+                    System.err.println("INVALID: " + xmlPath);
+                    System.err.println("  DTD or entity constructs are refused: this");
+                    System.err.println("  validation entry point is not an untrusted-XML");
+                    System.err.println("  sandbox. Remove the DOCTYPE/ENTITY declaration.");
+                    allValid = false;
+                    continue;
+                }
+            } catch (Exception e) {
+                System.err.println("INVALID: " + xmlPath);
+                System.err.println("  Could not read file: " + e.getMessage());
+                allValid = false;
+                continue;
+            }
+
             try {
                 XMLParser parser = new XMLParser();
                 parser.parseFile(xmlFile);
